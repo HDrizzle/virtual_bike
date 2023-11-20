@@ -1,0 +1,19 @@
+{
+    "map": "racetrack",
+    "vehicles": {
+        "admin": {
+            "static_name": "test-bike",
+            "body_state": {
+                "position": {
+                    "translation": [500, 50, 500],
+                    "rotation": [0, 0, 0, 1]
+                },
+                "lin_vel": [0, 0, 0],
+                "path_bound_opt": null
+            }
+        }
+    },
+    "age": 0.0,
+    "playing": true,
+    "gravity": -3
+}

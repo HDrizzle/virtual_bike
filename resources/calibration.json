@@ -1,0 +1,9 @@
+{
+    "wheel_dia": 0.7,
+    "pulses_per_rev": 2,
+    "power_mult": 1,
+    "steering_offset": 0,
+	"steering_mult": -0.2,
+    "brake_sensitivity": 1,
+    "timeout": 1000
+}

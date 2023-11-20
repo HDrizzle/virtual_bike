@@ -1,0 +1,16 @@
+{
+    "name": "test",
+    "gen": {
+        "seed": 1,
+        "max_slope": 10,
+        "rand_multiplier": 0,
+        "first_sum_multiplier": 0,
+        "second_sum_multiplier": 0,
+        "elev_abs_limit": 20
+    },
+    "paths": [],
+    "chunk_size": 100,
+    "chunk_grid_size": 2,
+    "landmarks": {},
+    "background_color": [0, 128, 0]
+}
