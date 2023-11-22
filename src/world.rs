@@ -14,22 +14,22 @@ use rapier3d::prelude::*;
 use crate::prelude::*;
 #[cfg(feature = "backend")]
 use crate::resource_interface::*;
-#[cfg(feature = "frontend")]
-use crate::client::VehicleBodyHandles;
+//#[cfg(feature = "frontend")]
+use crate::client::play::VehicleBodyHandles;
 
 use nalgebra::vector;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct StaticData {
-    pub map: Map,
-    pub vehicles: HashMap<String, VehicleStatic>,
+	pub map: Map,
+	pub vehicles: HashMap<String, VehicleStatic>,
 	#[cfg(feature = "debug_render_physics")]
 	pub partial_physics: PhysicsStateSend
 }
 
 impl StaticData {
-    #[cfg(feature = "frontend")]
-    pub fn init_bevy_rapier_context(&mut self, context: &mut RapierContext) -> (HashMap<String, RigidBodyHandle>, Vec<(String, Wheel)>) {
+	#[cfg(feature = "frontend")]
+	pub fn init_bevy_rapier_context(&mut self, context: &mut RapierContext) -> (HashMap<String, RigidBodyHandle>, Vec<(String, Wheel)>) {
 		let mut out = (HashMap::<String, RigidBodyHandle>::new(), Vec::<(String, Wheel)>::new());
 		// Debug feature
 		#[cfg(feature = "debug_render_physics")]
@@ -54,7 +54,7 @@ impl StaticData {
 			out = (handles, owner_wheel_pairs);
 		}
 		out
-    }
+	}
 	pub fn debug_print_sizes(&self) {
 		println!("StaticData.debug_print_sizes() is running");
 		{
@@ -214,7 +214,7 @@ pub struct WorldSend {// Sent to the client
 
 impl WorldSend {
 	#[cfg(feature = "frontend")]
-    pub fn update_bevy_rapier_context(&self, context: &mut RapierContext, v_body_handles: &VehicleBodyHandles, mut wheels: Vec<(&String, &mut Wheel)>, map_body_handle_opt: Option<RigidBodyHandle>) {
+	pub fn update_bevy_rapier_context(&self, context: &mut RapierContext, v_body_handles: &VehicleBodyHandles, mut wheels: Vec<(&String, &mut Wheel)>, map_body_handle_opt: Option<RigidBodyHandle>) {
 		#[cfg(feature = "debug_render_physics")]
 		for (handle, body_state) in self.body_states.iter() {
 			if let Some(map_body_handle) = map_body_handle_opt {
@@ -224,7 +224,7 @@ impl WorldSend {
 			}
 			body_state.init_rapier_body(context.bodies.get_mut(*handle).expect("Unable to get body with handle from WorldSend::body_states"));
 		}
-        // Vehicles
+		// Vehicles
 		#[cfg(not(feature = "debug_render_physics"))]
 		for (name, v_send) in self.vehicles.iter() {
 			match v_body_handles.0.get(name) {
@@ -246,7 +246,7 @@ impl WorldSend {
 				None => panic!("Unable to get vehicle body handle from VehicleBodyHandles")
 			}
 		}
-    }
+	}
 }
 
 pub struct World {// Main game simulation
@@ -309,27 +309,27 @@ impl World {
 	}
 	pub fn main_loop(&mut self, rx: mpsc::Receiver<async_messages::ToWorld>, tx: mpsc::Sender<async_messages::FromWorld>) {
 		// Init timing
-        let mut prev_t: Instant = Instant::now();
-        let mut dt: Duration;
-        let mut dt_f64: f64;
-        let mut fps: f64;
-        let max_step: f64 = 0.1;// Maximum time step, to prevent collision glitches
-        // Main loop, I want this to run as FAST as possible
-        loop {
-            // 1: Timing, DO NOT USE dt, USE dt_f64 INSTEAD
-            dt = prev_t.elapsed();
-            prev_t = Instant::now();
-            dt_f64 = extras::get_secs(dt);
-            fps = 1.0 / dt_f64;// Do not use for simulation, only for performance measurement
-            // max step
-            if dt_f64 > max_step {
-                dt_f64 = max_step;
-            }
+		let mut prev_t: Instant = Instant::now();
+		let mut dt: Duration;
+		let mut dt_f64: f64;
+		let mut fps: f64;
+		let max_step: f64 = 0.1;// Maximum time step, to prevent collision glitches
+		// Main loop, I want this to run as FAST as possible
+		loop {
+			// 1: Timing, DO NOT USE dt, USE dt_f64 INSTEAD
+			dt = prev_t.elapsed();
+			prev_t = Instant::now();
+			dt_f64 = extras::get_secs(dt);
+			fps = 1.0 / dt_f64;// Do not use for simulation, only for performance measurement
+			// max step
+			if dt_f64 > max_step {
+				dt_f64 = max_step;
+			}
 			// 2: Updates
 			// rx
 			loop {
-                match rx.try_recv() {// https://doc.rust-lang.org/stable/std/sync/mpsc/struct.Receiver.html
-                    Ok(update) => {
+				match rx.try_recv() {// https://doc.rust-lang.org/stable/std/sync/mpsc/struct.Receiver.html
+					Ok(update) => {
 						match update {
 							async_messages::ToWorld::ClientUpdate(update) => match self.vehicles.get_mut(&update.auth.name) {
 								Some(v) => v.update_user_input(update.input),
@@ -349,15 +349,15 @@ impl World {
 								}
 							}
 						}
-                    },
-                    Err(error) => {
-                        match error {
-                            mpsc::TryRecvError::Empty => break,
-                            mpsc::TryRecvError::Disconnected => panic!("Client updates message queue has been disconnected")
-                        }
-                    }
-                }
-            }
+					},
+					Err(error) => {
+						match error {
+							mpsc::TryRecvError::Empty => break,
+							mpsc::TryRecvError::Disconnected => panic!("Client updates message queue has been disconnected")
+						}
+					}
+				}
+			}
 			// tx
 			tx.send(async_messages::FromWorld::State(self.send(fps))).unwrap();
 			// 3: Step physics simulation
@@ -380,7 +380,7 @@ impl World {
 		// except this only loads chunks adjacent to the ones which vehicles are on
 		let chunks_needed: Vec<ChunkRef> = self.chunks_needed();
 		// 1: Unload
-        self.map.unload_chunks(&chunks_needed, &mut self.physics_state.bodies, &mut self.physics_state.colliders, &mut self.physics_state.islands);
+		self.map.unload_chunks(&chunks_needed, &mut self.physics_state.bodies, &mut self.physics_state.colliders, &mut self.physics_state.islands);
 		// 2: Load
 		for chunk_ref in chunks_needed {
 			if !self.map.is_chunk_loaded(&chunk_ref) {
@@ -438,7 +438,7 @@ impl World {
 		}
 	}
 	pub fn build_static_data(&self) -> StaticData {
-        // build static vehicles
+		// build static vehicles
 		let mut static_vehicles: HashMap<String, VehicleStatic> = HashMap::new();
 		for (user, vehicle) in self.vehicles.iter() {
 			static_vehicles.insert(user.to_owned(), (*vehicle.static_).clone());
@@ -447,10 +447,10 @@ impl World {
 		let mut partial_physics = self.physics_state.send(&self.vehicles);
 		// Done
 		StaticData {
-            map: self.map.send(&mut partial_physics),// Need to remove map colliders from physics send as they are redundant and makes the StaticData very large
-            vehicles: static_vehicles,
+			map: self.map.send(&mut partial_physics),// Need to remove map colliders from physics send as they are redundant and makes the StaticData very large
+			vehicles: static_vehicles,
 			#[cfg(feature = "debug_render_physics")]
 			partial_physics
-        }
+		}
 	}
 }

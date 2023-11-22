@@ -1,18 +1,22 @@
 // Gets raw data from the hardware on the bike and sends it to the server
 // TODO: This was originally written to update to the web server, which is depreciated, must integrate with Bevy client app
-use std::{error::Error, time::{Duration, Instant}, sync::{Arc, Mutex}};
+use std::{str::FromStr, net::SocketAddr, error::Error, time::{Duration, Instant}, sync::{Arc, Mutex}};
 use serde::{Serialize, Deserialize};
+use bincode;
 use extras;
 use serialport::SerialPortInfo;
 use bevy::prelude::*;
 use egui::Ui;
+use renet::transport::{ServerConfig, ClientAuthentication, NetcodeClientTransport};
 use bevy_renet::{renet::*, transport::NetcodeClientPlugin};
 use bevy_renet::*;
 use bevy_inspector_egui::{
+	quick::WorldInspectorPlugin,
 	bevy_egui::{egui, EguiContexts, EguiPlugin}// Importing from re-export to prevent conflicting versions of bevy_egui
 };
 
 use crate::prelude::*;
+use super::*;
 
 const MAX_LINE_LEN: usize = 100;// To prevent infinite loop in case hardware isn't responding correctly
 

@@ -22,8 +22,11 @@ Created by Hadrian Ward, 2023-6-8
 	is really fast and millisecs are just not precise enough
 
 2023-11-6: I have temporarily given up on world gen, so I have created the new module: crate::map::path
+
+2023-11-21: Major design change for the client: due to the difficulty of having different "states" in the bevy app requiring only certain systems to be used,
+	Bevy will now only be used while actually playing the game. A plain egui app using eframe will be used for the login screen.
 */
-#![allow(warnings)]// TODO: remove when I have a lot of free-time
+//#![allow(warnings)]// TODO: remove when I have a lot of free-time
 use std::{env, ops};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 use nalgebra::{Point3, Point2, Vector3, Vector2, point, Matrix, Const, ArrayStorage, OPoint, Translation};
@@ -54,6 +57,8 @@ use nalgebra::Isometry3;
 // Prelude, added 2023-9-9
 mod prelude {
 	use super::*;
+	// Name of this app
+	pub const APP_NAME: &str = "Virtual Bike";
 	// Types
 	pub type Float = f32;
 	pub type Int = i64;
