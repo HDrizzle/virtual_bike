@@ -9,9 +9,8 @@ Major change 2023-11-21: this module will only be used when the game is signed-i
 
 use std::{net::{SocketAddr, UdpSocket, IpAddr, Ipv4Addr}, time::{SystemTime, Duration}, collections::HashMap};
 use bevy::{prelude::*, winit::WinitSettings, input::{keyboard::KeyboardInput, ButtonState}, render::mesh::PrimitiveTopology};
-use renet::transport::{ServerConfig, ClientAuthentication, NetcodeClientTransport};
-use bevy_renet::{renet::*, transport::NetcodeClientPlugin};
-use bevy_renet::*;
+//use renet;
+use bevy_renet::{renet::{RenetClient, DefaultChannel, transport::{ServerConfig, ClientAuthentication, NetcodeClientTransport}}, transport::NetcodeClientPlugin};
 use bevy_rapier3d::{plugin::RapierContext, prelude::Real};
 use rapier3d::dynamics::RigidBodyHandle;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
@@ -325,13 +324,12 @@ impl Plugin for MainClientPlugin {
 }
 
 pub fn start(init_info: InitInfo) {
-	// TODO: use `init_info`
 	let mut app = App::new();
 	app.add_plugins((
 		DefaultPlugins,
 		CustomRenetPlugin,
 		ChunkManagerPlugin,
-		GuiPlugin,
+		//GuiPlugin,
 		HardwareControllerPlugin,
 		MainClientPlugin
 	));

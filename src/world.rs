@@ -14,7 +14,7 @@ use rapier3d::prelude::*;
 use crate::prelude::*;
 #[cfg(feature = "backend")]
 use crate::resource_interface::*;
-//#[cfg(feature = "frontend")]
+#[cfg(feature = "frontend")]
 use crate::client::play::VehicleBodyHandles;
 
 use nalgebra::vector;

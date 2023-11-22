@@ -129,7 +129,7 @@ impl InputData {
 	}
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[cfg_attr(feature = "frontend", derive(Resource))]
 pub struct ClientAuth {
 	name: String,
