@@ -9,9 +9,9 @@ use crate::{vehicle::VehicleStatic, ClientAuth, world::*, map::{Map, chunk::{Chu
 use crate::{prelude::*, client::hardware_controller::Calibration};
 
 // STATICS
-static RESOURCES_DIR: &str = "../resources";
+pub static RESOURCES_DIR: &str = "../resources";
 static VEHICLES_DIR: &str = "../resources/vehicles/";
-static MAPS_DIR: &str = "../resources/maps/";
+pub static MAPS_DIR: &str = "../resources/maps/";
 static WORLDS_DIR: &str = "../resources/worlds/";
 static PATHS_DIR: &str = "../resources/paths/";
 static MAP_GENERATORS_DIR: &str = "../resources/map_generators/";
@@ -20,16 +20,15 @@ static CLIENT_LOGIN_FILE: &str = "../resources/client_credentials.json";
 static CALIBRATION_FILE: &str = "../resources/calibration.json";
 static PORT_FILE: &str = "../resources/port.txt";
 
-// Load
 pub fn load_static_vehicle(name: &str) -> Result<VehicleStatic, Box<dyn Error>> {
 	let raw_string: String = load_file_with_better_error(&(VEHICLES_DIR.to_owned() + name + ".json"))?;
 	let vehicle: VehicleStatic = serde_json::from_str(&raw_string)?;
 	Ok(vehicle)
 }
-
+/*
 fn get_chunk_dir_path(chunk_ref: &ChunkRef, map_name: &str) -> String {
-	return format!("{}{}/chunks/{}/", MAPS_DIR.to_owned(), map_name.to_owned(), chunk_ref.resource_dir_name())
-}
+	format!("{}{}/chunks/{}/", MAPS_DIR.to_owned(), map_name.to_owned(), chunk_ref.resource_dir_name())
+}*/
 
 pub fn list_created_chunks(map_name: &str) -> Result<Vec<ChunkRef>, String> {
 	let mut out = Vec::<ChunkRef>::new();
@@ -50,14 +49,56 @@ pub fn list_created_chunks(map_name: &str) -> Result<Vec<ChunkRef>, String> {
 	Ok(out)
 }
 
+// Load
+pub fn find_chunk(chunk_ref: &ChunkRef, map_name: &str) -> Result<String, Box<dyn Error>> {
+	// Tries everything to find path to chunk dir
+	// 1. Test if it exists as a normal chunk
+	if let Some(path) = does_non_generic_chunk_exist(chunk_ref, map_name) {
+        return Ok(path);
+    }
+	// 2. Is there a generic chunk to use instead?
+	if let Some(path) = does_generic_chunk_exist(map_name) {
+        return Ok(path);
+    }
+	// The chunk does not exist
+	Err(Box::new(GenericError::new(format!("Could not find regular or generic chunk for: {:?}", chunk_ref))))
+}
+
+pub fn does_generic_chunk_exist(map_name: &str) -> Option<String> {
+	// Tests if map has generic chunk, if so returns path to it
+	let path = ChunkRef{position: IntP2(0, 0), generic: true}.resource_path(map_name, None);
+	if fs::read_dir(path.clone()).is_ok() {
+		Some(path)
+	}
+	else {
+		None
+	}
+}
+
+pub fn does_non_generic_chunk_exist(chunk_ref: &ChunkRef, map_name: &str) -> Option<String> {
+	// Explicitly uses path for non-generic chunk, even if `chunk_ref.generic` is `true`
+	let path = chunk_ref.resource_path(map_name, Some(false));
+	if fs::read_dir(path.clone()).is_ok() {
+		Some(path)
+	}
+	else {
+		None
+	}
+}
+
 pub fn load_chunk_texture(chunk_ref: &ChunkRef, map_name: &str) -> Result<Vec<u8>, Box<dyn Error>> {
-	let data: Vec<u8> = fs::read(&(get_chunk_dir_path(chunk_ref, map_name) + "texture.png"))?;
+	let path: String = find_chunk(chunk_ref, map_name)?;
+	let data: Vec<u8> = fs::read(path + "texture.png")?;
 	Ok(data)
 }
 
 pub fn load_chunk_data(chunk_ref: &ChunkRef, map_name: &str) -> Result<Chunk, Box<dyn Error>> {
-	let raw_string: String = load_file_with_better_error(&(get_chunk_dir_path(chunk_ref, map_name) + "data.json"))?;
-	let chunk: Chunk = serde_json::from_str(&raw_string)?;
+	let path: String = find_chunk(chunk_ref, map_name)?;
+	let raw_string: String = load_file_with_better_error(&(path + "data.json"))?;
+	let mut chunk: Chunk = serde_json::from_str(&raw_string)?;
+	// Set chunk's position because the generic one will likely be incorrect
+	chunk.set_position(chunk_ref);
+	// Done
 	Ok(chunk)
 }
 
@@ -103,13 +144,17 @@ pub fn save_map(map: &Map) -> Result<(), Box<dyn Error>> {
 	Ok(())
 }
 
+#[cfg(feature = "backend")]
 pub fn save_chunk_data(chunk: &Chunk, map_name: &str) -> Result<(), Box<dyn Error>> {
+	if does_generic_chunk_exist(map_name).is_some() {
+		return Err(Box::new(GenericError::new("Attempt to save chunk to map which has a generic chunk".to_owned())));
+	}
 	// Create directory
-	fs::create_dir(&get_chunk_dir_path(&chunk.ref_, map_name))?;
+	fs::create_dir(&chunk.ref_.resource_path(map_name, None))?;
 	// Serialize
 	let raw_string: String = serde_json::to_string(chunk)?;
 	// Save to file
-	fs::write(get_chunk_dir_path(&chunk.ref_, map_name) + "data.json", &raw_string)?;
+	fs::write(chunk.ref_.resource_path(map_name, None) + "data.json", &raw_string)?;
 	Ok(())
 }
 
@@ -119,7 +164,7 @@ pub fn load_file_with_better_error(path: &str) -> Result<String, Box<dyn Error>>
         Ok(contents) => Ok(contents),
         Err(err) => {
             // Combine the error with the path information
-            Err(Box::new(IoError::new(err.kind(), format!("Error reading file \"{}\": {}", path, err))))
+            Err(Box::new(IoError::new(err.kind(), format!("Error reading file '{}': {}", path, err))))
         }
     }
 }

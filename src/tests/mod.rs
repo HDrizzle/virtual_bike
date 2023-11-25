@@ -210,8 +210,8 @@ pub mod GIS {
 	fn chunk_edge_alignment() {
 		let map_anchor = [-69.0, 60.0];
 		assert_eq!(
-			chunk_local_location(&map_anchor, &ChunkRef{position: IntP2(0, 0)}, IntP2(1000, 1000)),
-			chunk_local_location(&map_anchor, &ChunkRef{position: IntP2(1000, 1000)}, IntP2(0, 0))
+			chunk_local_location(&map_anchor, &ChunkRef{position: IntP2(0, 0), generic: false}, IntP2(1000, 1000)),
+			chunk_local_location(&map_anchor, &ChunkRef{position: IntP2(1000, 1000), generic: false}, IntP2(0, 0))
 		)
 	}
 }

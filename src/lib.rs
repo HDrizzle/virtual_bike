@@ -25,9 +25,12 @@ Created by Hadrian Ward, 2023-6-8
 
 2023-11-21: Major design change for the client: due to the difficulty of having different "states" in the bevy app requiring only certain systems to be used,
 	Bevy will now only be used while actually playing the game. A plain egui app using eframe will be used for the login screen.
+
+2023-11-25: Started work on generic chunks, meaning that a map can be configured so that newly explored chunks will be be copied from a template and not saved,
+	this will save disk space for, for example, flat or repeating terrain.
 */
 #![allow(warnings)]// TODO: remove when I have a lot of free-time
-use std::{env, ops, error::Error, collections::{HashMap, hash_map::DefaultHasher}, hash::{Hash, Hasher}, time::{SystemTime, UNIX_EPOCH}};
+use std::{fmt, env, ops, error::Error, collections::{HashMap, hash_map::DefaultHasher}, hash::{Hash, Hasher}, time::{SystemTime, UNIX_EPOCH}};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 use nalgebra::{Point3, Point2, Vector3, Vector2, point, Matrix, Const, ArrayStorage, OPoint, Translation};
 #[cfg(feature = "frontend")]
@@ -76,6 +79,7 @@ mod prelude {
 		world::{StaticData, PhysicsState, World, WorldSave, WorldSend},
 		map::{Map, path::{Path, PathSet, PathBoundBodyState, BCurve}, chunk::{Chunk, ChunkRef, RegularElevationMesh, Gen}},
 		vehicle::{Vehicle, VehicleStatic, VehicleSave, VehicleSend, Wheel, WheelStatic, BodyStateSerialize, BodyPhysicsController, VehicleLinearForces},
+		GenericError,
 		InputData,
 		ClientAuth,
 		ClientUpdate,
@@ -165,6 +169,26 @@ mod prelude {
 }
 
 use prelude::*;
+
+// Generic error, from ChatGPT
+#[derive(Debug)]
+pub struct GenericError<T> {
+    message: T,
+}
+
+impl<T: fmt::Display> fmt::Display for GenericError<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+impl<T: fmt::Debug + fmt::Display> Error for GenericError<T> {}
+
+impl<T: fmt::Display> GenericError<T> {
+    fn new(message: T) -> Self {
+        GenericError { message }
+    }
+}
 
 // Structs/Enums
 #[derive(Serialize, Deserialize, Clone, Copy, Debug)]
