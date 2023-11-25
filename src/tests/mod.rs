@@ -194,7 +194,7 @@ pub mod GIS {
 	// For crate::map::real_world_gen
     use std::f64::consts::E;
 	use super::*;
-	use crate::map::GIS::*;
+	use crate::map::gis::*;
 	#[test]
 	fn conversion() {
 		relative_eq!(meters_to_degrees((EARTH_RADIUS * 2.0 * (PI as Float)) as Int), 360.0, epsilon = EPSILON);

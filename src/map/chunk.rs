@@ -1,9 +1,9 @@
 // Created 2023-9-29
 
-use std::{f64::consts::PI, rc::Rc, error::Error, collections::HashMap};
+use std::{rc::Rc, error::Error, collections::HashMap};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 #[cfg(feature = "frontend")]
-use bevy::{prelude::*, render::mesh::{PrimitiveTopology, Indices}, ecs::system::EntityCommands};
+use bevy::{prelude::*, render::mesh::{PrimitiveTopology, Indices}};
 // Rapier 3D physics
 use rapier3d::prelude::*;
 
@@ -11,7 +11,7 @@ use extras::rand_unit;
 
 use crate::{prelude::*, resource_interface};
 
-use super::GIS;
+use super::gis;
 
 // Structs
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -569,7 +569,7 @@ impl Chunk {
 		let ref_ = ChunkRef::from_chunk_offset_position(position);
 		let elevation = match map_real_world_location {
 			Some(map_location) => {
-				GIS::create_mesh_from_real_world(size, grid_size, &ref_, map_location)
+				gis::create_mesh_from_real_world(size, grid_size, &ref_, map_location)
 			},
 			None => RegularElevationMesh::new(size, grid_size, gen, &ref_, map_name)
 		};

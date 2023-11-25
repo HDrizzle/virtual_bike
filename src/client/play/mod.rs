@@ -37,10 +37,45 @@ use gui::GuiPlugin;
 pub struct VehicleBodyHandles(pub HashMap<String, RigidBodyHandle>);
 
 #[derive(Resource)]
+pub struct MapBodyHandle(pub RigidBodyHandle);
+
 pub struct InitInfo {// Provided by the sign-in window, DOES NOT CHANGE
-	pub renet_transport: NetcodeClientTransport,
-	pub renet_client: RenetClient,
+	pub network: NetworkInitInfo,
 	pub static_data: StaticData,
+}
+
+impl InitInfo {
+	pub fn setup_app(init_info: InitInfo, app: &mut App) {
+		app.insert_resource(init_info.static_data);
+		app.insert_resource(init_info.network.renet_transport);
+		app.insert_resource(init_info.network.renet_client);
+		app.insert_resource(init_info.network.auth);
+		app.add_systems(Startup, Self::setup_system);
+	}
+	pub fn setup_system(
+		mut commands: Commands,
+		mut renet_client: ResMut<RenetClient>,
+		mut rapier_context_res: ResMut<RapierContext>,
+		mut wheel_query: Query<(&mut Wheel, &UsernameComponent)>,
+		mut static_data: ResMut<StaticData>
+	) {
+		// Init rapier
+		// (HashMap<String, RigidBodyHandle>, Vec<(String, Wheel)>)
+		let mut rapier_context = rapier_context_res.into_inner();
+		let (body_handles, owner_wheel_pairs) = static_data.init_bevy_rapier_context(&mut rapier_context);
+		commands.insert_resource(VehicleBodyHandles(body_handles));
+		// Save wheels
+		for pair in owner_wheel_pairs.iter() {
+			commands.spawn((pair.1.clone(), UsernameComponent(pair.0.clone())));
+		}
+		// Save map body handle
+		commands.insert_resource(MapBodyHandle(static_data.map.body_handle_opt.expect("Could not get map body handle")));
+	}
+}
+
+pub struct NetworkInitInfo {
+	pub renet_transport: NetcodeClientTransport,// Trying https://doc.rust-lang.org/std/mem/fn.replace.html
+	pub renet_client: RenetClient,
 	pub auth: ClientAuth
 }
 
@@ -49,7 +84,7 @@ pub struct InitInfo {// Provided by the sign-in window, DOES NOT CHANGE
 pub struct CameraComponent;
 
 #[derive(Component)]
-struct UsernameComponent(String);
+pub struct UsernameComponent(String);
 
 // Systems
 /*fn startup_test(mut client: ResMut<RenetClient>) {
@@ -138,10 +173,10 @@ fn update_system(
 	mut camera_query: Query<(&mut CameraComponent, &mut Transform, &Projection)>,
 	mut wheel_query: Query<(&mut Wheel, &UsernameComponent)>,
 	mut v_body_handles_res: ResMut<VehicleBodyHandles>,
-	mut map_body_handle_opt: Local<Option<RigidBodyHandle>>,
+	map_body_handle: Res<MapBodyHandle>,
 	mut requested_chunks: ResMut<RequestedChunks>,
 	mut render_distance: ResMut<RenderDistance>,
-	init_info: Res<InitInfo>
+	auth: Res<ClientAuth>
 ) {
 	// How to move a camera: https://bevy-cheatbook.github.io/cookbook/pan-orbit-camera.html
 	let mut rapier_context = rapier_context_res.into_inner();
@@ -159,6 +194,7 @@ fn update_system(
 		let res = bincode::deserialize::<Response>(&message).unwrap();
 		match res {
 			Response::InitState(mut static_data) => {
+				panic!("Bevy app recieved `Response::InitState(..) response which should not be possible, anything after the code block where this is written is obsolete code.`");
 				// TODO: move this to super
 				println!("Received static data");
 				// Test, TODO fix
@@ -172,7 +208,7 @@ fn update_system(
 					commands.spawn((pair.1.clone(), UsernameComponent(pair.0.clone())));
 				}
 				// Save map body handle
-				*map_body_handle_opt = Some(static_data.map.body_handle_opt.expect("Could not get map body handle"));
+				//*map_body_handle_opt = Some(static_data.map.body_handle_opt.expect("Could not get map body handle"));
 				// Save map as resource
 				commands.insert_resource(static_data.map);
 			},
@@ -206,10 +242,9 @@ fn update_system(
 			let w = &mut owner.1;
 			wheel_owners.push((&w.0, owner.0.into_inner()));
 		}
-		let map_body_handle = map_body_handle_opt.expect("map_body_handle_opt is None, but AppState == Initiated");
-		world_state.update_bevy_rapier_context(&mut rapier_context, &v_body_handles, wheel_owners, Some(map_body_handle));// TODO: fix: replacing `Some(map_body_handle)` with `None` makes the vehicle body update properly
+		world_state.update_bevy_rapier_context(&mut rapier_context, &v_body_handles, wheel_owners, Some(map_body_handle.0));// TODO: fix: replacing `Some(map_body_handle)` with `None` makes the vehicle body update properly
 		// Update camera position
-		let main_vehicle = world_state.vehicles.get(&init_info.auth.name).expect(&format!("Unable to get vehicle for signed-in username: \"{}\"", &init_info.auth.name));
+		let main_vehicle = world_state.vehicles.get(&auth.name).expect(&format!("Unable to get vehicle for signed-in username: \"{}\"", &auth.name));
 		render_distance.set_position(p3_to_p2(matrix_to_opoint(main_vehicle.body_state.position.translation.vector.clone())));
 		for (_, mut transform, projection) in camera_query.iter_mut() {
 			// Comment this out and add manual_camera_control() for debugging
@@ -329,11 +364,11 @@ pub fn start(init_info: InitInfo) {
 		DefaultPlugins,
 		CustomRenetPlugin,
 		ChunkManagerPlugin,
-		//GuiPlugin,
+		GuiPlugin,
 		HardwareControllerPlugin,
 		MainClientPlugin
 	));
-	app.insert_resource(init_info);
+	InitInfo::setup_app(init_info, &mut app);
 	println!("Starting Bevy app");
 	app.run();
 }

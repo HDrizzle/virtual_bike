@@ -1,6 +1,6 @@
 // Plugin for all Egui stuff
 
-use std::{net::{SocketAddr, UdpSocket, IpAddr, Ipv4Addr}, time::{SystemTime}, collections::HashMap};
+use std::{net::{SocketAddr, UdpSocket, IpAddr, Ipv4Addr}, collections::HashMap};
 use bevy::{prelude::*, winit::WinitSettings, input::{keyboard::KeyboardInput, ButtonState}, render::mesh::PrimitiveTopology};
 use renet::transport::{ServerConfig, ClientAuthentication, NetcodeClientTransport};
 use bevy_renet::{renet::*, transport::NetcodeClientPlugin};
@@ -15,7 +15,6 @@ use bevy_inspector_egui_rapier::InspectableRapierPlugin;
 use nalgebra::{point, geometry::{Isometry, UnitQuaternion}};
 
 use crate::prelude::*;
-use super::*;
 
 // Structs/enums
 

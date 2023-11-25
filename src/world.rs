@@ -5,8 +5,9 @@ use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113
 #[cfg(feature = "frontend")]
 use bevy_rapier3d::plugin::RapierContext;
 #[cfg(feature = "frontend")]
-use bevy::ecs::system::Resource;
 use extras;
+#[cfg(feature = "frontend")]
+use bevy::ecs::system::Resource;
 
 // Rapier 3D physics
 use rapier3d::prelude::*;
@@ -20,6 +21,7 @@ use crate::client::play::VehicleBodyHandles;
 use nalgebra::vector;
 
 #[derive(Serialize, Deserialize, Clone)]
+#[cfg_attr(feature = "frontend", derive(Resource))]
 pub struct StaticData {
 	pub map: Map,
 	pub vehicles: HashMap<String, VehicleStatic>,

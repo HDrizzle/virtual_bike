@@ -6,10 +6,9 @@ use extras;
 use serialport::SerialPortInfo;
 use bevy::prelude::*;
 use egui::Ui;
-use bevy_renet::{renet::*, transport::NetcodeClientPlugin};
-use bevy_renet::*;
+use bevy_renet::renet::*;
 use bevy_inspector_egui::{
-	bevy_egui::{egui, EguiContexts, EguiPlugin}// Importing from re-export to prevent conflicting versions of bevy_egui
+	bevy_egui::{egui, EguiContexts}// Importing from re-export to prevent conflicting versions of bevy_egui
 };
 
 use crate::prelude::*;
@@ -40,7 +39,7 @@ impl Calibration {
 		// Steering
 		let steering = (steering_raw + self.steering_offset) * self.steering_mult;
 		// Power
-		let mut t_micros = if t_between > t_last {
+		let t_micros = if t_between > t_last {
 			t_between
 		}
 		else {
@@ -127,7 +126,7 @@ fn update_system(
 	mut hardward_opt: Option<ResMut<HardwareInterface>>,
 	mut renet_client: ResMut<RenetClient>,
 	mut input_state: Local<String>,
-	mut auth: ResMut<ClientAuth>,
+	auth: Res<ClientAuth>,
 ) {
 	match hardward_opt {
 		Some(mut hardware) => {// Update latest data and send to server, TODO: eliminate code repitition
@@ -171,7 +170,7 @@ fn update_system(
 							}
 						}
 					}
-					Err(e) => {}// Invalid string
+					Err(_) => {}// Invalid string
 				}
 			});
 		}
@@ -205,7 +204,7 @@ pub fn debug() {
     let port = select_port();
 	let mut interface = HardwareInterface::init(port);
 	let mut prev_print_len = 0;
-	while true {
+	loop {
 		let new_out: String = match interface.get() {
 			Ok(input_data) => {
 				input_data.to_string()

@@ -12,7 +12,7 @@ use crate::{prelude::*, world::PhysicsStateSend};
 pub mod chunk;
 pub mod path;
 #[cfg(feature = "backend")]
-pub mod GIS;
+pub mod gis;
 
 // Rapier 3D physics
 use rapier3d::prelude::*;
