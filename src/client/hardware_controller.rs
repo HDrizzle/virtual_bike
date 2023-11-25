@@ -2,7 +2,7 @@
 // TODO: This was originally written to update to the web server, which is depreciated, must integrate with Bevy client app
 use std::{error::Error, time::{Duration, Instant}, sync::{Arc, Mutex}};
 use serde::{Serialize, Deserialize};
-use extras;
+//use extras;
 use serialport::SerialPortInfo;
 use bevy::prelude::*;
 use egui::Ui;
@@ -89,10 +89,10 @@ impl HardwareInterface {
 		loop {
 			let mut buff: Vec<u8> = vec![0; 1];// May have to put this inside the loop
 			{
-				let mut port = extras::to_string_err(self.port.lock())?;
-				extras::to_string_err(port.read(buff.as_mut_slice()))?;
+				let mut port = to_string_err(self.port.lock())?;
+				to_string_err(port.read(buff.as_mut_slice()))?;
 			}
-			let data_char = extras::to_string_err(String::from_utf8(buff))?;
+			let data_char = to_string_err(String::from_utf8(buff))?;
 			if &data_char == "\n" {
 				return Ok(line)
 			}
@@ -194,7 +194,7 @@ fn select_port() -> String {
     for (i, p) in ports.iter().enumerate() {
         println!("{}. {}", i, p.port_name);
     }
-    let n = extras::prompt("Port").parse::<u32>().unwrap();
+    let n = prompt("Port").parse::<u32>().unwrap();
     ports[n as usize].port_name.clone()
 }
 

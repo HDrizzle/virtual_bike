@@ -27,11 +27,13 @@ Created by Hadrian Ward, 2023-6-8
 	Bevy will now only be used while actually playing the game. A plain egui app using eframe will be used for the login screen.
 */
 #![allow(warnings)]// TODO: remove when I have a lot of free-time
-use std::{env, ops};
+use std::{env, ops, error::Error, collections::{HashMap, hash_map::DefaultHasher}, hash::{Hash, Hasher}, time::{SystemTime, UNIX_EPOCH}};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 use nalgebra::{Point3, Point2, Vector3, Vector2, point, Matrix, Const, ArrayStorage, OPoint, Translation};
 #[cfg(feature = "frontend")]
 use bevy::ecs::system::Resource;
+use dialoguer;
+use rand::Rng;
 
 // Modules
 mod world;
@@ -50,7 +52,7 @@ pub mod renet_server;
 mod tests;
 
 // Extras
-use extras;
+//use extras;
 
 use nalgebra::Isometry3;
 
@@ -109,6 +111,56 @@ mod prelude {
 	}
 	pub fn p2_to_p3(p: P2) -> P3 {
 		point![p[0], 0.0, p[1]]
+	}
+	// Copied from extras
+	pub fn to_string_err<T, E: Error>(result: Result<T, E>) -> Result<T, String> {
+		match result {
+			Ok(t) => Ok(t),
+			Err(e) => Err(e.to_string())
+		}
+	}
+	pub fn to_string_err_with_message<T, E: Error>(result: Result<T, E>, message: &str) -> Result<T, String> {
+		match result {
+			Ok(t) => Ok(t),
+			Err(e) => Err(format!("Message: {}, Error: {}", message, e.to_string()))
+		}
+	}
+	pub fn prompt(s: &str) -> String {
+		dialoguer::Input::new()
+			.with_prompt(s)
+			.interact_text()
+			.unwrap()
+	}
+	pub fn rand_unit() -> f64 {
+		//(rand::thread_rng().gen_range(0..1000000000) as f64) / 1000000000.0
+		rand::thread_rng().gen()
+	}
+	pub fn remove_dups<T>(v: &mut Vec<T>)// From ChatGPT
+	where
+		T: PartialEq + Clone, // T needs to implement Clone for this approach
+	{
+		let mut unique_items = Vec::new();
+		let mut index = 0;
+
+		while index < v.len() {
+			let item = v[index].clone(); // Clone the item for comparison
+
+			if !unique_items.contains(&item) {
+				unique_items.push(item.clone());
+				index += 1;
+			} else {
+				v.remove(index);
+			}
+		}
+	}
+	pub fn calculate_hash<T: Hash>(t: &T) -> u64 {// https://doc.rust-lang.org/std/hash/index.html
+		let mut s = DefaultHasher::new();
+		t.hash(&mut s);
+		s.finish()
+	}
+	pub fn get_unix_ts_secs_u64() -> u64 {
+		let start = SystemTime::now();
+		start.duration_since(UNIX_EPOCH).expect("Time went backwards").as_secs()
 	}
 }
 
@@ -271,14 +323,14 @@ pub fn ui_main() {
 			"-server" => {
 				assert!(args.len() >= 3, "Not enough arguments");
 				// Start server with renet
-				let mut server = renet_server::WorldServer::init(&args[2]);
+				let mut server = renet_server::WorldServer::init(&args[2], args.contains(&"-localhost".to_string()));
 				println!("Running world");
 				server.main_loop();
 			},
 			"-new-map" => {
-				let name = extras::prompt("Name");
-				let chunk_size = extras::prompt("Chunk size").parse::<UInt>().unwrap();
-				let chunk_grid_size = extras::prompt("Number of points along each side of chunk (chunk size)").parse::<UInt>().unwrap();
+				let name = prompt("Name");
+				let chunk_size = prompt("Chunk size").parse::<UInt>().unwrap();
+				let chunk_grid_size = prompt("Number of points along each side of chunk (chunk size)").parse::<UInt>().unwrap();
 				let gen = Gen::default();
 				// name: &str, chunk_size: UInt, chunk_grid_size: UInt, gen: gen::Gen, background_color: [u8; 3]
 				resource_interface::save_map(&Map::new(&name, chunk_size, chunk_grid_size, gen, [0, 128, 0])).unwrap();

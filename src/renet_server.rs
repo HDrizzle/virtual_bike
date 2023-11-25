@@ -4,6 +4,8 @@ use std::{net::{SocketAddr, UdpSocket, IpAddr, Ipv4Addr}, time::{SystemTime, Dur
 use renet::{RenetServer, ServerEvent, ConnectionConfig, transport::{ServerAuthentication, ServerConfig}, transport::NetcodeServerTransport, DefaultChannel};
 use serde::{Serialize, Deserialize};
 use bincode;
+use local_ip_address::local_ip;
+
 use crate::{prelude::*, world::async_messages, resource_interface};
 
 #[derive(Serialize, Deserialize)]
@@ -29,33 +31,40 @@ pub enum Response {// All possible responses
 
 pub struct WorldServer {
 	world: Arc<Mutex<World>>,
-    server: RenetServer,
-    addr: SocketAddr,
+	server: RenetServer,
+	addr: SocketAddr,
 	transport: NetcodeServerTransport,
 	static_data: StaticData
 }
 
 impl WorldServer {
-	pub fn init(world_name: &str) -> Self {
+	pub fn init(world_name: &str, localhost: bool) -> Self {
 		// Load world
 		let world_original = World::load(world_name).expect(&format!("Failed to load world \"{}\"", world_name));
 		let static_data = world_original.build_static_data();
 		let world: Arc<Mutex<World>> = Arc::new(Mutex::new(world_original));
 		// Init renet server, mostly copied from https://crates.io/crates/renet
-        let server = RenetServer::new(ConnectionConfig::default());
-        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), resource_interface::load_port().expect("Unable to load and parse port.txt"));
+		let server = RenetServer::new(ConnectionConfig::default());
+		let ip_addr: IpAddr = if localhost {
+			IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))
+		}
+		else {
+			local_ip().expect("Could not get this machine's local ip address, to run on localhost/127.0.0.1 pass the flag `-localhost`")
+		};
+		let addr = SocketAddr::new(ip_addr, resource_interface::load_port().expect("Unable to load and parse port.txt"));
+		println!("Server listening on {:?}", addr);
 		let socket: UdpSocket = UdpSocket::bind(addr).unwrap();
-        let server_config = ServerConfig {
-            max_clients: 64,
-            protocol_id: 0,
-            public_addr: addr,
-            authentication: ServerAuthentication::Unsecure
-        };
+		let server_config = ServerConfig {
+			max_clients: 64,
+			protocol_id: 0,
+			public_addr: addr,
+			authentication: ServerAuthentication::Unsecure
+		};
 		let current_time = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap();
 		let transport = NetcodeServerTransport::new(current_time, server_config, socket).unwrap();
 		Self {
 			world,
-            server,
+			server,
 			addr,
 			transport,
 			static_data
@@ -80,7 +89,7 @@ impl WorldServer {
 			// Receive messages from world simulation thread
 			loop {
 				match world_rx.try_recv() {// https://doc.rust-lang.org/stable/std/sync/mpsc/struct.Receiver.html
-                    Ok(update) => {
+					Ok(update) => {
 						match update {
 							async_messages::FromWorld::State(world_send) => {
 								// Broadcast state to all clients
@@ -88,14 +97,14 @@ impl WorldServer {
 							}
 							async_messages::FromWorld::Error(e) => panic!("Received the following error from world: {}", e)
 						}
-                    },
-                    Err(error) => {
-                        match error {
-                            mpsc::TryRecvError::Empty => break,
-                            mpsc::TryRecvError::Disconnected => panic!("World receive channel has been disconnected")
-                        }
-                    }
-                }
+					},
+					Err(error) => {
+						match error {
+							mpsc::TryRecvError::Empty => break,
+							mpsc::TryRecvError::Disconnected => panic!("World receive channel has been disconnected")
+						}
+					}
+				}
 			}
 			// Receive messages from server
 			for client_id in self.server.clients_id().iter() {

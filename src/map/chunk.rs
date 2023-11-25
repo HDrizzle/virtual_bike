@@ -7,8 +7,6 @@ use bevy::{prelude::*, render::mesh::{PrimitiveTopology, Indices}};
 // Rapier 3D physics
 use rapier3d::prelude::*;
 
-use extras::rand_unit;
-
 use crate::{prelude::*, resource_interface};
 
 use super::gis;
@@ -99,7 +97,7 @@ impl RegularElevationMesh {
 			return (self.grid[x][z] + (self.grid[x + 1][z] - self.grid[x][z])/2.0) as Float;// interpolate between x and x+1
 		};*/
 		let get_vertex_index = |x: usize, z: usize| -> u32 {// Gets the `vertices` index corresponding to the grid X and Y coordinates
-			extras::to_string_err_with_message(((x * self.grid.len()) + z).try_into(), &format!("x={}, z={}", x, z)).unwrap()// TODO: test
+			to_string_err_with_message(((x * self.grid.len()) + z).try_into(), &format!("x={}, z={}", x, z)).unwrap()// TODO: test
 		};
 		let mut indices = Vec::<[u32; 3]>::new();
 		for z in 0..coord_matrix_size-1 {
@@ -152,11 +150,11 @@ impl RegularElevationMesh {
 		(
 			vertices,
 			indices
-        )
+		)
 	}
-    pub fn rapier_collider(&self, offset: &V3) -> Collider {
+	pub fn rapier_collider(&self, offset: &V3) -> Collider {
 		// https://docs.rs/rapier3d/0.17.2/rapier3d/geometry/struct.ColliderBuilder.html#method.trimesh
-        let (vertices, indices) = self.build_trimesh(offset);
+		let (vertices, indices) = self.build_trimesh(offset);
 		ColliderBuilder::trimesh(
 			vertices,
 			indices
@@ -186,7 +184,7 @@ impl RegularElevationMesh {
 	#[cfg(feature = "frontend")]
 	pub fn bevy_mesh(&self, size: u64, offset: &V3) -> Mesh {// With help from: https://stackoverflow.com/questions/66677098/how-can-i-manually-create-meshes-in-bevy-with-vertices
 		let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
-        let (vertices, indices) = self.build_trimesh(offset);
+		let (vertices, indices) = self.build_trimesh(offset);
 
 		// Positions of the vertices
 		// See https://bevy-cheatbook.github.io/features/coords.html
@@ -488,40 +486,40 @@ impl Default for Gen {
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Eq, Hash)]
 pub struct ChunkRef {// A deterministic reference to a chunk in the world
-    pub position: IntP2
+	pub position: IntP2
 }
 
 impl ChunkRef {
-    pub fn from_world_point(p: P3, chunk_size_u: UInt) -> Self {
+	pub fn from_world_point(p: P3, chunk_size_u: UInt) -> Self {
 		let chunk_size_f = chunk_size_u as Float;
 		let chunk_size_int = chunk_size_u as Int;
 		//println!("Chunk size: {}", chunk_size_f);
 		let x = (p[0] / chunk_size_f).floor() as Int * chunk_size_int;
 		let y = (p[2] / chunk_size_f).floor() as Int * chunk_size_int;
-        Self {
-            position: IntP2(x, y)
-        }
-    }
-    pub fn from_chunk_offset_position(pos: V3) -> Self {
-        Self {
-            position: IntP2(pos[0] as Int, pos[2] as Int)
-        }
-    }
-    pub fn resource_dir_name(&self) -> String {
-        format!("{}_{}", self.position.0, self.position.1)
-    }
+		Self {
+			position: IntP2(x, y)
+		}
+	}
+	pub fn from_chunk_offset_position(pos: V3) -> Self {
+		Self {
+			position: IntP2(pos[0] as Int, pos[2] as Int)
+		}
+	}
+	pub fn resource_dir_name(&self) -> String {
+		format!("{}_{}", self.position.0, self.position.1)
+	}
 	pub fn from_resource_dir_name(name: &str) -> Result<Self, String> {
 		let parts: Vec<&str> = name.split("_").collect();
 		if parts.len() != 2 {
 			return Err("Chunk dir name .split(\"_\") length is not 2".to_string());
 		}
-		let x = extras::to_string_err(parts[0].parse::<Int>())?;
-		let y = extras::to_string_err(parts[1].parse::<Int>())?;
+		let x = to_string_err(parts[0].parse::<Int>())?;
+		let y = to_string_err(parts[1].parse::<Int>())?;
 		Ok(Self{position: IntP2(x, y)})
 	}
-    pub fn into_chunk_offset_position(&self, elev_offset: Float) -> V3 {
-        V3::new(self.position.0 as Float, elev_offset, self.position.1 as Float)
-    }
+	pub fn into_chunk_offset_position(&self, elev_offset: Float) -> V3 {
+		V3::new(self.position.0 as Float, elev_offset, self.position.1 as Float)
+	}
 	pub fn adjacent_chunks(&self, size_u: u64, exclude_diagonals: bool) -> Vec<Self> {
 		let size = size_u as Int;
 		let mut out = Vec::<Self>::new();
@@ -534,23 +532,23 @@ impl ChunkRef {
 		out
 	}
 	pub fn exists(&self, map_name: &str) -> bool {
-        resource_interface::list_created_chunks(map_name).expect("Unable to list created chunks").contains(&self)
-    }
+		resource_interface::list_created_chunks(map_name).expect("Unable to list created chunks").contains(&self)
+	}
 }
 /*
 impl fmt::Debug for ChunkRef {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "ChunkRef{{{}, {}}}", self.position[0], self.position[1])
-    }
+		write!(f, "ChunkRef{{{}, {}}}", self.position[0], self.position[1])
+	}
 }*/
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Chunk {
 	pub position: V3,// Y-Value will be elevation offset
-    pub ref_: ChunkRef,
+	pub ref_: ChunkRef,
 	pub elevation: RegularElevationMesh,
-    #[serde(skip)]// Texture image data is in a seperate file (.png)
-    pub texture_data: Option<Vec<u8>>,
+	#[serde(skip)]// Texture image data is in a seperate file (.png)
+	pub texture_data: Option<Vec<u8>>,
 	pub size: UInt,
 	pub grid_size: UInt,// Number of spaces inside grid, for example if this is 4 then the elevation grid coordinates should be 5x5, because fenc-post problem
 	pub background_color: [u8; 3],
@@ -562,9 +560,9 @@ pub struct Chunk {
 }
 
 impl Chunk {
-    pub fn load(ref_: &ChunkRef, map_name: &str) -> Result<Self, Box<dyn Error>> {
+	pub fn load(ref_: &ChunkRef, map_name: &str) -> Result<Self, Box<dyn Error>> {
 		resource_interface::load_chunk_data(ref_, map_name)
-    }
+	}
 	pub fn new(position: V3, size: u64, grid_size: u64, gen: &Gen, background_color: [u8; 3], map_name: &str, map_real_world_location: Option<[Float; 2]>) -> Self {
 		let ref_ = ChunkRef::from_chunk_offset_position(position);
 		let elevation = match map_real_world_location {
@@ -574,8 +572,8 @@ impl Chunk {
 			None => RegularElevationMesh::new(size, grid_size, gen, &ref_, map_name)
 		};
 		let out = Self {
-            position: position.clone(),
-            ref_: ref_.clone(),
+			position: position.clone(),
+			ref_: ref_.clone(),
 			elevation,
 			texture_data: None,
 			size,
@@ -589,15 +587,15 @@ impl Chunk {
 		// Done
 		out
 	}
-    pub fn init_rapier(&mut self, bodies: &mut RigidBodySet, colliders: &mut ColliderSet, parent_body_handle: RigidBodyHandle) {
-        // Make sure this can only be called once
-        if let Some(_) = self.collider_handle {
-            panic!("init_rapier() called when self.collider_handle is not None, meaning it has been called more than once");
-        }
-        let collider = self.elevation.rapier_collider(&self.position);
+	pub fn init_rapier(&mut self, bodies: &mut RigidBodySet, colliders: &mut ColliderSet, parent_body_handle: RigidBodyHandle) {
+		// Make sure this can only be called once
+		if let Some(_) = self.collider_handle {
+			panic!("init_rapier() called when self.collider_handle is not None, meaning it has been called more than once");
+		}
+		let collider = self.elevation.rapier_collider(&self.position);
 		//collider.set_position(Iso{rotation: UnitQuaternion::identity(), translation: matrix_to_opoint(self.position).into()});
 		self.collider_handle = Some(colliders.insert_with_parent(collider, parent_body_handle, bodies));
-    }
+	}
 	pub fn remove_from_rapier(&mut self, bodies: &mut RigidBodySet, colliders: &mut ColliderSet, islands: &mut IslandManager) {
 		colliders.remove(self.collider_handle.expect("Removing collider from rapier, but self.collider_handle is None"), islands, bodies, false);
 		self.collider_handle = None;
@@ -650,15 +648,15 @@ impl Chunk {
 	}
 	#[cfg(feature = "backend")]
 	pub fn send(&self, map_name: &str) -> Self {// Makes sure that texture data is loaded
-        let mut out = self.clone();
+		let mut out = self.clone();
 		// Load texture
 		let texture_data = resource_interface::load_chunk_texture(&self.ref_, map_name).expect(&format!("Unable to load texture for chunk {:?}", &self.ref_));
 		out.texture_data = Some(texture_data);
-        out
+		out
 	}
 	/*#[cfg(feature = "backend")]
 	pub fn save(&self) {
-        let mut save = self.clone();
+		let mut save = self.clone();
 		// TODO
 	}*/
 }

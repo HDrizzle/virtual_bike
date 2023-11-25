@@ -22,16 +22,16 @@ mod network;
 
 #[derive(Debug)]
 struct SigninEntryState {
-    pub name: String,
-    pub psswd: String,
-    pub ip: String,
-    pub port: String
+	pub name: String,
+	pub psswd: String,
+	pub ip: String,
+	pub port: String
 }
 
 impl SigninEntryState {
-    pub fn valid(&self) -> bool {
-        true// TODO
-    }
+	pub fn valid(&self) -> bool {
+		true// TODO
+	}
 	pub fn build_network_init_info(&self) -> play::NetworkInitInfo {
 		assert!(self.valid());
 		// Setup the transport layer TODO: use entry_state
@@ -50,7 +50,7 @@ impl SigninEntryState {
 		// ClientAuthentication
 		let client_auth = ClientAuthentication::Unsecure {
 			protocol_id: 0,
-			client_id: extras::calculate_hash(&self.name),// Hash username for `client_id`, https://stackoverflow.com/questions/29573605/how-do-i-use-stdhashhash
+			client_id: calculate_hash(&self.name),// Hash username for `client_id`, https://stackoverflow.com/questions/29573605/how-do-i-use-stdhashhash
 			server_addr,
 			user_data: None
 		};
@@ -67,14 +67,14 @@ impl SigninEntryState {
 }
 
 impl Default for SigninEntryState {
-    fn default() -> Self {
-        Self {
-            name: "admin".to_string(),
-            psswd: "1234".to_string(),// Don't look very private
-            ip: "127.0.0.1".to_string(),
-            port: "62062".to_string()
-        }
-    }
+	fn default() -> Self {
+		Self {
+			name: "admin".to_string(),
+			psswd: "1234".to_string(),// Don't look very private
+			ip: "127.0.0.1".to_string(),
+			port: "62062".to_string()
+		}
+	}
 }
 
 fn get_play_init_info() -> Option<play::InitInfo> {

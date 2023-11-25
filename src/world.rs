@@ -5,7 +5,7 @@ use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113
 #[cfg(feature = "frontend")]
 use bevy_rapier3d::plugin::RapierContext;
 #[cfg(feature = "frontend")]
-use extras;
+//use extras;
 #[cfg(feature = "frontend")]
 use bevy::ecs::system::Resource;
 
@@ -321,7 +321,7 @@ impl World {
 			// 1: Timing, DO NOT USE dt, USE dt_f64 INSTEAD
 			dt = prev_t.elapsed();
 			prev_t = Instant::now();
-			dt_f64 = extras::get_secs(dt);
+			dt_f64 = dt.as_secs_f64();
 			fps = 1.0 / dt_f64;// Do not use for simulation, only for performance measurement
 			// max step
 			if dt_f64 > max_step {
@@ -407,7 +407,7 @@ impl World {
 			additional_chunks.append(&mut chunk_ref.adjacent_chunks(self.map.chunk_size, false));
 		}
 		needed_chunks.append(&mut additional_chunks);
-		extras::remove_dups(&mut needed_chunks);
+		remove_dups(&mut needed_chunks);
 		needed_chunks
 	}
 	pub fn save(&self) -> WorldSave {

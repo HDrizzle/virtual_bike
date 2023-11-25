@@ -16,8 +16,6 @@ use nalgebra::{vector, point, UnitQuaternion};
 use rapier3d::prelude::*;
 //use nalgebra::{Isometry3, Vector3, vector, Point3, point, geometry::Quaternion, UnitQuaternion, Const};
 
-use extras;
-
 use crate::{prelude::*, map::path::PathBoundBodyState};
 
 const STATIONARY_DRIVE_ACC_LIMIT: Float = 10.0;// m/s^2
@@ -277,7 +275,7 @@ impl Vehicle {
 	pub fn update_user_input(&mut self, control: InputData) {
 		// IMPORTANT: ONLY RUN WHEN THERE IS NEW USER DATA
 		self.latest_input = Some(control);
-		self.latest_input_t = extras::get_unix_ts_secs_u64();
+		self.latest_input_t = get_unix_ts_secs_u64();
 	}
 	pub fn update_physics(&mut self, dt: Float, fluid_density: Float, bodies: &mut RigidBodySet, joints: &mut ImpulseJointSet, paths: &PathSet) {
 		// Run every frame

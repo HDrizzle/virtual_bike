@@ -3,7 +3,6 @@ use std::{f64::consts::PI, default::Default};
 use serde::{Serialize, Deserialize};
 use serde_json;
 use reqwest;
-use extras;
 
 use crate::prelude::*;
 
@@ -44,12 +43,12 @@ impl ElevationRequest {
 			req_url += &format!("{},{}|", location.longitude, location.latitude);// I checked manually and trailing "|" chars are fine
 		}
 		//dbg!(&req_url);
-		let res_raw: String = extras::to_string_err(
-			extras::to_string_err(
+		let res_raw: String = to_string_err(
+			to_string_err(
 				reqwest::blocking::get(req_url)
 			)?
 			.text())?;
-		let res: ElevationResponse = extras::to_string_err(serde_json::from_str(&res_raw))?;
+		let res: ElevationResponse = to_string_err(serde_json::from_str(&res_raw))?;
 		// Done
 		//dbg!(&res);
 		Ok(res)

@@ -192,7 +192,7 @@ pub mod gen {
 
 pub mod GIS {
 	// For crate::map::real_world_gen
-    use std::f64::consts::E;
+	use std::f64::consts::E;
 	use super::*;
 	use crate::map::gis::*;
 	#[test]

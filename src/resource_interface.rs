@@ -3,11 +3,10 @@
 use std::{error::Error, fs, collections::HashMap};
 use std::io::Error as IoError;
 use serde_json;
-use extras;
 
 use crate::{vehicle::VehicleStatic, ClientAuth, world::*, map::{Map, chunk::{Chunk, ChunkRef, RegularElevationMesh, Gen}}};
 #[cfg(feature = "frontend")]
-use crate::client::hardware_controller::Calibration;
+use crate::{prelude::*, client::hardware_controller::Calibration};
 
 // STATICS
 static RESOURCES_DIR: &str = "../resources";
@@ -35,7 +34,7 @@ fn get_chunk_dir_path(chunk_ref: &ChunkRef, map_name: &str) -> String {
 pub fn list_created_chunks(map_name: &str) -> Result<Vec<ChunkRef>, String> {
 	let mut out = Vec::<ChunkRef>::new();
 	let chunks_dir = format!("{}/{}/chunks", MAPS_DIR.to_owned(), map_name);
-	let entries = extras::to_string_err_with_message(fs::read_dir(&chunks_dir), &chunks_dir)?;
+	let entries = to_string_err_with_message(fs::read_dir(&chunks_dir), &chunks_dir)?;
 	for entry_res in entries {
 		if let Ok(entry) = entry_res {
 			let path = entry.path();
