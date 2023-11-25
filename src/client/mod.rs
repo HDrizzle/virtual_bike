@@ -2,7 +2,7 @@
 This module contains the bevy-based module `play` and sign-in screen logic using egui and eframe
 Template for using `eframe` copied from https://github.com/appcove/egui.info/blob/master/examples/egui-101-basic/src/main.rsc
 */
-use std::{net::{SocketAddr, UdpSocket, IpAddr, Ipv4Addr}, time::SystemTime, thread};
+use std::{net::{SocketAddr, UdpSocket, IpAddr, Ipv4Addr}, time::SystemTime, thread, collections::hash_map::DefaultHasher};
 use bevy_renet::renet::{RenetClient, ConnectionConfig, transport::{NetcodeClientTransport, ClientAuthentication}};
 use local_ip_address::local_ip;
 
@@ -47,9 +47,10 @@ impl SigninEntryState {
 			},
 			0u16
 		)).unwrap();
+		// ClientAuthentication
 		let client_auth = ClientAuthentication::Unsecure {
 			protocol_id: 0,
-			client_id: 0,
+			client_id: extras::calculate_hash(&self.name),// Hash username for `client_id`, https://stackoverflow.com/questions/29573605/how-do-i-use-stdhashhash
 			server_addr,
 			user_data: None
 		};

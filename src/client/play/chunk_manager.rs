@@ -1,6 +1,6 @@
 // Plugin for loading/unloading chunks
 
-use std::{net::{SocketAddr, UdpSocket, IpAddr, Ipv4Addr}, time::SystemTime, collections::HashMap};
+use std::{net::{SocketAddr, UdpSocket, IpAddr, Ipv4Addr}, time::{SystemTime, Duration}, collections::HashMap};
 use bevy::{prelude::*, winit::WinitSettings, input::{keyboard::KeyboardInput, ButtonState}, render::mesh::PrimitiveTopology};
 use renet::transport::{ServerConfig, ClientAuthentication, NetcodeClientTransport};
 use bevy_renet::{renet::*, transport::NetcodeClientPlugin};
@@ -11,8 +11,7 @@ use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_inspector_egui_rapier::InspectableRapierPlugin;
 use nalgebra::{point, geometry::{Isometry, UnitQuaternion}};
 
-use crate::prelude::*;
-use super::*;
+use crate::{prelude::*, renet_server::Request};
 
 // Structs/enums
 #[derive(PartialEq)]
@@ -130,19 +129,14 @@ pub fn update_chunks_system(// TODO get this to only run when main vehicle is mo
 	mut meshes: ResMut<Assets<Mesh>>,
 	mut materials: ResMut<Assets<StandardMaterial>>,
 	render_distance: Res<RenderDistance>,
-	mut map_res_opt: Option<ResMut<Map>>,
+	mut static_data: ResMut<StaticData>,
 	mut rapier_context_res: ResMut<RapierContext>,
 	mut renet_client: ResMut<RenetClient>,
 	mut requested_chunks: ResMut<RequestedChunks>
 ) {
-	match &mut map_res_opt {
-		Some(map_res) => {
-			let chunks_to_load: Vec<ChunkRef> = render_distance.load_unload_chunks(&mut *map_res, &mut rapier_context_res, &mut commands, &mut meshes, &mut materials);
-			for chunk_ref in chunks_to_load {
-				requested_chunks.add(chunk_ref, &mut renet_client);
-			}
-		},
-		None => {}
+	let chunks_to_load: Vec<ChunkRef> = render_distance.load_unload_chunks(&mut static_data.map, &mut rapier_context_res, &mut commands, &mut meshes, &mut materials);
+	for chunk_ref in chunks_to_load {
+		requested_chunks.add(chunk_ref, &mut renet_client);
 	}
 }
 

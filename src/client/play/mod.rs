@@ -166,7 +166,7 @@ fn update_system(
 	mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-	mut map_res_opt: Option<ResMut<Map>>,
+	mut static_data: ResMut<StaticData>,
 	asset_server: Res<AssetServer>,
 	mut renet_client: ResMut<RenetClient>,
 	mut rapier_context_res: ResMut<RapierContext>,
@@ -218,12 +218,7 @@ fn update_system(
 			Response::Chunk(chunk) => {
 				//println!("Recieved chunk");//, but doing nothing else because debug reasons");
 				requested_chunks.remove(&chunk.ref_);
-				match &mut map_res_opt {
-					Some(map_res) => {
-						map_res.insert_chunk_client(chunk, &mut rapier_context, &mut commands, &mut meshes, &mut materials, &asset_server);
-					},
-					None => panic!("There is no Map resource, but Chunks are being recieved")
-				}
+				static_data.map.insert_chunk_client(chunk, &mut rapier_context, &mut commands, &mut meshes, &mut materials, &asset_server);
 			},
 			Response::Err(err_string) => {
 				panic!("Server sent following error message: {}", err_string);

@@ -114,7 +114,7 @@ impl WorldServer {
 							}
 							Request::Chunk(chunk_ref) => {
 								// TODO: change to Reliable
-								println!("Recieved chunk request: {:?}", &chunk_ref);
+								//println!("Recieved chunk request: {:?}", &chunk_ref);
 								match Chunk::load(&chunk_ref, &self.static_data.map.name) {
 									Ok(chunk) => {
 										let res = Response::Chunk(chunk);
