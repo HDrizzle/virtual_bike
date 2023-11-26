@@ -532,7 +532,14 @@ impl ChunkRef {
 		out
 	}
 	pub fn exists(&self, map_name: &str) -> bool {
-		resource_interface::list_created_chunks(map_name).expect("Unable to list created chunks").contains(&self)
+		resource_interface::find_chunk(&self, map_name).is_ok()
+	}
+	#[cfg(feature = "backend")]
+	pub fn resource_path(&self, map_name: &str, generic: bool) -> String {
+		match generic {
+			true  => format!("{}{}/generic_chunk/", resource_interface::MAPS_DIR.to_owned(), map_name.to_owned()),
+			false => format!("{}{}/chunks/{}/",     resource_interface::MAPS_DIR.to_owned(), map_name.to_owned(), self.resource_dir_name())
+		}
 	}
 }
 /*
@@ -654,9 +661,9 @@ impl Chunk {
 		out.texture_data = Some(texture_data);
 		out
 	}
-	/*#[cfg(feature = "backend")]
-	pub fn save(&self) {
-		let mut save = self.clone();
-		// TODO
-	}*/
+	pub fn set_position(&mut self, chunk_ref: &ChunkRef) {
+		// Sets chunk's position if it has been loaded as a generic chunk because if so it will likely be incorrect
+		self.ref_ = chunk_ref.clone();
+		self.position = chunk_ref.into_chunk_offset_position(self.position[1]);
+	}
 }
