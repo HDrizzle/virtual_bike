@@ -70,7 +70,7 @@ impl RegularElevationMesh {
 			}
 			//dbg!(i);
 			// Create chunk ref
-			let chunk_ref = ChunkRef{position: position.position + offset.unit_displacement().mult(size as Int), generic: false};
+			let chunk_ref = ChunkRef{position: position.position + offset.unit_displacement().mult(size as Int)};
 			// Check if it exists
 			if chunk_ref.exists(map_name) {
 				//dbg!(chunk_ref.clone());
@@ -486,8 +486,7 @@ impl Default for Gen {
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Eq, Hash)]
 pub struct ChunkRef {// A deterministic reference to a chunk in the world
-	pub position: IntP2,
-	pub generic: bool
+	pub position: IntP2
 }
 
 impl ChunkRef {
@@ -498,18 +497,15 @@ impl ChunkRef {
 		let x = (p[0] / chunk_size_f).floor() as Int * chunk_size_int;
 		let y = (p[2] / chunk_size_f).floor() as Int * chunk_size_int;
 		Self {
-			position: IntP2(x, y),
-			generic: false
+			position: IntP2(x, y)
 		}
 	}
 	pub fn from_chunk_offset_position(pos: V3) -> Self {
 		Self {
-			position: IntP2(pos[0] as Int, pos[2] as Int),
-			generic: false
+			position: IntP2(pos[0] as Int, pos[2] as Int)
 		}
 	}
 	pub fn resource_dir_name(&self) -> String {
-		assert!(!self.generic, "Should not get resource_dir_name(&self) of ChunkRef which is generic as the result will be meaningless");
 		format!("{}_{}", self.position.0, self.position.1)
 	}
 	pub fn from_resource_dir_name(name: &str) -> Result<Self, String> {
@@ -519,7 +515,7 @@ impl ChunkRef {
 		}
 		let x = to_string_err(parts[0].parse::<Int>())?;
 		let y = to_string_err(parts[1].parse::<Int>())?;
-		Ok(Self{position: IntP2(x, y), generic: false})
+		Ok(Self{position: IntP2(x, y)})
 	}
 	pub fn into_chunk_offset_position(&self, elev_offset: Float) -> V3 {
 		V3::new(self.position.0 as Float, elev_offset, self.position.1 as Float)
@@ -531,7 +527,7 @@ impl ChunkRef {
 			if exclude_diagonals && !offset.is_straight() {
 				continue;
 			}
-			out.push(Self{position: self.position + offset.unit_displacement().mult(size), generic: false});
+			out.push(Self{position: self.position + offset.unit_displacement().mult(size)});
 		}
 		out
 	}
@@ -539,11 +535,7 @@ impl ChunkRef {
 		resource_interface::find_chunk(&self, map_name).is_ok()
 	}
 	#[cfg(feature = "backend")]
-	pub fn resource_path(&self, map_name: &str, override_generic: Option<bool>) -> String {
-		let generic = match override_generic {
-			Some(x) => x,
-			None => self.generic
-		};
+	pub fn resource_path(&self, map_name: &str, generic: bool) -> String {
 		match generic {
 			true  => format!("{}{}/generic_chunk/", resource_interface::MAPS_DIR.to_owned(), map_name.to_owned()),
 			false => format!("{}{}/chunks/{}/",     resource_interface::MAPS_DIR.to_owned(), map_name.to_owned(), self.resource_dir_name())
@@ -670,7 +662,8 @@ impl Chunk {
 		out
 	}
 	pub fn set_position(&mut self, chunk_ref: &ChunkRef) {
+		// Sets chunk's position if it has been loaded as a generic chunk because if so it will likely be incorrect
 		self.ref_ = chunk_ref.clone();
-		self.position = ChunkRef::from_chunk_offset_position(self.position).into_chunk_offset_position(self.position[1]);
+		self.position = chunk_ref.into_chunk_offset_position(self.position[1]);
 	}
 }

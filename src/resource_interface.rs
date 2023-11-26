@@ -66,7 +66,7 @@ pub fn find_chunk(chunk_ref: &ChunkRef, map_name: &str) -> Result<String, Box<dy
 
 pub fn does_generic_chunk_exist(map_name: &str) -> Option<String> {
 	// Tests if map has generic chunk, if so returns path to it
-	let path = ChunkRef{position: IntP2(0, 0), generic: true}.resource_path(map_name, None);
+	let path = ChunkRef{position: IntP2(0, 0)}.resource_path(map_name, true);
 	if fs::read_dir(path.clone()).is_ok() {
 		Some(path)
 	}
@@ -77,7 +77,7 @@ pub fn does_generic_chunk_exist(map_name: &str) -> Option<String> {
 
 pub fn does_non_generic_chunk_exist(chunk_ref: &ChunkRef, map_name: &str) -> Option<String> {
 	// Explicitly uses path for non-generic chunk, even if `chunk_ref.generic` is `true`
-	let path = chunk_ref.resource_path(map_name, Some(false));
+	let path = chunk_ref.resource_path(map_name, false);
 	if fs::read_dir(path.clone()).is_ok() {
 		Some(path)
 	}
@@ -150,11 +150,11 @@ pub fn save_chunk_data(chunk: &Chunk, map_name: &str) -> Result<(), Box<dyn Erro
 		return Err(Box::new(GenericError::new("Attempt to save chunk to map which has a generic chunk".to_owned())));
 	}
 	// Create directory
-	fs::create_dir(&chunk.ref_.resource_path(map_name, None))?;
+	fs::create_dir(&chunk.ref_.resource_path(map_name, false))?;
 	// Serialize
 	let raw_string: String = serde_json::to_string(chunk)?;
 	// Save to file
-	fs::write(chunk.ref_.resource_path(map_name, None) + "data.json", &raw_string)?;
+	fs::write(chunk.ref_.resource_path(map_name, false) + "data.json", &raw_string)?;
 	Ok(())
 }
 
