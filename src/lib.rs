@@ -32,7 +32,7 @@ Created by Hadrian Ward, 2023-6-8
 #![allow(warnings)]// TODO: remove when I have a lot of free-time
 use std::{fmt, env, ops, error::Error, collections::{HashMap, hash_map::DefaultHasher}, hash::{Hash, Hasher}, time::{SystemTime, UNIX_EPOCH}};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
-use nalgebra::{Point3, Point2, Vector3, Vector2, point, Matrix, Const, ArrayStorage, OPoint, Translation};
+use nalgebra::{Point3, Point2, Vector3, Vector2, point, Matrix, Const, ArrayStorage, OPoint, Translation, Isometry3};
 #[cfg(feature = "frontend")]
 use bevy::ecs::system::Resource;
 use dialoguer;
@@ -53,11 +53,6 @@ pub mod renet_server;
 // Tests
 #[cfg(test)]
 mod tests;
-
-// Extras
-//use extras;
-
-use nalgebra::Isometry3;
 
 // Prelude, added 2023-9-9
 mod prelude {

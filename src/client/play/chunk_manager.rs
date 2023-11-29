@@ -1,15 +1,10 @@
 // Plugin for loading/unloading chunks
 
-use std::{net::{SocketAddr, UdpSocket, IpAddr, Ipv4Addr}, time::{SystemTime, Duration}, collections::HashMap};
-use bevy::{prelude::*, winit::WinitSettings, input::{keyboard::KeyboardInput, ButtonState}, render::mesh::PrimitiveTopology};
-use renet::transport::{ServerConfig, ClientAuthentication, NetcodeClientTransport};
-use bevy_renet::{renet::*, transport::NetcodeClientPlugin};
+use std::{time::{SystemTime, Duration}, collections::HashMap};
+use bevy::prelude::*;
+use bevy_renet::renet::*;
 use bevy_renet::*;
-use bevy_rapier3d::{plugin::RapierContext, prelude::Real};
-use rapier3d::dynamics::RigidBodyHandle;
-use bevy_inspector_egui::quick::WorldInspectorPlugin;
-use bevy_inspector_egui_rapier::InspectableRapierPlugin;
-use nalgebra::{point, geometry::{Isometry, UnitQuaternion}};
+use bevy_rapier3d::plugin::RapierContext;
 
 use crate::{prelude::*, renet_server::Request};
 
@@ -32,18 +27,8 @@ pub struct RenderDistance {
 impl RenderDistance {
 	pub fn load_unload_chunks(&self, map: &mut Map, context: &mut RapierContext, commands: &mut Commands, meshes: &mut ResMut<Assets<Mesh>>, materials: &mut ResMut<Assets<StandardMaterial>>) -> Vec<ChunkRef> {
 		// Returns list of ChunkRefs that need to be loaded
-		// 1: Unload, TODO: test
-		/*let mut chunks_to_unload = Vec::<ChunkRef>::new();
-		for chunk in map.loaded_chunks.iter() {
-			if self.chunk_load_status(&chunk) == ChunkLoadStatus::Unload {
-				chunks_to_unload.push(chunk.ref_.clone());
-			}
-		}
-		for ref_ in chunks_to_unload {
-			map.unload_chunk_client(&ref_, context, commands, meshes, materials);
-		}*/
-		// 2: Load
-		let mut out = Vec::<ChunkRef>::new();
+		// 1: List all chunks that MUST be loaded
+		// This basically the same as crate::map::chunk::Chunk::distance_to_point
 		/*let chunk_grid_radius: i64 = ((self.load as UInt) / map.chunk_size) as i64 + 1;
 		for dx in chunk_grid_radius..chunk_grid_radius {
 			for dy in -chunk_grid_radius..chunk_grid_radius {
@@ -56,8 +41,8 @@ impl RenderDistance {
 				}
 			}
 		}*/
-		// Test
-		out.append(&mut {
+		// Test, only requests to load occupied and adjacent chunks
+		let chunks_to_load: Vec<ChunkRef> = {
 			let mut out = Vec::<ChunkRef>::new();
 			let center_chunk = ChunkRef::from_world_point(p2_to_p3(self.pos.clone()), map.chunk_size);
 			for ref_ in center_chunk.adjacent_chunks(map.chunk_size, false) {
@@ -69,8 +54,18 @@ impl RenderDistance {
 				out.push(center_chunk);
 			}
 			out
-		});
-		out
+		};
+		// 1: Unload, TODO: test
+		let mut chunks_to_unload = Vec::<ChunkRef>::new();
+		for chunk in map.loaded_chunks.iter() {
+			if (!chunks_to_load.contains(&chunk.ref_)) && self.chunk_load_status(&chunk) == ChunkLoadStatus::Unload {
+				chunks_to_unload.push(chunk.ref_.clone());
+			}
+		}
+		for ref_ in chunks_to_unload {
+			map.unload_chunk_client(&ref_, context, commands, meshes, materials);
+		}
+		chunks_to_load
 	}
 	pub fn chunk_load_status(&self, chunk: &Chunk) -> ChunkLoadStatus {
 		let dist = chunk.distance_to_point(&self.pos);

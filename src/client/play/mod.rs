@@ -7,20 +7,17 @@ Bevy 3D rendering simple example: https://bevyengine.org/examples/3D%20Rendering
 Major change 2023-11-21: this module will only be used when the game is signed-in and being played
 */
 
-use std::{net::{SocketAddr, UdpSocket, IpAddr, Ipv4Addr}, time::{SystemTime, Duration}, collections::HashMap};
-use bevy::{prelude::*, winit::WinitSettings, input::{keyboard::KeyboardInput, ButtonState}, render::mesh::PrimitiveTopology};
+use std::collections::HashMap;
+use bevy::{prelude::*, input::{keyboard::KeyboardInput, ButtonState}};
 //use renet;
-use bevy_renet::{renet::{RenetClient, DefaultChannel, transport::{ServerConfig, ClientAuthentication, NetcodeClientTransport}}, transport::NetcodeClientPlugin};
-use bevy_rapier3d::{plugin::RapierContext, prelude::Real};
+use bevy_renet::renet::{RenetClient, DefaultChannel, transport::NetcodeClientTransport};
+use bevy_rapier3d::plugin::RapierContext;
 use rapier3d::dynamics::RigidBodyHandle;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
-use bevy_inspector_egui_rapier::InspectableRapierPlugin;
-use nalgebra::geometry::{Isometry, UnitQuaternion};
 use bincode;
 
 use crate::{
 	prelude::*,
-	resource_interface,
 	renet_server::{Request, Response}
 };
 

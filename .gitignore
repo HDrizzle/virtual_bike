@@ -15,4 +15,4 @@ Cargo.lock
 *.pdb
 
 # Don't upload maps because they can be large
-resources/maps/
+resources/maps/*/chunks/
