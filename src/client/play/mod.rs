@@ -191,7 +191,7 @@ fn update_system(
 		let res = bincode::deserialize::<Response>(&message).unwrap();
 		match res {
 			Response::InitState(mut static_data) => {
-				panic!("Bevy app recieved `Response::InitState(..) response which should not be possible, anything after the code block where this is written is obsolete code.`");
+				panic!("Bevy app recieved `Response::InitState(..) response which should not be possible, anything in the code block after where this is written is obsolete code.`");
 				// TODO: move this to super
 				println!("Received static data");
 				// Test, TODO fix

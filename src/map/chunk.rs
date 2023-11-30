@@ -1,6 +1,7 @@
 // Created 2023-9-29
 
 use std::{rc::Rc, error::Error, collections::HashMap};
+use bevy::asset::HandleId;
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 #[cfg(feature = "frontend")]
 use bevy::{prelude::*, render::mesh::{PrimitiveTopology, Indices}};
@@ -485,6 +486,7 @@ impl Default for Gen {
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Eq, Hash)]
+#[cfg_attr(feature = "frontend", derive(Component))]
 pub struct ChunkRef {// A deterministic reference to a chunk in the world
 	pub position: IntP2
 }
@@ -560,10 +562,10 @@ pub struct Chunk {
 	pub grid_size: UInt,// Number of spaces inside grid, for example if this is 4 then the elevation grid coordinates should be 5x5, because fenc-post problem
 	pub background_color: [u8; 3],
 	#[serde(skip)]
-	collider_handle: Option<ColliderHandle>/*,
+	collider_handle: Option<ColliderHandle>,
 	#[serde(skip)]
 	#[cfg(feature = "frontend")]
-	pbr_bundle_entity_commands_opt: Option<EntityCommands>*/
+	pub asset_id_opt: Option<HandleId>// Can be used for `remove()`: https://docs.rs/bevy/0.11.0/bevy/asset/struct.Assets.html#method.remove
 }
 
 impl Chunk {
@@ -586,7 +588,8 @@ impl Chunk {
 			size,
 			grid_size,
 			background_color,
-			collider_handle: None
+			collider_handle: None,
+			asset_id_opt: None
 		};
 		// Save chunk
 		//println!("Creating and saving chunk at {}", out.ref_.resource_dir_name());
@@ -608,7 +611,7 @@ impl Chunk {
 		self.collider_handle = None;
 	}
 	#[cfg(feature = "frontend")]
-	pub fn bevy_pbr_bundle(&self, commands: &mut Commands, meshes:  &mut ResMut<Assets<Mesh>>, materials: &mut ResMut<Assets<StandardMaterial>>, asset_server: &AssetServer) {// See https://stackoverflow.com/questions/66677098/how-can-i-manually-create-meshes-in-bevy-with-vertices
+	pub fn bevy_pbr_bundle(&mut self, commands: &mut Commands, meshes:  &mut ResMut<Assets<Mesh>>, materials: &mut ResMut<Assets<StandardMaterial>>, asset_server: &AssetServer) {// See https://stackoverflow.com/questions/66677098/how-can-i-manually-create-meshes-in-bevy-with-vertices
 		// TODO: paths
 		// With help from https://github.com/bevyengine/bevy/blob/main/examples/3d/texture.rs
 		let texture_handle: Handle<Image> = asset_server.load("grass_texture_large.png");// TODO: use self.texture_data
@@ -620,11 +623,18 @@ impl Chunk {
 			..default()
 		});
 		let mesh = self.elevation.bevy_mesh(self.grid_size, &self.position);
-		commands.spawn(PbrBundle {
-			mesh: meshes.add(mesh),
-			material: material_handle,
-			..default()
-		});
+		// Add mesh to meshes and get handle
+		let mesh_handle: Handle<Mesh> = meshes.add(mesh);
+		self.asset_id_opt = Some(mesh_handle.id());
+		// Done
+		commands.spawn((
+			self.ref_.clone(),
+			PbrBundle {
+				mesh: mesh_handle,
+				material: material_handle,
+				..default()
+			}
+		));
 	}
 	pub fn distance_to_point(&self, point: &P2) -> Float {
 		let v = point.coords;

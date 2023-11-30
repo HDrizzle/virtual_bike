@@ -32,20 +32,18 @@ fn loading_screen(go: Arc<Mutex<bool>>) {
 }
 
 pub fn get_play_init_info() -> Option<play::InitInfo> {
-    println!("Enter information to connect to the game server");
-    let name: String = prompt("Username");
-    let psswd: String = prompt("Password");
-    let ip: String = prompt("IPv4 addr");
-    let port: String = prompt("Port");
     // Create client/transport
     #[cfg(feature = "client_default_signin")]
     let entry = SigninEntryState::default();
     #[cfg(not(feature = "client_default_signin"))]
-    let entry = SigninEntryState {
-        name,
-        psswd,
-        ip,
-        port
+    let entry = {
+        println!("Enter information to connect to the game server");
+        SigninEntryState {
+            name: prompt("Username"),
+            psswd: prompt("Password"),
+            ip: prompt("IPv4 addr"),
+            port: prompt("Port")
+        }
     };
     let mut network_init_info: play::NetworkInitInfo = entry.build_network_init_info();
     let mut sent_request = false;
