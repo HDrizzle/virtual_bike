@@ -1,7 +1,7 @@
 // Created 2023-9-29
 
 use std::{rc::Rc, error::Error, collections::HashMap};
-use bevy::asset::HandleId;
+use bevy::asset::Handle;
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 #[cfg(feature = "frontend")]
 use bevy::{prelude::*, render::mesh::{PrimitiveTopology, Indices}};
@@ -62,7 +62,7 @@ impl RegularElevationMesh {
 			grid
 		}*/
 		// Get adjacent chunks
-		//println!("Checking for chunks adjacent to: {:?}", position);
+		println!("Checking for chunks adjacent to: {:?}", position);
 		let mut adj_chunks: [Option<Rc<Self>>; 4] = [None, None, None, None];// Has to be expanded like this otherwise Copy will need to be implemented
 		for (i_raw, offset) in EightWayDir::iter().enumerate() {
 			let i = i_raw / 2;
@@ -78,13 +78,20 @@ impl RegularElevationMesh {
 				adj_chunks[i] = Some(Rc::new(resource_interface::load_chunk_data(&chunk_ref, map_name).unwrap().elevation));
 			}
 		}
+		// Advanced debug
+		for i in 0..adj_chunks.len() {
+			match &adj_chunks[i] {
+				Some(mesh) => println!("Mesh at index: {}", i),
+				None => {}
+			}
+		}
 		// Done
 		gen.create_mesh(size, grid_size, adj_chunks)
 	}
 	pub fn build_trimesh(&self, offset: &V3) -> (Vec<P3>, Vec<[u32; 3]>) {
 		// Build vertices
 		let mut vertices = Vec::<P3>::new();
-		let coord_matrix_size = self.grid.len();// Number of fence posts, not spaces
+		let coord_matrix_size = self.grid.len();// Number of "fence posts", not "spaces"
 		//let size = (coord_matrix_size - 1) as Float * self.precision;
 		for x in 0..coord_matrix_size {
 			for z in 0..coord_matrix_size {
@@ -565,7 +572,7 @@ pub struct Chunk {
 	collider_handle: Option<ColliderHandle>,
 	#[serde(skip)]
 	#[cfg(feature = "frontend")]
-	pub asset_id_opt: Option<HandleId>// Can be used for `remove()`: https://docs.rs/bevy/0.11.0/bevy/asset/struct.Assets.html#method.remove
+	pub asset_id_opt: Option<AssetId<Mesh>>// Can be used for `remove()`: https://docs.rs/bevy/0.11.0/bevy/asset/struct.Assets.html#method.remove
 }
 
 impl Chunk {

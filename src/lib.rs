@@ -28,6 +28,8 @@ Created by Hadrian Ward, 2023-6-8
 
 2023-11-25: Started work on generic chunks, meaning that a map can be configured so that newly explored chunks will be be copied from a template and not saved,
 	this will save disk space for, for example, flat or repeating terrain.
+
+2023-12-2: I will attempt to upgrade to the latest version of Bevy (0.12.1) as well as everything that uses it.
 */
 #![allow(warnings)]// TODO: remove when I have a lot of free-time
 use std::{fmt, env, ops, error::Error, collections::{HashMap, hash_map::DefaultHasher}, hash::{Hash, Hasher}, time::{SystemTime, UNIX_EPOCH}};

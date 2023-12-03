@@ -142,8 +142,8 @@ impl Map {
 		}
 		let body_handle = self.body_handle_opt.expect("Body handle is None when trying to insert chunk, help: maybe init_rapier() hasn\'t been called yet");
 		chunk.init_rapier(bodies, colliders, body_handle);
-		#[cfg(feature = "frontend")]
-		assert!(chunk.asset_id_opt.is_some(), "Attempt in client to map.loaded_chunks.push() chunk with no asset id");
+		/*#[cfg(feature = "frontend")]
+		assert!(chunk.asset_id_opt.is_some(), "Attempt in client to map.loaded_chunks.push() chunk with no asset id");*/
 		self.loaded_chunks.push(chunk);
 		true
 	}

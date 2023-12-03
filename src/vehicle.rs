@@ -13,7 +13,7 @@ use bevy_rapier3d::plugin::RapierContext;
 use nalgebra::{vector, point, UnitQuaternion};
 
 // Rapier 3D physics
-use rapier3d::prelude::*;
+use rapier3d::{prelude::*, math::Real};
 //use nalgebra::{Isometry3, Vector3, vector, Point3, point, geometry::Quaternion, UnitQuaternion, Const};
 
 use crate::{prelude::*, map::path::PathBoundBodyState};

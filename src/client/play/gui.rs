@@ -2,7 +2,7 @@
 
 use std::{net::{SocketAddr, UdpSocket, IpAddr, Ipv4Addr}, collections::HashMap};
 use bevy::{prelude::*, winit::WinitSettings, input::{keyboard::KeyboardInput, ButtonState}, render::mesh::PrimitiveTopology};
-use renet::transport::{ServerConfig, ClientAuthentication, NetcodeClientTransport};
+//use renet::transport::{ServerConfig, ClientAuthentication, NetcodeClientTransport};
 use bevy_renet::{renet::*, transport::NetcodeClientPlugin};
 use bevy_renet::*;
 use bevy_rapier3d::{plugin::RapierContext, prelude::Real};

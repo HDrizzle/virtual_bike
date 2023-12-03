@@ -278,7 +278,7 @@ fn manual_camera_control(
 		}
 		let mut vel_trans = Transform::from_translation(velocity);
 		vel_trans.rotate_y(transform.rotation.to_euler(EulerRot::YXZ).0);// TODO: fix
-		transform.translation += vel_trans.translation * 5.0;// Very sloppy, TODO: fix
+		transform.translation += vel_trans.translation * 0.5;// Very sloppy, TODO: fix
 		// Rotation
 		let mut horiz_rot = 0.0;
 		if keys.pressed(KeyCode::Left) {

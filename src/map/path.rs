@@ -5,10 +5,12 @@ This will use bezier splines (wiki: https://en.wikipedia.org/wiki/Composite_B%C3
 Technically there are two tangent points for each knot point on a spline, but the tangent points are mirrored so only 1 per knot point is needed
 */
 
+use std::collections::HashMap;
 use nalgebra::{UnitQuaternion, vector};
 use serde::{Serialize, Deserialize};
+use bevy::{prelude::*, render::mesh::PrimitiveTopology};
 
-use super::*;
+//use super::*;
 use crate::prelude::*;
 
 // Structs
@@ -65,7 +67,7 @@ pub type PathTypeRef = u64;
 #[derive(Serialize, Deserialize, Clone)]
 pub struct PathType {
 	ref_: PathTypeRef,
-	name: String,// Non-identifying, example usage: "dirt_path", "road", or "highway"
+	name: String,// Non-identifying, example usage: "Dirt path", "Road", or "Highway"
 	width: Float
 }
 
@@ -156,11 +158,36 @@ impl Path {
 		state.latest_point = new_latest_i;
 		state.velocity = new_velocity;
 	}
+	#[cfg(feature = "frontend")]
+	pub fn init_bevy(&self, commands: &mut Commands, meshes:  &mut ResMut<Assets<Mesh>>, materials: &mut ResMut<Assets<StandardMaterial>>, asset_server: &AssetServer) {
+		// With help from https://github.com/bevyengine/bevy/blob/main/examples/3d/wireframe.rs
+		/*let texture_handle: Handle<Image> = asset_server.load("grass_texture_large.png");// TODO: use self.texture_data
+		let material_handle = materials.add(StandardMaterial {
+			base_color: Color::rgba(0.5, 0.5, 0.5, 1.0),
+			base_color_texture: Some(texture_handle),
+			alpha_mode: AlphaMode::Blend,
+			unlit: true,
+			..default()
+		});
+		let mesh = Mesh::new(PrimitiveTopology::LineList{});// TODO
+		// Add mesh to meshes and get handle
+		let mesh_handle: Handle<Mesh> = meshes.add(mesh);
+		// Done
+		commands.spawn((
+			PbrBundle {
+				mesh: mesh_handle,
+				material: material_handle,
+				..default()
+			},
+			Wireframe,
+			Wire
+		));*/
+	}
 }
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct PathSet {
-	paths: HashMap<PathRef, Path>,
+	pub paths: HashMap<PathRef, Path>,
 	query_grid_scale: UInt,// 0 means no query grid
 	#[serde(skip)]
 	query_grid: HashMap<IntP2, Vec<PathRef>>
