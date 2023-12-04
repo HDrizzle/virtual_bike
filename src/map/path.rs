@@ -5,13 +5,16 @@ This will use bezier splines (wiki: https://en.wikipedia.org/wiki/Composite_B%C3
 Technically there are two tangent points for each knot point on a spline, but the tangent points are mirrored so only 1 per knot point is needed
 */
 
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 use nalgebra::{UnitQuaternion, vector};
 use serde::{Serialize, Deserialize};
-use bevy::{prelude::*, render::mesh::PrimitiveTopology};
+use bevy::{prelude::*, render::mesh::PrimitiveTopology, pbr::wireframe::{NoWireframe, Wireframe, WireframeColor, WireframeConfig, WireframePlugin}};
 
 //use super::*;
 use crate::prelude::*;
+
+// CONSTS
+const PATH_RENDER_SEGMENT_LENGTH: Float = 1.0;
 
 // Structs
 #[derive(PartialEq, Debug)]
@@ -71,11 +74,21 @@ pub struct PathType {
 	width: Float
 }
 
+impl Default for PathType {
+	fn default() -> Self {
+		Self {
+			ref_: 0,
+			name: "Default path type".to_string(),
+			width: 10.0
+		}
+	}
+}
+
 pub type PathRef = u64;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Path {// Use for things like roads
-	pub type_: PathTypeRef,
+	pub type_: Arc<PathType>,
 	pub ref_: PathRef,
 	pub name: String,// Non-identifying, Example usage: road names
 	pub knot_points: Vec<P3>,// The spline must pass through these
@@ -86,8 +99,8 @@ pub struct Path {// Use for things like roads
 impl Path {
 	pub fn create_body_state(&self, path_body_state: PathBoundBodyState) -> BodyStateSerialize {
 		assert_eq!(path_body_state.path_ref, self.ref_);
-		let bcurve = self.get_bcurve(&path_body_state);
-		let position = bcurve.sample(path_body_state.ratio_from_latest_point);
+		let bcurve = self.get_bcurve(&path_body_state.pos);
+		let position = bcurve.sample(path_body_state.pos.ratio_from_latest_point);
 		let linvel_scalar = bcurve.length() * path_body_state.velocity;// TODO: fix: veocity is not constant along curve
 		// Linvel vector
 		let linvel: V3 = position.rotation.transform_vector(&V3::new(0.0, 0.0, linvel_scalar));
@@ -98,14 +111,13 @@ impl Path {
 			path_bound_opt: Some(path_body_state)
 		}
 	}
-	/*pub fn get_position(&self, path_body_state: &PathBoundBodyState) -> Iso {
-		assert_eq!(path_body_state.path_ref, self.ref_);
-		let bcurve = self.get_bcurve(path_body_state);
-		bcurve.sample(path_body_state.ratio_from_latest_point)
-	}*/
-	pub fn get_bcurve(&self, path_body_state: &PathBoundBodyState) -> BCurve {
+	pub fn sample(&self, pos: &PathPosition) -> Iso {
+		let bcurve = self.get_bcurve(pos);
+		bcurve.sample(pos.ratio_from_latest_point)
+	}
+	pub fn get_bcurve(&self, pos: &PathPosition) -> BCurve {
 		// Returns: (point behind, point infront)
-		let i_raw = path_body_state.latest_point;
+		let i_raw = pos.latest_point;
 		let all_points_len = self.knot_points.len();
 		let (i0, i1): (usize, usize) = match self.loop_ {
 			true => {
@@ -131,57 +143,82 @@ impl Path {
 			knots: [v0, v1]
 		}
 	}
-	pub fn get_new_index_and_ratio(&self, curr_i: usize, new_segment_progress_unclamped: Float) -> (usize, Float) {
+	pub fn get_new_position(&self, curr_i: usize, new_segment_progress_unclamped: Float) -> PathPosition {
 		// TODO: this assumes all segements are the same length, fix
 		let progress_int: Int = new_segment_progress_unclamped as Int;// TODO: be sure this always rounds down
 		let progress_fraction: Float = new_segment_progress_unclamped - (progress_int as Float);
 		let progress_int_total = progress_int + curr_i as Int;
 		let new_prev_int = (progress_int_total.rem_euclid(self.knot_points.len() as Int)) as usize;
-		(new_prev_int, progress_fraction)
+		PathPosition {
+			latest_point: new_prev_int,
+			ratio_from_latest_point: progress_fraction
+		}
 	}
 	pub fn get_real_velocity(&self, state: &PathBoundBodyState) -> Float {
-		let bcurve = self.get_bcurve(state);
-		state.velocity * bcurve.get_real_velocity_mulitplier(state.ratio_from_latest_point)
+		let bcurve = self.get_bcurve(&state.pos);
+		state.velocity * bcurve.get_real_velocity_mulitplier(state.pos.ratio_from_latest_point)
 	}
 	pub fn update_body(&self, dt: Float, forces: &mut VehicleLinearForces, v_static: &VehicleStatic, state: &mut PathBoundBodyState) {
-		let bcurve = self.get_bcurve(&state);
+		let bcurve = self.get_bcurve(&state.pos);
 		// Acceleration: F = m * a, a = F / m
 		// TODO: add gravity
 		let acc = forces.sum() / v_static.mass;// Standard units
 		// Velocity: V += a * dt
-		let new_velocity = state.velocity + (acc * dt) * bcurve.get_real_velocity_mulitplier(state.ratio_from_latest_point);// `segment_dist`/sec units
+		let new_velocity = state.velocity + (acc * dt) * bcurve.get_real_velocity_mulitplier(state.pos.ratio_from_latest_point);// `segment_dist`/sec units
 		// Translation: translation += V * dt
-		let new_segment_progress_unclamped = state.ratio_from_latest_point + new_velocity * dt;
-		let (new_latest_i, new_segment_progress): (usize, Float) = self.get_new_index_and_ratio(state.latest_point, new_segment_progress_unclamped);
+		let new_segment_progress_unclamped = state.pos.ratio_from_latest_point + new_velocity * dt;
+		let new_pos = self.get_new_position(state.pos.latest_point, new_segment_progress_unclamped);
 		// Done
-		state.ratio_from_latest_point = new_segment_progress;
-		state.latest_point = new_latest_i;
+		state.pos =  new_pos;
 		state.velocity = new_velocity;
 	}
 	#[cfg(feature = "frontend")]
-	pub fn init_bevy(&self, commands: &mut Commands, meshes:  &mut ResMut<Assets<Mesh>>, materials: &mut ResMut<Assets<StandardMaterial>>, asset_server: &AssetServer) {
-		// With help from https://github.com/bevyengine/bevy/blob/main/examples/3d/wireframe.rs
-		/*let texture_handle: Handle<Image> = asset_server.load("grass_texture_large.png");// TODO: use self.texture_data
-		let material_handle = materials.add(StandardMaterial {
-			base_color: Color::rgba(0.5, 0.5, 0.5, 1.0),
-			base_color_texture: Some(texture_handle),
-			alpha_mode: AlphaMode::Blend,
-			unlit: true,
-			..default()
-		});
-		let mesh = Mesh::new(PrimitiveTopology::LineList{});// TODO
-		// Add mesh to meshes and get handle
-		let mesh_handle: Handle<Mesh> = meshes.add(mesh);
-		// Done
-		commands.spawn((
-			PbrBundle {
-				mesh: mesh_handle,
-				material: material_handle,
+	pub fn bevy_mesh(&self, texture_len_width_ratio: Float, start: PathPosition) -> (Mesh, Option<PathPosition>) {
+		/* Crates a mesh with UV mapping. The UV coords are intended for an image with Y starting from the top going down and with the "path travel direction" being vertical.
+		`texture_len_width_ratio` is the ratio of the height / width of the texture image being used.
+		Returns: The mesh and an option for the next position to use, if this is `None`, it means that whatever loop iterating over this can now stop.
+		*/
+		let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
+		// Get length used by texture
+		let texture_len = self.type_.width * texture_len_width_ratio;
+		// Loop over segments of length `PATH_RENDER_SEGMENT_LENGTH`
+		let mut curr_pos = start;
+		loop {
+			todo!();
+		}
+	}
+	#[cfg(feature = "frontend")]
+	pub fn init_bevy(&self, commands: &mut Commands, meshes:  &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>, asset_server: &AssetServer) {
+		// Loop through entire path until done
+		let mut curr_pos = PathPosition::default();
+		loop {
+			// With help from https://github.com/bevyengine/bevy/blob/main/examples/3d/wireframe.rs
+			let texture_handle: Handle<Image> = asset_server.load("road.png");
+			let material_handle = materials.add(StandardMaterial {
+				base_color: Color::rgba(0.5, 0.5, 0.5, 1.0),
+				base_color_texture: Some(texture_handle),
+				alpha_mode: AlphaMode::Blend,
+				unlit: true,
 				..default()
-			},
-			Wireframe,
-			Wire
-		));*/
+			});
+			let (mesh, next_pos_opt) = self.bevy_mesh(220.0/708.0, curr_pos);
+			match next_pos_opt {
+				Some(next_pos) => {curr_pos = next_pos;},
+				None => break
+			}
+			// Add mesh to meshes and get handle
+			let mesh_handle: Handle<Mesh> = meshes.add(mesh);
+			// Done
+			commands.spawn((
+				PbrBundle {
+					mesh: mesh_handle,
+					material: material_handle,
+					transform: Transform::from_xyz(50.0, 20.0, 50.0),
+					..default()
+				}
+			));
+		}
+		
 	}
 }
 
@@ -210,11 +247,34 @@ impl Default for PathSet {
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct PathPosition {
+	pub latest_point: usize,
+	pub ratio_from_latest_point: Float// 0<= this < 1
+}
+
+impl PathPosition {
+	pub fn from(i: usize, f: Float) -> Self {
+		Self {
+			latest_point: i,
+			ratio_from_latest_point: f
+		}
+	}
+}
+
+impl Default for PathPosition {
+	fn default() -> Self {
+		Self {
+			latest_point: 0,
+			ratio_from_latest_point: 0.0
+		}
+	}
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct PathBoundBodyState {
 	pub path_ref: PathRef,
-	pub latest_point: usize,
-	pub ratio_from_latest_point: Float,// 0<= this < 1
-	pub velocity: Float,// in current-spline-segment-length-units / second
+	pub pos: PathPosition,
+	pub velocity: Float,// in current-curve-length-units / second
 	pub forward: bool
 }
 

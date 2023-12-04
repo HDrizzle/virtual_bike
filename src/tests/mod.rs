@@ -1,4 +1,4 @@
-use std::{collections::HashMap, rc::Rc, f64::consts::PI};
+use std::{collections::HashMap, rc::Rc, sync::Arc, f64::consts::PI};
 use approx::relative_eq;
 use crate::prelude::*;
 
@@ -190,7 +190,7 @@ pub mod gen {
 	}*/
 }
 
-pub mod GIS {
+pub mod gis {
 	// For crate::map::real_world_gen
 	use std::f64::consts::E;
 	use super::*;
@@ -217,11 +217,13 @@ pub mod GIS {
 }
 
 pub mod paths {
-	use super::*;
+	use crate::map::path::PathType;
+
+use super::*;
 	// Initial states
 	fn square_loop_non_unit_edges() -> Path {// 10 x 10 square loop
 		Path {
-			type_: 0,
+			type_: Arc::new(PathType::default()),
 			ref_: 0,
 			name: "test".to_owned(),
 			knot_points: vec![
@@ -242,8 +244,10 @@ pub mod paths {
 	fn initial_path_bound_body_state() -> PathBoundBodyState {
 		PathBoundBodyState {
 			path_ref: 0,
-			latest_point: 0,
-			ratio_from_latest_point: 0.5,
+			pos: PathPosition {
+				latest_point: 0,
+				ratio_from_latest_point: 0.5
+			},
 			velocity: 0.2,
 			forward: true
 		}
@@ -251,8 +255,10 @@ pub mod paths {
 	fn initial_path_bound_body_state_past_end() -> PathBoundBodyState {
 		PathBoundBodyState {
 			path_ref: 0,
-			latest_point: 3,
-			ratio_from_latest_point: 0.5,
+			pos: PathPosition {
+				latest_point: 3,
+				ratio_from_latest_point: 0.5
+			},
 			velocity: 0.2,
 			forward: true
 		}
@@ -280,8 +286,10 @@ pub mod paths {
 		// Compare
 		let ideal_new_state = PathBoundBodyState {
 			path_ref: 0,
-			latest_point: 0,
-			ratio_from_latest_point: 0.7,// side length is 10, 0.5 side length (5 units) + 1 unit = 0.6 of a side length
+			pos: PathPosition {
+				latest_point: 0,
+				ratio_from_latest_point: 0.7
+			},// side length is 10, 0.5 side length (5 units) + 1 unit = 0.6 of a side length
 			velocity: 0.2,
 			forward: true
 		};
@@ -293,7 +301,7 @@ pub mod paths {
 		let v_static = vehicle_static();
 		// 0 - 1
 		assert_eq!(
-			path.get_bcurve(&initial_path_bound_body_state()),
+			path.get_bcurve(&initial_path_bound_body_state().pos),
 			BCurve {
 				offsets: [V3::zeros(); 2],
 				knots: [
@@ -304,7 +312,7 @@ pub mod paths {
 		);
 		// 3 - 0
 		assert_eq!(
-			path.get_bcurve(&initial_path_bound_body_state_past_end()),
+			path.get_bcurve(&initial_path_bound_body_state_past_end().pos),
 			BCurve {
 				offsets: [V3::zeros(); 2],
 				knots: [
@@ -320,17 +328,17 @@ pub mod paths {
 		{
 			let curr_i: usize = 0;
 			let progress_ratio: Float = 1.5;
-			assert_eq!(path.get_new_index_and_ratio(curr_i, progress_ratio), (1, 0.5));
+			assert_eq!(path.get_new_position(curr_i, progress_ratio), PathPosition::from(1, 0.5));
 		}
 		{
 			let curr_i: usize = 3;
 			let progress_ratio: Float = 0.5;
-			assert_eq!(path.get_new_index_and_ratio(curr_i, progress_ratio), (3, 0.5));
+			assert_eq!(path.get_new_position(curr_i, progress_ratio), PathPosition::from(3, 0.5));
 		}
 		{// Wraparound
 			let curr_i: usize = 3;
 			let progress_ratio: Float = 2.5;
-			assert_eq!(path.get_new_index_and_ratio(curr_i, progress_ratio), (1, 0.5));
+			assert_eq!(path.get_new_position(curr_i, progress_ratio), PathPosition::from(1, 0.5));
 		}
 	}
 }

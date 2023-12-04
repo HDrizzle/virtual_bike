@@ -29,7 +29,7 @@ Created by Hadrian Ward, 2023-6-8
 2023-11-25: Started work on generic chunks, meaning that a map can be configured so that newly explored chunks will be be copied from a template and not saved,
 	this will save disk space for, for example, flat or repeating terrain.
 
-2023-12-2: I will attempt to upgrade to the latest version of Bevy (0.12.1) as well as everything that uses it.
+2023-12-2: I will attempt to upgrade to the latest version of Bevy (bevy-^0.12) as well as everything that uses it.
 */
 #![allow(warnings)]// TODO: remove when I have a lot of free-time
 use std::{fmt, env, ops, error::Error, collections::{HashMap, hash_map::DefaultHasher}, hash::{Hash, Hasher}, time::{SystemTime, UNIX_EPOCH}};
@@ -74,7 +74,7 @@ mod prelude {
 	// Misc, important to not use anything that is behind a feature
 	pub use crate::{
 		world::{StaticData, PhysicsState, World, WorldSave, WorldSend},
-		map::{Map, path::{Path, PathSet, PathBoundBodyState, BCurve}, chunk::{Chunk, ChunkRef, RegularElevationMesh, Gen}},
+		map::{Map, path::{Path, PathSet, PathBoundBodyState, PathPosition, BCurve}, chunk::{Chunk, ChunkRef, RegularElevationMesh, Gen}},
 		vehicle::{Vehicle, VehicleStatic, VehicleSave, VehicleSend, Wheel, WheelStatic, BodyStateSerialize, BodyPhysicsController, VehicleLinearForces},
 		GenericError,
 		InputData,
@@ -82,7 +82,8 @@ mod prelude {
 		ClientUpdate,
 		EightWayDir,
 		IntP2,
-		resource_interface
+		resource_interface,
+		BasicTriMesh
 	};
 	// Utility functions because nalgebra is friggin complicated
 	pub fn add_isometries(iso1: &Iso, iso2: &Iso) -> Iso {
@@ -312,6 +313,11 @@ impl ops::Sub<IntP2> for IntP2 {
 	fn sub(self, other: IntP2) -> Self {
 		Self(self.0 - other.0, self.1 - other.1)
 	}
+}
+
+pub struct BasicTriMesh {
+	pub vertices: Vec<P3>,
+	pub indices: Vec<[u32; 3]>
 }
 
 //#[derive(Serialize, Deserialize)]

@@ -155,4 +155,10 @@ impl Map {
 		}
 		None
 	}
+	#[cfg(feature = "frontend")]
+	pub fn init_bevy(&mut self, commands: &mut Commands, meshes:  &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>, asset_server: &AssetServer) {
+		for (_, path) in &mut self.path_set.paths.iter_mut() {
+			path.init_bevy(commands, meshes, materials, asset_server);
+		}
+	}
 }

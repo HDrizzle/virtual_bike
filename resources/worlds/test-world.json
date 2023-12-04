@@ -1,5 +1,5 @@
 {
-	"map": "random_gen",
+	"map": "paths_test",
 	"vehicles": {
 		"admin": {
 			"static_name": "test-bike",

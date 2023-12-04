@@ -8,7 +8,16 @@ Major change 2023-11-21: this module will only be used when the game is signed-i
 */
 
 use std::collections::HashMap;
-use bevy::{prelude::*, input::{keyboard::KeyboardInput, ButtonState}};
+use bevy::{
+	prelude::*,
+	input::{keyboard::KeyboardInput, ButtonState},
+	render::{
+		render_resource::WgpuFeatures,
+		settings::{RenderCreation, WgpuSettings},
+		RenderPlugin,
+	},
+	pbr::wireframe::WireframePlugin
+};
 //use renet;
 use bevy_renet::renet::{RenetClient, DefaultChannel, transport::NetcodeClientTransport};
 use bevy_rapier3d::plugin::RapierContext;
@@ -54,8 +63,13 @@ impl InitInfo {
 		mut renet_client: ResMut<RenetClient>,
 		mut rapier_context_res: ResMut<RapierContext>,
 		mut wheel_query: Query<(&mut Wheel, &UsernameComponent)>,
-		mut static_data: ResMut<StaticData>
+		mut static_data: ResMut<StaticData>,
+		mut meshes: ResMut<Assets<Mesh>>,
+		mut materials: ResMut<Assets<StandardMaterial>>,
+		asset_server: Res<AssetServer>,
 	) {
+		// Map init bevy
+		static_data.map.init_bevy(&mut commands, meshes.as_mut(), materials.as_mut(), &*asset_server);
 		// Init rapier
 		// (HashMap<String, RigidBodyHandle>, Vec<(String, Wheel)>)
 		let mut rapier_context = rapier_context_res.into_inner();
@@ -353,7 +367,15 @@ impl Plugin for MainClientPlugin {
 pub fn start(init_info: InitInfo) {
 	let mut app = App::new();
 	app.add_plugins((
-		DefaultPlugins,
+		DefaultPlugins/*.set(RenderPlugin {// From https://github.com/bevyengine/bevy/blob/main/examples/3d/wireframe.rs
+			render_creation: RenderCreation::Automatic(WgpuSettings {
+				// WARN this is a native only feature. It will not work with webgl or webgpu
+				features: WgpuFeatures::POLYGON_MODE_LINE,
+				..default()
+			}),
+		}),
+		// You need to add this plugin to enable wireframe rendering
+		WireframePlugin*/,
 		CustomRenetPlugin,
 		ChunkManagerPlugin,
 		GuiPlugin,

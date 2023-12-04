@@ -88,8 +88,8 @@ impl RegularElevationMesh {
 		// Done
 		gen.create_mesh(size, grid_size, adj_chunks)
 	}
-	pub fn build_trimesh(&self, offset: &V3) -> (Vec<P3>, Vec<[u32; 3]>) {
-		// Build vertices
+	pub fn build_trimesh(&self, offset: &V3) -> BasicTriMesh {
+		// Build vertices, returns (Flattened vec of vertices, Vec of 3-arrays of indices for vertices in the vertices vec which make up each triangle)
 		let mut vertices = Vec::<P3>::new();
 		let coord_matrix_size = self.grid.len();// Number of "fence posts", not "spaces"
 		//let size = (coord_matrix_size - 1) as Float * self.precision;
@@ -155,17 +155,17 @@ impl RegularElevationMesh {
 			];
 		}*/
 		// Done
-		(
+		BasicTriMesh {
 			vertices,
 			indices
-		)
+		}
 	}
 	pub fn rapier_collider(&self, offset: &V3) -> Collider {
 		// https://docs.rs/rapier3d/0.17.2/rapier3d/geometry/struct.ColliderBuilder.html#method.trimesh
-		let (vertices, indices) = self.build_trimesh(offset);
+		let mesh = self.build_trimesh(offset);
 		ColliderBuilder::trimesh(
-			vertices,
-			indices
+			mesh.vertices,
+			mesh.indices
 		).friction(2.0)
 		.restitution(0.9)// TODO: fix const value
 		.build()
@@ -192,12 +192,12 @@ impl RegularElevationMesh {
 	#[cfg(feature = "frontend")]
 	pub fn bevy_mesh(&self, size: u64, offset: &V3) -> Mesh {// With help from: https://stackoverflow.com/questions/66677098/how-can-i-manually-create-meshes-in-bevy-with-vertices
 		let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
-		let (vertices, indices) = self.build_trimesh(offset);
+		let tri_mesh = self.build_trimesh(offset);
 
 		// Positions of the vertices
 		// See https://bevy-cheatbook.github.io/features/coords.html
 		let mut vertex_arrays = Vec::<[f32; 3]>::new();
-		for v in &vertices {
+		for v in &tri_mesh.vertices {
 			vertex_arrays.push([v[0], v[1], v[2]]);
 		}
 		mesh.insert_attribute(
@@ -207,14 +207,14 @@ impl RegularElevationMesh {
 
 		// In this example, normals and UVs don't matter,
 		// so we just use the same value for all of them
-		mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0., 1., 0.]; vertices.len()]);
+		mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0., 1., 0.]; tri_mesh.vertices.len()]);
 		//mesh.compute_flat_normals();// https://docs.rs/bevy/latest/bevy/render/mesh/struct.Mesh.html#method.compute_flat_normals
 		//mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, vec![[0., 0.]; 3]);
-		mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, self.build_uv_coords(size, &vertices, offset));
+		mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, self.build_uv_coords(size, &tri_mesh.vertices, offset));
 
 		// A triangle using vertices 0, 2, and 1.
 		// Note: order matters. [0, 1, 2] will be flipped upside down, and you won't see it from behind!
-		mesh.set_indices(Some(Indices::U32(self.flatten_and_reverse_indices(&indices))));
+		mesh.set_indices(Some(Indices::U32(self.flatten_and_reverse_indices(&tri_mesh.indices))));
 
 		// Done
 		mesh
