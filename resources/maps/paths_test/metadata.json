@@ -11,7 +11,11 @@
     "path_set": {
         "paths": {
             "0": {
-                "type_": 0,
+                "type_": {
+                    "ref_": 0,
+                    "name": "Generic path",
+                    "width": 10
+                },
                 "ref_": 0,
                 "name": "square",
                 "knot_points": [

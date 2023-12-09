@@ -170,15 +170,6 @@ impl RegularElevationMesh {
 		.restitution(0.9)// TODO: fix const value
 		.build()
 	}
-	pub fn flatten_and_reverse_indices(&self, indices: &Vec<[u32; 3]>) -> Vec<u32> {
-		let mut out = Vec::<u32>::new();
-		for set in indices {
-			out.push(set[0]);
-			out.push(set[2]);// Not a mistake
-			out.push(set[1]);// Triangle winding or something, do not change
-		}
-		out
-	}
 	pub fn build_uv_coords(&self, grid_size: u64, vertices: &Vec<P3>, offset: &V3) -> Vec<[f32; 2]> {
 		// Offset is required because unless this is the chunk at (0, 0), the vertex coordinates will be out of the grid precision range
 		let mut out = Vec::<[f32; 2]>::new();
@@ -191,7 +182,8 @@ impl RegularElevationMesh {
 	}
 	#[cfg(feature = "frontend")]
 	pub fn bevy_mesh(&self, size: u64, offset: &V3) -> Mesh {// With help from: https://stackoverflow.com/questions/66677098/how-can-i-manually-create-meshes-in-bevy-with-vertices
-		let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
+		// If BasicTriMesh::build_bevy_mesh() works, this whole thing can be deleted
+		/*let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
 		let tri_mesh = self.build_trimesh(offset);
 
 		// Positions of the vertices
@@ -214,7 +206,10 @@ impl RegularElevationMesh {
 
 		// A triangle using vertices 0, 2, and 1.
 		// Note: order matters. [0, 1, 2] will be flipped upside down, and you won't see it from behind!
-		mesh.set_indices(Some(Indices::U32(self.flatten_and_reverse_indices(&tri_mesh.indices))));
+		mesh.set_indices(Some(Indices::U32(self.flatten_and_reverse_indices(&tri_mesh.indices))));*/
+		let tri_mesh = self.build_trimesh(offset);
+		let mut mesh = tri_mesh.build_bevy_mesh();
+		mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, self.build_uv_coords(size, &tri_mesh.vertices, offset));
 
 		// Done
 		mesh

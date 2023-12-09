@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["backend", "frontend", "debug_render_physics", "debug_vehicle_input", "client_default_signin", "experimental_terrain_gen", "debug_camera_control"]
+default = ["backend", "frontend", "debug_render_physics", "debug_vehicle_input", "client_default_signin", "experimental_terrain_gen"]#, "debug_camera_control", "path_rendering"]
 backend = ["reqwest"]
 frontend = ["serialport", "bevy", "bevy_rapier3d", "bevy-inspector-egui", "bevy-inspector-egui-rapier", "bevy_renet", "image", "eframe"]
 web_server = ["backend", "hyper", "futures"]
@@ -17,6 +17,7 @@ debug_vehicle_input = []
 GIS_longitude_scaling = []
 client_default_signin = ["frontend"]
 egui_signin = []
+path_rendering = []
 
 # Enable a small amount of optimization in debug mode
 #[profile.dev]

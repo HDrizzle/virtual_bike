@@ -87,7 +87,7 @@ impl Default for PathType {
 pub type PathRef = u64;
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct Path {// Use for things like roads
+pub struct Path {// TODO: fix: load the path type from seperate file
 	pub type_: Arc<PathType>,
 	pub ref_: PathRef,
 	pub name: String,// Non-identifying, Example usage: road names
@@ -121,7 +121,7 @@ impl Path {
 		let all_points_len = self.knot_points.len();
 		let (i0, i1): (usize, usize) = match self.loop_ {
 			true => {
-				assert!(i_raw < all_points_len, "Path body state latest point should be < the length of the spline's knot points when the path is looping");
+				assert!(i_raw < all_points_len, "Path position latest point should be < the length of the spline's knot points when the path is looping");
 				if i_raw == all_points_len - 1 {
 					(i_raw, 0)
 				}
@@ -130,7 +130,7 @@ impl Path {
 				}
 			},
 			false => {
-				assert!(i_raw - 1 < all_points_len, "Path body state latest point - 1 should be < the length of the spline's knot points when the path is not looping");
+				assert!(i_raw - 1 < all_points_len, "Path position latest point - 1 should be < the length of the spline's knot points when the path is not looping");
 				(i_raw, i_raw + 1)
 			}
 		};
@@ -154,6 +154,19 @@ impl Path {
 			ratio_from_latest_point: progress_fraction
 		}
 	}
+	pub fn step_position_by_world_units(&self, pos: &mut PathPosition, step: Float) -> bool {
+		// Returns: whether the position looped over to the beginning of this path
+		let old_latest_point = pos.latest_point;
+		let bcurve = self.get_bcurve(pos);
+		let new_segment_progress_unclamped = pos.ratio_from_latest_point + step / bcurve.length();// TODO: fix: assumes linear motion across bcurve
+		*pos = self.get_new_position(pos.latest_point, new_segment_progress_unclamped);
+		// Done
+		pos.latest_point < old_latest_point// TODO: fix: assumes a step shorter than the whole path itself
+
+	}
+	pub fn end_position(&self) -> PathPosition {
+		PathPosition{latest_point: self.knot_points.len() - 1, ratio_from_latest_point: 1.0}
+	}
 	pub fn get_real_velocity(&self, state: &PathBoundBodyState) -> Float {
 		let bcurve = self.get_bcurve(&state.pos);
 		state.velocity * bcurve.get_real_velocity_mulitplier(state.pos.ratio_from_latest_point)
@@ -173,19 +186,97 @@ impl Path {
 		state.velocity = new_velocity;
 	}
 	#[cfg(feature = "frontend")]
-	pub fn bevy_mesh(&self, texture_len_width_ratio: Float, start: PathPosition) -> (Mesh, Option<PathPosition>) {
+	pub fn bevy_mesh(&self, texture_len_width_ratio: Float, start: &PathPosition) -> (Mesh, Option<PathPosition>) {
 		/* Crates a mesh with UV mapping. The UV coords are intended for an image with Y starting from the top going down and with the "path travel direction" being vertical.
 		`texture_len_width_ratio` is the ratio of the height / width of the texture image being used.
+		The layout of the mesh will look like:
+		~~~~~~~~~~~
+		| *       |
+		4         | ---
+		| *       |  ^
+		|    *    |  |
+		|       * |  |
+		|         3  | `PATH_RENDER_SEGMENT_LENGTH`
+		|       * |  |
+		|    *    |  |
+		| *       |  v
+		2         | ---
+		| *       |
+		|    *    |
+		|       * |
+		0 ------- 1
+		|<------->| self.type_.width
 		Returns: The mesh and an option for the next position to use, if this is `None`, it means that whatever loop iterating over this can now stop.
 		*/
 		let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
+		let half_width = self.type_.width / 2.0;
 		// Get length used by texture
 		let texture_len = self.type_.width * texture_len_width_ratio;
+		let start_bcurve = self.get_bcurve(start);
+		// Function to get edge positions on the road, TODO: verify
+		let get_edge_pos = |center_pos: &PathPosition, sideways_offset: Float| -> V3 {
+			let center_iso = self.sample(center_pos);
+			add_isometries(&center_iso, &Iso{
+				translation: nalgebra::Translation{vector: V3::new(sideways_offset, 0.0, 0.0)},
+				rotation: UnitQuaternion::identity()
+			}).translation.vector
+		};
 		// Loop over segments of length `PATH_RENDER_SEGMENT_LENGTH`
-		let mut curr_pos = start;
-		loop {
-			todo!();
-		}
+		let mut basic_mesh = BasicTriMesh::default();
+		let mut uv_coords = Vec::<[f32; 2]>::new();// For mapping the texture onto the mesh
+		basic_mesh.vertices.push(P3::from(get_edge_pos(start, -half_width)));// First vertex, bottom-left of ASCII diagram above
+		let mut curr_pos: PathPosition = start.clone();/*self.get_new_position(
+			start.latest_point,
+			start.ratio_from_latest_point * start_bcurve.length() + PATH_RENDER_SEGMENT_LENGTH / 2.0
+		);*/
+		let mut i = 0;// even = right side, odd - left side
+		let next_pos: Option<PathPosition> = loop {
+			// Get sideways offset
+			let sideways_offset_sign: Float = if i % 2 == 0 {
+				1.0
+			}
+			else {
+				-1.0
+			};
+			let sideways_offset = half_width * sideways_offset_sign;
+			// Append next edge point
+			basic_mesh.vertices.push(P3::from(get_edge_pos(
+				&curr_pos,
+				sideways_offset
+			)));
+			// TODO: UV coords
+			// New triangle from last 3 vertices, TODO: check winding
+			if i >= 1 {
+				let start: u32 = basic_mesh.vertices.len() as u32 - 3;
+				basic_mesh.indices.push([start, start+1, start+2]);
+				uv_coords.push([
+					(sideways_offset_sign + 1.0) / 2.0,
+					1.0 - (texture_len / (i as Float * (PATH_RENDER_SEGMENT_LENGTH / 2.0)))
+				]);
+			}
+			// Next pos/i
+			i += 1;
+			// Check stop conditions
+			let looped_over = self.step_position_by_world_units(&mut curr_pos, PATH_RENDER_SEGMENT_LENGTH / 2.0);
+			let end_of_texture = i as Float * (PATH_RENDER_SEGMENT_LENGTH / 2.0) >= texture_len;
+			let end = looped_over || end_of_texture;
+			// TODO: stop either at end of this path or end of texture
+			if end {
+				curr_pos = self.end_position();
+				// Last part, complicated triangles
+				// TODO
+				// Break
+				break if !looped_over {
+					Some(curr_pos)
+				}
+				else {
+					None
+				};
+			}
+		};
+		// Done
+		mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv_coords);
+		(mesh, next_pos)
 	}
 	#[cfg(feature = "frontend")]
 	pub fn init_bevy(&self, commands: &mut Commands, meshes:  &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>, asset_server: &AssetServer) {
@@ -193,15 +284,15 @@ impl Path {
 		let mut curr_pos = PathPosition::default();
 		loop {
 			// With help from https://github.com/bevyengine/bevy/blob/main/examples/3d/wireframe.rs
-			let texture_handle: Handle<Image> = asset_server.load("road.png");
+			/*let texture_handle: Handle<Image> = asset_server.load("road.png");
 			let material_handle = materials.add(StandardMaterial {
 				base_color: Color::rgba(0.5, 0.5, 0.5, 1.0),
 				base_color_texture: Some(texture_handle),
 				alpha_mode: AlphaMode::Blend,
 				unlit: true,
 				..default()
-			});
-			let (mesh, next_pos_opt) = self.bevy_mesh(220.0/708.0, curr_pos);
+			});*/
+			let (mesh, next_pos_opt) = self.bevy_mesh(220.0/708.0, &curr_pos);// TODO: fix hardcoded value
 			match next_pos_opt {
 				Some(next_pos) => {curr_pos = next_pos;},
 				None => break
@@ -212,13 +303,11 @@ impl Path {
 			commands.spawn((
 				PbrBundle {
 					mesh: mesh_handle,
-					material: material_handle,
-					transform: Transform::from_xyz(50.0, 20.0, 50.0),
+					material: materials.add(Color::RED.into()),//material_handle,
 					..default()
 				}
 			));
 		}
-		
 	}
 }
 
@@ -281,8 +370,10 @@ pub struct PathBoundBodyState {
 /*
 {
                     "path_ref": 0,
-                    "latest_point": 0,
-                    "ratio_from_latest_point": 0.5,
+					"pos": {
+						"latest_point": 0,
+                    	"ratio_from_latest_point": 0.5
+					},
                     "velocity": 0.1,
                     "forward": true
                 } */

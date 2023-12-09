@@ -36,7 +36,7 @@ use std::{fmt, env, ops, error::Error, collections::{HashMap, hash_map::DefaultH
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 use nalgebra::{Point3, Point2, Vector3, Vector2, point, Matrix, Const, ArrayStorage, OPoint, Translation, Isometry3};
 #[cfg(feature = "frontend")]
-use bevy::ecs::system::Resource;
+use bevy::{ecs::system::Resource, render::{mesh::{Mesh, Indices}, render_resource::PrimitiveTopology}};
 use dialoguer;
 use rand::Rng;
 
@@ -318,6 +318,57 @@ impl ops::Sub<IntP2> for IntP2 {
 pub struct BasicTriMesh {
 	pub vertices: Vec<P3>,
 	pub indices: Vec<[u32; 3]>
+}
+
+impl BasicTriMesh {
+	#[cfg(feature = "frontend")]
+	pub fn build_bevy_mesh(&self) -> Mesh {
+		// Check if valid
+		self.is_valid().unwrap();
+		// Start with "blank" mesh
+		let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
+		let mut vertex_arrays = Vec::<[f32; 3]>::new();
+		for v in &self.vertices {
+			vertex_arrays.push([v[0], v[1], v[2]]);
+		}
+		mesh.insert_attribute(
+			Mesh::ATTRIBUTE_POSITION,
+			vertex_arrays,
+		);
+		mesh.set_indices(Some(Indices::U32(self.flatten_and_reverse_indices())));
+		// Done
+		mesh
+	}
+	pub fn is_valid(&self) -> Result<(), String> {
+		// Check that all indices are within limits
+		for triangle in &self.indices {
+			for index in triangle {
+				if index >= &(self.vertices.len() as u32) {
+					return Err(format!("BasicTriMesh::is_valid(): index out of bounds"));
+				}
+			}
+		}
+		// Done
+		Ok(())
+	}
+	pub fn flatten_and_reverse_indices(&self) -> Vec<u32> {
+		let mut out = Vec::<u32>::new();
+		for set in &self.indices {
+			out.push(set[0]);
+			out.push(set[2]);// Not a mistake
+			out.push(set[1]);// Triangle winding or something, do not change
+		}
+		out
+	}
+}
+
+impl Default for BasicTriMesh {
+	fn default() -> Self {
+		Self {
+			vertices: Vec::new(),
+			indices: Vec::new()
+		}
+	}
 }
 
 //#[derive(Serialize, Deserialize)]
