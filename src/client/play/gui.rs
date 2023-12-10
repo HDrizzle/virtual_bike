@@ -5,13 +5,11 @@ use bevy::{prelude::*, winit::WinitSettings, input::{keyboard::KeyboardInput, Bu
 //use renet::transport::{ServerConfig, ClientAuthentication, NetcodeClientTransport};
 use bevy_renet::{renet::*, transport::NetcodeClientPlugin};
 use bevy_renet::*;
-use bevy_rapier3d::{plugin::RapierContext, prelude::Real};
 use rapier3d::dynamics::RigidBodyHandle;
 use bevy_inspector_egui::{
 	quick::WorldInspectorPlugin,
 	bevy_egui::{egui, EguiContexts, EguiPlugin}// Importing from re-export to prevent conflicting versions of bevy_egui
 };
-use bevy_inspector_egui_rapier::InspectableRapierPlugin;
 use nalgebra::{point, geometry::{Isometry, UnitQuaternion}};
 
 use crate::prelude::*;

@@ -9,6 +9,7 @@ use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113
 #[cfg(feature = "frontend")]
 use bevy::{prelude::*, ecs::component::Component};
 #[cfg(feature = "frontend")]
+#[cfg(feature = "debug_render_physics")]
 use bevy_rapier3d::plugin::RapierContext;
 use nalgebra::{vector, point, UnitQuaternion};
 
@@ -211,7 +212,7 @@ pub struct VehicleSend {// This is sent over the network to the client
 impl VehicleSend {
 	#[cfg(feature = "frontend")]
     pub fn update_bevy_camera_transform(&self, transform: &mut Transform) {
-		let p = &self.body_state.position;
+		let p: &Iso = &self.body_state.position;
         //*transform = Transform::from_xyz(50.0, 10.0, 50.0).looking_at(Vec3{x: v.0 as Float, y: v.1 as Float, z: v.2 as Float}, Vec3::Y);
         //*transform = transform.looking_at(p.translation.into(), Vec3::Y);
 		let mut new_trans = Transform::default();

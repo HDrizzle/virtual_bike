@@ -3,6 +3,7 @@
 use std::{thread, error::Error, sync::{mpsc, Arc}, collections::HashMap, time::{Duration, Instant}};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 #[cfg(feature = "frontend")]
+#[cfg(feature = "debug_render_physics")]
 use bevy_rapier3d::plugin::RapierContext;
 #[cfg(feature = "frontend")]
 //use extras;
@@ -15,8 +16,9 @@ use rapier3d::prelude::*;
 use crate::prelude::*;
 #[cfg(feature = "backend")]
 use crate::resource_interface::*;
-#[cfg(feature = "frontend")]
-use crate::client::play::VehicleBodyHandles;
+/*#[cfg(feature = "frontend")]
+#[cfg(feature = "debug_render_physics")]
+use crate::client::play::VehicleBodyHandles;*/
 
 use nalgebra::vector;
 
@@ -31,31 +33,12 @@ pub struct StaticData {
 
 impl StaticData {
 	#[cfg(feature = "frontend")]
-	pub fn init_bevy_rapier_context(&mut self, context: &mut RapierContext) -> (HashMap<String, RigidBodyHandle>, Vec<(String, Wheel)>) {
-		let mut out = (HashMap::<String, RigidBodyHandle>::new(), Vec::<(String, Wheel)>::new());
+	#[cfg(feature = "debug_render_physics")]
+	pub fn init_bevy_rapier_context(&mut self, context: &mut RapierContext) {
 		// Debug feature
-		#[cfg(feature = "debug_render_physics")]
-		{
-			self.partial_physics.init_bevy_rapier_context(context);// very important that this is the first thing that acts on the rapier context
-		}
+		self.partial_physics.init_bevy_rapier_context(context);// very important that this is the first thing that acts on the rapier context, NOT the map
 		// Map
 		self.map.init_rapier(&mut context.bodies);
-		// Vehicles
-		#[cfg(not(feature = "debug_render_physics"))]
-		{
-			let (mut handles, mut owner_wheel_pairs) = (HashMap::<String, RigidBodyHandle>::new(), Vec::<(String, Wheel)>::new());
-			for (name, v) in self.vehicles.iter() {
-				let (body_handle, _, wheels) = v.init_rapier(&mut context.bodies, &mut context.colliders, &mut context.impulse_joints, None, false);
-				// Save handle
-				handles.insert(name.to_owned(), body_handle);
-				// Save wheels
-				for w in wheels {
-					owner_wheel_pairs.push((name.to_owned(), w));
-				}
-			}
-			out = (handles, owner_wheel_pairs);
-		}
-		out
 	}
 	pub fn debug_print_sizes(&self) {
 		println!("StaticData.debug_print_sizes() is running");
@@ -135,6 +118,7 @@ impl PhysicsState {
 	pub fn insert_collider_with_parent(&mut self, collider: Collider, body_handle: RigidBodyHandle) -> ColliderHandle {
 		self.colliders.insert_with_parent(collider, body_handle, &mut self.bodies)
 	}
+	#[cfg(feature = "debug_render_physics")]
 	pub fn send(&self, vehicles: &HashMap<String, Vehicle>) -> PhysicsStateSend {// TODO: only send the states of vehicles, wheel mounts and wheels
 		let (mut bodies_v, mut colliders_v, mut impulse_joints_v): (Vec<RigidBodyHandle>, Vec<ColliderHandle>, Vec<ImpulseJointHandle>) = (Vec::new(), Vec::new(), Vec::new());
 		PhysicsStateSend {
@@ -154,9 +138,17 @@ impl PhysicsState {
 		}
 		out
 	}
+	pub fn build_body_creation_deletion_context(&mut self) -> RapierBodyCreationDeletionContext {
+		RapierBodyCreationDeletionContext {
+			bodies: &mut self.bodies,
+			colliders: &mut self.colliders,
+			islands: &mut self.islands
+		}
+	}
 }
 
 #[derive(Serialize, Deserialize, Clone)]
+#[cfg(feature = "debug_render_physics")]
 pub struct PhysicsStateSend {// Only what is needed to init the client's rapier context, this should only be sent once when the client initially connects as it can be very large when serialized
 	pub islands: IslandManager,
 	pub bodies: RigidBodySet,
@@ -165,6 +157,7 @@ pub struct PhysicsStateSend {// Only what is needed to init the client's rapier 
 	pub multibody_joints: MultibodyJointSet,
 }
 
+#[cfg(feature = "debug_render_physics")]
 impl PhysicsStateSend {
 	#[cfg(feature = "frontend")]
 	pub fn init_bevy_rapier_context(&self, context: &mut RapierContext) {
@@ -173,6 +166,13 @@ impl PhysicsStateSend {
 		context.colliders = self.colliders.clone();
 		context.impulse_joints = self.impulse_joints.clone();
 		context.multibody_joints = self.multibody_joints.clone();
+	}
+	pub fn build_body_creation_deletion_context(&mut self) -> RapierBodyCreationDeletionContext {
+		RapierBodyCreationDeletionContext {
+			bodies: &mut self.bodies,
+			colliders: &mut self.colliders,
+			islands: &mut self.islands
+		}
 	}
 }
 
@@ -214,10 +214,10 @@ pub struct WorldSend {// Sent to the client
 	pub body_states: BodyStates
 }
 
+#[cfg(feature = "frontend")]
 impl WorldSend {
-	#[cfg(feature = "frontend")]
-	pub fn update_bevy_rapier_context(&self, context: &mut RapierContext, v_body_handles: &VehicleBodyHandles, mut wheels: Vec<(&String, &mut Wheel)>, map_body_handle_opt: Option<RigidBodyHandle>) {
-		#[cfg(feature = "debug_render_physics")]
+	#[cfg(feature = "debug_render_physics")]
+	pub fn update_bevy_rapier_context(&self, context: &mut RapierContext, map_body_handle_opt: Option<RigidBodyHandle>) {
 		for (handle, body_state) in self.body_states.iter() {
 			if let Some(map_body_handle) = map_body_handle_opt {
 				if handle == &map_body_handle {
@@ -225,28 +225,6 @@ impl WorldSend {
 				}
 			}
 			body_state.init_rapier_body(context.bodies.get_mut(*handle).expect("Unable to get body with handle from WorldSend::body_states"));
-		}
-		// Vehicles
-		#[cfg(not(feature = "debug_render_physics"))]
-		for (name, v_send) in self.vehicles.iter() {
-			match v_body_handles.0.get(name) {
-				Some(handle) => match context.bodies.get_mut(*handle) {
-					Some(body) => {// once told me the world was gonna roll me
-						//body.set_position(v_send.body_state.position, false);
-						// Build vector of wheels
-						let mut v_specific_wheels = Vec::<&mut Wheel>::new();
-						for (parent_name, ref mut w) in wheels.iter_mut() {
-							if parent_name == &name {
-								v_specific_wheels.push(w);
-							}
-						}
-						v_send.body_state.init_rapier_body(body);
-						v_send.update_rapier(&mut context.bodies, v_specific_wheels);
-					},
-					None => panic!("Unable to get body from body set with handle")
-				},
-				None => panic!("Unable to get vehicle body handle from VehicleBodyHandles")
-			}
 		}
 	}
 }
@@ -382,13 +360,13 @@ impl World {
 		// except this only loads chunks adjacent to the ones which vehicles are on
 		let chunks_needed: Vec<ChunkRef> = self.chunks_needed();
 		// 1: Unload
-		self.map.unload_chunks(&chunks_needed, &mut self.physics_state.bodies, &mut self.physics_state.colliders, &mut self.physics_state.islands);
+		self.map.unload_chunks(&chunks_needed, &mut self.physics_state.build_body_creation_deletion_context());
 		// 2: Load
 		for chunk_ref in chunks_needed {
 			if !self.map.is_chunk_loaded(&chunk_ref) {
 				//println!("Loading/Creating chunk {:?}", &chunk_ref);
 				match self.map.load_or_create_chunk(&chunk_ref) {// Will be None if the chunk doesn't exist and the map auto chunk gen is disabled
-					Some(chunk) => {self.map.insert_chunk(chunk, &mut self.physics_state.bodies, &mut self.physics_state.colliders);},
+					Some(chunk) => {self.map.insert_chunk(chunk, Some(&mut self.physics_state.build_body_creation_deletion_context()));},
 					None => {}
 				}
 			}
@@ -446,10 +424,11 @@ impl World {
 			static_vehicles.insert(user.to_owned(), (*vehicle.static_).clone());
 		}
 		// Physics send
+		#[cfg(feature = "debug_render_physics")]
 		let mut partial_physics = self.physics_state.send(&self.vehicles);
 		// Done
 		StaticData {
-			map: self.map.send(&mut partial_physics),// Need to remove map colliders from physics send as they are redundant and makes the StaticData very large
+			map: self.map.send(#[cfg(feature = "debug_render_physics")] &mut partial_physics),// Need to remove map colliders from physics send as they are redundant and makes the StaticData very large
 			vehicles: static_vehicles,
 			#[cfg(feature = "debug_render_physics")]
 			partial_physics

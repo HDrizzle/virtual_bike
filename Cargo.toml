@@ -6,11 +6,13 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["backend", "frontend", "debug_render_physics", "debug_vehicle_input", "client_default_signin", "experimental_terrain_gen"]#, "debug_camera_control", "path_rendering"]
-backend = ["reqwest"]
-frontend = ["serialport", "bevy", "bevy_rapier3d", "bevy-inspector-egui", "bevy-inspector-egui-rapier", "bevy_renet", "image", "eframe"]
+default = ["backend", "frontend", "debug_vehicle_input", "client_default_signin", "experimental_terrain_gen"]#, "debug_render_physics", "debug_camera_control", "path_rendering"]
+
+backend = ["reqwest", "rapier3d"]
+frontend = ["serialport", "bevy", "bevy-inspector-egui", "bevy_renet", "image", "eframe"]
+
 web_server = ["backend", "hyper", "futures"]
-debug_render_physics = []
+debug_render_physics = ["rapier3d", "bevy_rapier3d", "bevy-inspector-egui-rapier"]
 debug_camera_control = []
 experimental_terrain_gen = []
 debug_vehicle_input = []
@@ -30,7 +32,7 @@ path_rendering = []
 [dependencies]
 serde = {version = "1.0.152", features = ["derive"]}# https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 serde_json = "1.0.93"
-rapier3d = {version = "0.17.2", features = ["serde-serialize"]}
+rapier3d = {version = "0.17.2", features = ["serde-serialize"], optional = true}# Always used by backend, frontend uses only when `debug_render_physics` is enabled
 nalgebra = {version = "0.32.2", features = ["serde-serialize"]}
 renet = "0.0.13"
 bincode = "1.3.3"

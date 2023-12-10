@@ -30,13 +30,18 @@ Created by Hadrian Ward, 2023-6-8
 	this will save disk space for, for example, flat or repeating terrain.
 
 2023-12-2: I will attempt to upgrade to the latest version of Bevy (bevy-^0.12) as well as everything that uses it.
+
+2023-12-9: I decided to not use rapier in the client except when `debug_render_physics` is enabled
 */
 #![allow(warnings)]// TODO: remove when I have a lot of free-time
 use std::{fmt, env, ops, error::Error, collections::{HashMap, hash_map::DefaultHasher}, hash::{Hash, Hasher}, time::{SystemTime, UNIX_EPOCH}};
+use rapier3d::{dynamics::{RigidBodySet, IslandManager}, geometry::ColliderSet};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 use nalgebra::{Point3, Point2, Vector3, Vector2, point, Matrix, Const, ArrayStorage, OPoint, Translation, Isometry3};
 #[cfg(feature = "frontend")]
 use bevy::{ecs::system::Resource, render::{mesh::{Mesh, Indices}, render_resource::PrimitiveTopology}};
+#[cfg(feature = "debug_render_physics")]
+use bevy_rapier3d::plugin::RapierContext;
 use dialoguer;
 use rand::Rng;
 
@@ -83,7 +88,8 @@ mod prelude {
 		EightWayDir,
 		IntP2,
 		resource_interface,
-		BasicTriMesh
+		BasicTriMesh,
+		RapierBodyCreationDeletionContext
 	};
 	// Utility functions because nalgebra is friggin complicated
 	pub fn add_isometries(iso1: &Iso, iso2: &Iso) -> Iso {
@@ -369,6 +375,23 @@ impl Default for BasicTriMesh {
 			indices: Vec::new()
 		}
 	}
+}
+
+pub struct RapierBodyCreationDeletionContext<'a> {
+	pub bodies: &'a mut RigidBodySet,
+	pub colliders: &'a mut ColliderSet,
+	pub islands: &'a mut IslandManager
+}
+
+impl<'a> RapierBodyCreationDeletionContext<'a> {// From ChatGPT
+    #[cfg(feature = "debug_render_physics")]
+    pub fn from_bevy_rapier_context(ctx: &'a mut RapierContext) -> Self {
+        Self {
+            bodies: &mut ctx.bodies,
+            colliders: &mut ctx.colliders,
+            islands: &mut ctx.islands,
+        }
+    }
 }
 
 //#[derive(Serialize, Deserialize)]

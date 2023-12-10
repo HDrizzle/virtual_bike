@@ -4,6 +4,7 @@ use std::{time::{SystemTime, Duration}, collections::HashMap};
 use bevy::prelude::*;
 use bevy_renet::renet::*;
 use bevy_renet::*;
+#[cfg(feature = "debug_render_physics")]
 use bevy_rapier3d::plugin::RapierContext;
 
 use crate::{prelude::*, renet_server::Request};
@@ -25,7 +26,15 @@ pub struct RenderDistance {
 }
 
 impl RenderDistance {
-	pub fn load_unload_chunks(&self, map: &mut Map, context: &mut RapierContext, commands: &mut Commands, meshes: &mut ResMut<Assets<Mesh>>, materials: &mut ResMut<Assets<StandardMaterial>>) -> Vec<ChunkRef> {
+	pub fn load_unload_chunks(
+		&self,
+		map: &mut Map,
+		#[cfg(feature = "debug_render_physics")]
+		context: &mut RapierContext,
+		commands: &mut Commands,
+		meshes: &mut ResMut<Assets<Mesh>>,
+		materials: &mut ResMut<Assets<StandardMaterial>>
+	) -> Vec<ChunkRef> {
 		// Returns list of ChunkRefs that need to be loaded
 		// 1: List all chunks that MUST be loaded
 		// This basically the same as crate::map::chunk::Chunk::distance_to_point
@@ -63,7 +72,7 @@ impl RenderDistance {
 			}
 		}
 		for ref_ in chunks_to_unload {
-			map.unload_chunk_client(&ref_, context, commands, meshes, materials);
+			map.unload_chunk_client(&ref_, #[cfg(feature = "debug_render_physics")]context, commands, meshes, materials);
 		}
 		chunks_to_load
 	}
@@ -125,11 +134,12 @@ pub fn update_chunks_system(// TODO get this to only run when main vehicle is mo
 	mut materials: ResMut<Assets<StandardMaterial>>,
 	render_distance: Res<RenderDistance>,
 	mut static_data: ResMut<StaticData>,
+	#[cfg(feature = "debug_render_physics")]
 	mut rapier_context_res: ResMut<RapierContext>,
 	mut renet_client: ResMut<RenetClient>,
 	mut requested_chunks: ResMut<RequestedChunks>
 ) {
-	let chunks_to_load: Vec<ChunkRef> = render_distance.load_unload_chunks(&mut static_data.map, &mut rapier_context_res, &mut commands, &mut meshes, &mut materials);
+	let chunks_to_load: Vec<ChunkRef> = render_distance.load_unload_chunks(&mut static_data.map, #[cfg(feature = "debug_render_physics")] &mut rapier_context_res, &mut commands, &mut meshes, &mut materials);
 	for chunk_ref in chunks_to_load {
 		requested_chunks.add(chunk_ref, &mut renet_client);
 	}

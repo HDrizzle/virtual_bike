@@ -20,7 +20,9 @@ use bevy::{
 };
 //use renet;
 use bevy_renet::renet::{RenetClient, DefaultChannel, transport::NetcodeClientTransport};
+#[cfg(feature = "debug_render_physics")]
 use bevy_rapier3d::plugin::RapierContext;
+#[cfg(feature = "debug_render_physics")]
 use rapier3d::dynamics::RigidBodyHandle;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bincode;
@@ -39,10 +41,12 @@ mod gui;
 use gui::GuiPlugin;
 
 // Custom resources
-#[derive(Resource)]
-pub struct VehicleBodyHandles(pub HashMap<String, RigidBodyHandle>);
+/*#[derive(Resource)]
+#[cfg(feature = "debug_render_physics")]
+pub struct VehicleBodyHandles(pub HashMap<String, RigidBodyHandle>);*/
 
 #[derive(Resource)]
+#[cfg(feature = "debug_render_physics")]
 pub struct MapBodyHandle(pub RigidBodyHandle);
 
 pub struct InitInfo {// Provided by the sign-in window, DOES NOT CHANGE
@@ -61,8 +65,7 @@ impl InitInfo {
 	pub fn setup_system(
 		mut commands: Commands,
 		mut renet_client: ResMut<RenetClient>,
-		mut rapier_context_res: ResMut<RapierContext>,
-		mut wheel_query: Query<(&mut Wheel, &UsernameComponent)>,
+		#[cfg(feature = "debug_render_physics")] mut rapier_context_res: ResMut<RapierContext>,
 		mut static_data: ResMut<StaticData>,
 		mut meshes: ResMut<Assets<Mesh>>,
 		mut materials: ResMut<Assets<StandardMaterial>>,
@@ -71,16 +74,14 @@ impl InitInfo {
 		// Map init bevy
 		static_data.map.init_bevy(&mut commands, meshes.as_mut(), materials.as_mut(), &*asset_server);
 		// Init rapier
-		// (HashMap<String, RigidBodyHandle>, Vec<(String, Wheel)>)
-		let mut rapier_context = rapier_context_res.into_inner();
-		let (body_handles, owner_wheel_pairs) = static_data.init_bevy_rapier_context(&mut rapier_context);
-		commands.insert_resource(VehicleBodyHandles(body_handles));
-		// Save wheels
-		for pair in owner_wheel_pairs.iter() {
-			commands.spawn((pair.1.clone(), UsernameComponent(pair.0.clone())));
+		#[cfg(feature = "debug_render_physics")]
+		{
+			// (HashMap<String, RigidBodyHandle>, Vec<(String, Wheel)>)
+			let mut rapier_context = rapier_context_res.into_inner();
+			static_data.init_bevy_rapier_context(&mut rapier_context);
+			// Save map body handle
+			commands.insert_resource(MapBodyHandle(static_data.map.body_handle_opt.expect("Could not get map body handle")));
 		}
-		// Save map body handle
-		commands.insert_resource(MapBodyHandle(static_data.map.body_handle_opt.expect("Could not get map body handle")));
 	}
 }
 
@@ -180,18 +181,16 @@ fn update_system(
 	mut static_data: ResMut<StaticData>,
 	asset_server: Res<AssetServer>,
 	mut renet_client: ResMut<RenetClient>,
-	mut rapier_context_res: ResMut<RapierContext>,
+	#[cfg(feature = "debug_render_physics")] mut rapier_context_res: ResMut<RapierContext>,
 	mut camera_query: Query<(&mut CameraComponent, &mut Transform, &Projection)>,
-	mut wheel_query: Query<(&mut Wheel, &UsernameComponent)>,
-	mut v_body_handles_res: ResMut<VehicleBodyHandles>,
-	map_body_handle: Res<MapBodyHandle>,
+	#[cfg(feature = "debug_render_physics")] map_body_handle: Res<MapBodyHandle>,
 	mut requested_chunks: ResMut<RequestedChunks>,
 	mut render_distance: ResMut<RenderDistance>,
 	auth: Res<ClientAuth>
 ) {
 	// How to move a camera: https://bevy-cheatbook.github.io/cookbook/pan-orbit-camera.html
+	#[cfg(feature = "debug_render_physics")]
 	let mut rapier_context = rapier_context_res.into_inner();
-	let mut v_body_handles = v_body_handles_res.into_inner();
 	// Incomming messages
 	let mut most_recent_world_state: Option<WorldSend> = None;
 	let mut messages = Vec::<Vec<u8>>::new();
@@ -206,22 +205,6 @@ fn update_system(
 		match res {
 			Response::InitState(mut static_data) => {
 				panic!("Bevy app recieved `Response::InitState(..) response which should not be possible, anything in the code block after where this is written is obsolete code.`");
-				// TODO: move this to super
-				println!("Received static data");
-				// Test, TODO fix
-				//renet_client.send_message(DefaultChannel::ReliableOrdered, bincode::serialize(&Request::Chunk(ChunkRef{position: [100, 100]})).unwrap());
-				// Init rapier
-				// (HashMap<String, RigidBodyHandle>, Vec<(String, Wheel)>)
-				let (body_handles, owner_wheel_pairs) = static_data.init_bevy_rapier_context(&mut rapier_context);
-				*v_body_handles = VehicleBodyHandles(body_handles);
-				// Save wheels
-				for pair in owner_wheel_pairs.iter() {
-					commands.spawn((pair.1.clone(), UsernameComponent(pair.0.clone())));
-				}
-				// Save map body handle
-				//*map_body_handle_opt = Some(static_data.map.body_handle_opt.expect("Could not get map body handle"));
-				// Save map as resource
-				commands.insert_resource(static_data.map);
 			},
 			Response::WorldState(world_send) => {
 				most_recent_world_state = Some(world_send);// In case multiple come through, only use the most recent one
@@ -229,7 +212,7 @@ fn update_system(
 			Response::Chunk(chunk) => {
 				//println!("Recieved chunk");//, but doing nothing else because debug reasons");
 				requested_chunks.remove(&chunk.ref_);
-				static_data.map.insert_chunk_client(chunk, &mut rapier_context, &mut commands, &mut meshes, &mut materials, &asset_server);
+				static_data.map.insert_chunk_client(chunk, #[cfg(feature = "debug_render_physics")] &mut RapierBodyCreationDeletionContext::from_bevy_rapier_context(&mut rapier_context), &mut commands, &mut meshes, &mut materials, &asset_server);
 			},
 			Response::Err(err_string) => {
 				panic!("Server sent following error message: {}", err_string);
@@ -242,13 +225,14 @@ fn update_system(
 		/*let mut wheel_owners = Vec::<(&String, &mut Wheel)>::new();
 		for (mut w, owner) in wheel_query.iter_mut() {
 			wheel_owners.push((&owner.0, &mut w));
-		}*/
+		}
 		let mut wheel_owners = Vec::<(&String, &mut Wheel)>::new();
 		for mut owner in wheel_query.iter_mut() {
 			let w = &mut owner.1;
 			wheel_owners.push((&w.0, owner.0.into_inner()));
-		}
-		world_state.update_bevy_rapier_context(&mut rapier_context, &v_body_handles, wheel_owners, Some(map_body_handle.0));// TODO: fix: replacing `Some(map_body_handle)` with `None` makes the vehicle body update properly
+		}*/
+		#[cfg(feature = "debug_render_physics")]
+		world_state.update_bevy_rapier_context(&mut rapier_context, Some(map_body_handle.0));// TODO: fix: replacing `Some(map_body_handle)` with `None` makes the vehicle body update properly
 		// Update camera position
 		let main_vehicle = world_state.vehicles.get(&auth.name).expect(&format!("Unable to get vehicle for signed-in username: \"{}\"", &auth.name));
 		render_distance.set_position(p3_to_p2(matrix_to_opoint(main_vehicle.body_state.position.translation.vector.clone())));
@@ -257,6 +241,7 @@ fn update_system(
 			#[cfg(not(feature = "debug_camera_control"))]
 			main_vehicle.update_bevy_camera_transform(&mut transform);
 		}
+		#[cfg(feature = "debug_render_physics")]
 		rapier_context.propagate_modified_body_positions_to_colliders();// Just what I needed https://docs.rs/bevy_rapier3d/latest/bevy_rapier3d/plugin/struct.RapierContext.html#method.propagate_modified_body_positions_to_colliders
 	}
 }
@@ -351,11 +336,13 @@ impl Plugin for MainClientPlugin {
 			name: "admin".to_owned(),
 			psswd: "1234".to_owned()
 		});*/
-		app.insert_resource(VehicleBodyHandles(HashMap::<String, RigidBodyHandle>::new()));
 		app.add_systems(Update, update_system);
 		// bevy_rapier3d
-		app.insert_resource(bevy_rapier3d::plugin::RapierContext::default());
-		app.add_plugins(bevy_rapier3d::render::RapierDebugRenderPlugin::default());
+		#[cfg(feature = "debug_render_physics")]
+		{
+			app.insert_resource(bevy_rapier3d::plugin::RapierContext::default());
+			app.add_plugins(bevy_rapier3d::render::RapierDebugRenderPlugin::default());
+		}
 		//app.add_plugin(InspectableRapierPlugin);
 		app.add_plugins(WorldInspectorPlugin::new());
 		// Rendering

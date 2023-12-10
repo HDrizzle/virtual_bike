@@ -5,9 +5,12 @@ use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113
 #[cfg(feature = "frontend")]
 use bevy::{prelude::*, render::mesh::{PrimitiveTopology, Indices}};
 #[cfg(feature = "frontend")]
+#[cfg(feature = "debug_render_physics")]
 use bevy_rapier3d::plugin::RapierContext;
 
-use crate::{prelude::*, world::PhysicsStateSend};
+use crate::prelude::*;
+#[cfg(feature = "debug_render_physics")]
+use crate::world::PhysicsStateSend;
 
 pub mod chunk;
 pub mod path;
@@ -63,35 +66,48 @@ impl Map {
 		self.body_handle_opt = Some(body_handle);
 	}
 	#[cfg(feature = "backend")]
-	pub fn send(&self, physics: &mut PhysicsStateSend) -> Self {
-		// Done
+	pub fn send(&self, #[cfg(feature = "debug_render_physics")] physics: &mut PhysicsStateSend) -> Self {
+		// Unloads all chunks from the physics state which will also be sent to the client
 		let mut out = self.clone();
-		out.unload_chunks(&Vec::<ChunkRef>::new(), &mut physics.bodies, &mut physics.colliders, &mut physics.islands);
+		#[cfg(feature = "debug_render_physics")]
+		out.unload_chunks(&Vec::<ChunkRef>::new(), &mut physics.build_body_creation_deletion_context());
+		// Done
 		out
 	}
     #[cfg(feature = "frontend")]
-	pub fn unload_chunk_client(&mut self, ref_: &ChunkRef, context: &mut RapierContext, commands: &mut Commands, meshes: &mut ResMut<Assets<Mesh>>, materials: &mut ResMut<Assets<StandardMaterial>>) {
+	pub fn unload_chunk_client(&mut self, ref_: &ChunkRef, #[cfg(feature = "debug_render_physics")] mut context: &mut RapierContext, commands: &mut Commands, meshes: &mut ResMut<Assets<Mesh>>, materials: &mut ResMut<Assets<StandardMaterial>>) {
 		match self.get_chunk_id(ref_) {
 			Some(i) => {
 				let chunk = &mut self.loaded_chunks[i];
 				// Remove Bevy mesh
 				meshes.remove(chunk.asset_id_opt.expect("Client-side chunk unloading expects chunks to have Some(HandleId)"));
 				// Generic unload
-				self.unload_chunk(i, &mut context.bodies, &mut context.colliders, &mut context.islands);
+				self.unload_chunk(
+					i,
+					#[cfg(feature = "debug_render_physics")] Some(&mut RapierBodyCreationDeletionContext::from_bevy_rapier_context(&mut context)),
+					#[cfg(not(feature = "debug_render_physics"))] None
+				);
 			},
 			None => {}
 		}
 		// TODO
 	}
-	pub fn unload_chunk(&mut self, i: usize, bodies: &mut RigidBodySet, colliders: &mut ColliderSet, islands: &mut IslandManager) {
+	pub fn unload_chunk(
+		&mut self,
+		i: usize,
+		rapier_data_opt: Option<&mut RapierBodyCreationDeletionContext>
+	) {
 		let chunk = &mut self.loaded_chunks[i];
 		// Can't simply delete chunk, 1st must remove it from the physics engine
-		chunk.remove_from_rapier(bodies, colliders, islands);
+		match rapier_data_opt {
+			Some(mut rapier_data) => chunk.remove_from_rapier(&mut rapier_data),
+			None => {}
+		}
 		// Now we can delete it
 		self.loaded_chunks.remove(i);
 	}
 	#[cfg(feature = "backend")]
-	pub fn unload_chunks(&mut self, chunks_needed: &Vec<ChunkRef>, bodies: &mut RigidBodySet, colliders: &mut ColliderSet, islands: &mut IslandManager) {
+	pub fn unload_chunks(&mut self, chunks_needed: &Vec<ChunkRef>, rapier_data: &mut RapierBodyCreationDeletionContext) {
 		// Unloads all chunks except the ones in `chunks_needed`
         let mut chunks_to_unload = Vec::<usize>::new();
         for (i, chunk) in self.loaded_chunks.iter().enumerate() {
@@ -101,7 +117,7 @@ impl Map {
         }
         for i in chunks_to_unload.iter().rev() {// Important to reverse the index order so its from largest to smallest
 			//println!("Unloading chunk {:?}", &ref_);
-            self.unload_chunk(*i, bodies, colliders, islands);
+            self.unload_chunk(*i, Some(rapier_data));
         }
 	}
 	#[cfg(feature = "backend")]
@@ -126,22 +142,29 @@ impl Map {
 		false
 	}
     #[cfg(feature = "frontend")]
-	pub fn insert_chunk_client(&mut self, mut chunk: Chunk, rapier_context: &mut RapierContext, commands: &mut Commands, meshes:  &mut ResMut<Assets<Mesh>>, materials: &mut ResMut<Assets<StandardMaterial>>, asset_server: &AssetServer) {
+	pub fn insert_chunk_client(&mut self, mut chunk: Chunk, #[cfg(feature = "debug_render_physics")] rapier_data: &mut RapierBodyCreationDeletionContext, commands: &mut Commands, meshes:  &mut ResMut<Assets<Mesh>>, materials: &mut ResMut<Assets<StandardMaterial>>, asset_server: &AssetServer) {
 		// Add to bevy rendering world
 		if !self.is_chunk_loaded(&chunk.ref_) {
 			chunk.bevy_pbr_bundle(commands, meshes, materials, asset_server);
 		}
 		// Generic insert
-		let loaded = self.insert_chunk(chunk, &mut rapier_context.bodies, &mut rapier_context.colliders);
+		let loaded = self.insert_chunk(
+			chunk,
+			#[cfg(feature = "debug_render_physics")] Some(rapier_data),
+			#[cfg(not(feature = "debug_render_physics"))] None
+		);
 		assert!(loaded, "self.insert_chunk says the chunk was not loaded, however a previous check says the chunk didn't already exist. This should not be possible.");
 	}
-	pub fn insert_chunk(&mut self, mut chunk: Chunk, bodies: &mut RigidBodySet, colliders: &mut ColliderSet) -> bool {
+	pub fn insert_chunk(&mut self, mut chunk: Chunk, rapier_data_opt: Option<&mut RapierBodyCreationDeletionContext>) -> bool {
 		// IMPORTANT: THIS SHOULD BE THE ONLY PLACE WHERE self.loaded_chunks.push() IS CALLED
 		if self.is_chunk_loaded(&chunk.ref_) {
 			return false;//panic!("Attempt to insert already loaded chunk");
 		}
-		let body_handle = self.body_handle_opt.expect("Body handle is None when trying to insert chunk, help: maybe init_rapier() hasn\'t been called yet");
-		chunk.init_rapier(bodies, colliders, body_handle);
+		let body_handle = self.body_handle_opt.expect("Map body handle is None when trying to insert chunk, help: maybe init_rapier() hasn\'t been called yet");
+		match rapier_data_opt {
+			Some(mut rapier_data) => chunk.init_rapier(rapier_data, body_handle),
+			None => {}
+		}
 		/*#[cfg(feature = "frontend")]
 		assert!(chunk.asset_id_opt.is_some(), "Attempt in client to map.loaded_chunks.push() chunk with no asset id");*/
 		self.loaded_chunks.push(chunk);

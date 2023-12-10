@@ -599,17 +599,17 @@ impl Chunk {
 		// Done
 		out
 	}
-	pub fn init_rapier(&mut self, bodies: &mut RigidBodySet, colliders: &mut ColliderSet, parent_body_handle: RigidBodyHandle) {
+	pub fn init_rapier(&mut self, mut rapier_data: &mut RapierBodyCreationDeletionContext, parent_body_handle: RigidBodyHandle) {
 		// Make sure this can only be called once
 		if let Some(_) = self.collider_handle {
 			panic!("init_rapier() called when self.collider_handle is not None, meaning it has been called more than once");
 		}
 		let collider = self.elevation.rapier_collider(&self.position);
 		//collider.set_position(Iso{rotation: UnitQuaternion::identity(), translation: matrix_to_opoint(self.position).into()});
-		self.collider_handle = Some(colliders.insert_with_parent(collider, parent_body_handle, bodies));
+		self.collider_handle = Some(rapier_data.colliders.insert_with_parent(collider, parent_body_handle, &mut rapier_data.bodies));
 	}
-	pub fn remove_from_rapier(&mut self, bodies: &mut RigidBodySet, colliders: &mut ColliderSet, islands: &mut IslandManager) {
-		colliders.remove(self.collider_handle.expect("Removing collider from rapier, but self.collider_handle is None"), islands, bodies, false);
+	pub fn remove_from_rapier(&mut self, rapier_data: &mut RapierBodyCreationDeletionContext) {
+		rapier_data.colliders.remove(self.collider_handle.expect("Removing collider from rapier, but self.collider_handle is None"), &mut rapier_data.islands, &mut rapier_data.bodies, false);
 		self.collider_handle = None;
 	}
 	#[cfg(feature = "frontend")]
