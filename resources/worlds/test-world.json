@@ -1,5 +1,5 @@
 {
-	"map": "paths_test",
+	"map": "flat",
 	"vehicles": {
 		"admin": {
 			"static_name": "test-bike",
@@ -9,15 +9,7 @@
 					"rotation": [0, 0, 0, 1]
 				},
 				"lin_vel": [0, 0, 0],
-				"path_bound_opt": {
-                    "path_ref": 0,
-					"pos": {
-						"latest_point": 0,
-                    	"ratio_from_latest_point": 0.5
-					},
-                    "velocity": 0.1,
-                    "forward": true
-                }
+				"path_bound_opt": null
 			}
 		}
 	},

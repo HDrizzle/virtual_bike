@@ -208,7 +208,6 @@ impl Path {
 		|<------->| self.type_.width
 		Returns: The mesh and an option for the next position to use, if this is `None`, it means that whatever loop iterating over this can now stop.
 		*/
-		let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
 		let half_width = self.type_.width / 2.0;
 		// Get length used by texture
 		let texture_len = self.type_.width * texture_len_width_ratio;
@@ -232,25 +231,29 @@ impl Path {
 		let mut i = 0;// even = right side, odd - left side
 		let next_pos: Option<PathPosition> = loop {
 			// Get sideways offset
-			let sideways_offset_sign: Float = if i % 2 == 0 {
-				1.0
+			let sideways_offset_sign: i32 = if i % 2 == 0 {
+				1
 			}
 			else {
-				-1.0
+				-1
 			};
-			let sideways_offset = half_width * sideways_offset_sign;
+			let sideways_offset = half_width * (sideways_offset_sign as Float);
 			// Append next edge point
 			basic_mesh.vertices.push(P3::from(get_edge_pos(
 				&curr_pos,
 				sideways_offset
 			)));
 			// TODO: UV coords
-			// New triangle from last 3 vertices, TODO: check winding
+			// New triangle from last 3 vertices
 			if i >= 1 {
-				let start: u32 = basic_mesh.vertices.len() as u32 - 3;
-				basic_mesh.indices.push([start, start+1, start+2]);
+				let middle: i32 = basic_mesh.vertices.len() as i32 - 2;
+				basic_mesh.indices.push([
+					(middle-sideways_offset_sign) as u32,
+					middle as u32,
+					(middle+sideways_offset_sign) as u32
+				]);
 				uv_coords.push([
-					(sideways_offset_sign + 1.0) / 2.0,
+					(sideways_offset_sign + 1) as Float / 2.0,
 					1.0 - (texture_len / (i as Float * (PATH_RENDER_SEGMENT_LENGTH / 2.0)))
 				]);
 			}
@@ -275,7 +278,8 @@ impl Path {
 			}
 		};
 		// Done
-		mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv_coords);
+		let mut mesh = basic_mesh.build_bevy_mesh();
+		//mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv_coords);
 		(mesh, next_pos)
 	}
 	#[cfg(feature = "frontend")]
@@ -292,7 +296,7 @@ impl Path {
 				unlit: true,
 				..default()
 			});*/
-			let (mesh, next_pos_opt) = self.bevy_mesh(220.0/708.0, &curr_pos);// TODO: fix hardcoded value
+			let (mesh, next_pos_opt) = self.bevy_mesh(5.0/*220.0/708.0*/, &curr_pos);// TODO: fix hardcoded value
 			match next_pos_opt {
 				Some(next_pos) => {curr_pos = next_pos;},
 				None => break
