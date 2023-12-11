@@ -218,9 +218,9 @@ impl VehicleSend {
 		let mut new_trans = Transform::default();
 		// Create rotation quat
 		let rot_offset = Quat::from_rotation_x(-0.2);
-		let mut rot: Quat = p.rotation.into();
+		let mut rot: Quat = nalgebra_quat_to_bevy_quat(&p.rotation);
 		rot = rot.mul_quat(rot_offset);
-		new_trans.translation = p.translation.into();
+		new_trans.translation = nalgebra_vec3_to_bevy_vec3(&p.translation.vector);
 		// 2nd POV
 		let mut pov_trans = Transform::default();
 		//pov_trans.translation = Vec3{x: 0.0, y: 0.0, z: -30.0};

@@ -11,7 +11,7 @@ use bevy_inspector_egui::{
 	bevy_egui::{egui, EguiContexts}// Importing from re-export to prevent conflicting versions of bevy_egui
 };
 
-use crate::prelude::*;
+use crate::{prelude::*, renet_server::Request};
 
 const MAX_LINE_LEN: usize = 100;// To prevent infinite loop in case hardware isn't responding correctly
 

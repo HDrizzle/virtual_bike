@@ -8,7 +8,7 @@ Created by Hadrian Ward, 2023-6-8
 2023-9-21: Just to clear things up, when the client connects to the game server, it is sent a bincode::serialize()ed instance of world::StaticData.
 	After that only WorldSend is sent to the client as often as possible. Major change: A partial copy of the server's physics state will be sent upon initial
 	connection (world::PhysicsStateSend) which means that RigidBodyHandles can be sent with body state information attached (world::BodyStates), and
-	they will work with the client's rapier context
+	they will work with the client's rapier context (2023-12-9: All of this will be behind the `debug_render_physics` feature)
 
 2023-9-23: The previous change will now be behind the `#[cfg(feature = "debug_render_physics")]` feature
 
@@ -37,7 +37,7 @@ Created by Hadrian Ward, 2023-6-8
 use std::{fmt, env, ops, error::Error, collections::{HashMap, hash_map::DefaultHasher}, hash::{Hash, Hasher}, time::{SystemTime, UNIX_EPOCH}};
 use rapier3d::{dynamics::{RigidBodySet, IslandManager}, geometry::ColliderSet};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
-use nalgebra::{Point3, Point2, Vector3, Vector2, point, Matrix, Const, ArrayStorage, OPoint, Translation, Isometry3};
+use nalgebra::{Point3, Point2, Vector3, Vector2, point, Matrix, Const, ArrayStorage, OPoint, Translation, Isometry3, UnitQuaternion};
 #[cfg(feature = "frontend")]
 use bevy::{ecs::system::Resource, render::{mesh::{Mesh, Indices}, render_resource::PrimitiveTopology}};
 #[cfg(feature = "debug_render_physics")]
@@ -119,6 +119,19 @@ mod prelude {
 	}
 	pub fn p2_to_p3(p: P2) -> P3 {
 		point![p[0], 0.0, p[1]]
+	}
+	// Convert between nalgebra and bevy
+	#[cfg(feature = "frontend")]
+	pub fn nalgebra_quat_to_bevy_quat(quat: &UnitQuaternion<Float>) -> bevy::math::Quat {
+		bevy::math::Quat::from_xyzw(quat.i, quat.j, quat.k, quat.w)
+	}
+	#[cfg(feature = "frontend")]
+	pub fn nalgebra_vec3_to_bevy_vec3(v: &V3) -> bevy::math::Vec3 {
+		bevy::math::Vec3 {
+			x: v.x,
+			y: v.y,
+			z: v.z
+		}
 	}
 	// Copied from extras
 	pub fn to_string_err<T, E: Error>(result: Result<T, E>) -> Result<T, String> {

@@ -160,9 +160,11 @@ impl Map {
 		if self.is_chunk_loaded(&chunk.ref_) {
 			return false;//panic!("Attempt to insert already loaded chunk");
 		}
-		let body_handle = self.body_handle_opt.expect("Map body handle is None when trying to insert chunk, help: maybe init_rapier() hasn\'t been called yet");
 		match rapier_data_opt {
-			Some(mut rapier_data) => chunk.init_rapier(rapier_data, body_handle),
+			Some(mut rapier_data) => {
+				let body_handle = self.body_handle_opt.expect("Map body handle is None when trying to insert chunk, help: maybe init_rapier() hasn\'t been called yet");
+				chunk.init_rapier(rapier_data, body_handle);
+			},
 			None => {}
 		}
 		/*#[cfg(feature = "frontend")]
