@@ -18,9 +18,9 @@ const PATH_RENDER_SEGMENT_LENGTH: Float = 1.0;
 
 // Structs
 #[derive(PartialEq, Debug)]
-pub struct BCurve {// Single cubic bezier curve, control points are mirrored
-	pub offsets: [V3; 2],
-	pub knots: [V3; 2]
+pub struct BCurve {// Single cubic bezier curve
+	pub knots: [V3; 2],
+	pub offsets: [V3; 2]
 }
 
 impl BCurve {
@@ -40,10 +40,10 @@ impl BCurve {
 		let mut coords = Vec::<Float>::new();
 		for i in 0..3 {
 			// Points
-			let P0 = self.knots[0][i] + self.offsets[0][i];
-			let P1 = self.knots[0][i];
-			let P2 = self.knots[1][i];
-			let P3 = self.knots[1][i] - self.offsets[1][i];
+			let P0 = self.knots[0][i];
+			let P1 = self.knots[0][i] + self.offsets[0][i];
+			let P2 = self.knots[1][i] + self.offsets[1][i];
+			let P3 = self.knots[1][i];
 			// Quick calculation
 			let t2 = t.powi(2);
 			let t3 = t.powi(3);
@@ -121,7 +121,7 @@ impl Path {
 		let all_points_len = self.knot_points.len();
 		let (i0, i1): (usize, usize) = match self.loop_ {
 			true => {
-				assert!(i_raw < all_points_len, "Path position latest point should be < the length of the spline's knot points when the path is looping");
+				assert!(i_raw < all_points_len, "Path position ({:?}) latest point should be < the length of the spline's knot points when the path is looping", pos);
 				if i_raw == all_points_len - 1 {
 					(i_raw, 0)
 				}
@@ -130,39 +130,48 @@ impl Path {
 				}
 			},
 			false => {
-				assert!(i_raw - 1 < all_points_len, "Path position latest point - 1 should be < the length of the spline's knot points when the path is not looping");
+				assert!(i_raw < all_points_len - 1, "Path position ({:?}) latest point should be < the length of the spline's knot points - 1 when the path is not looping", pos);
 				(i_raw, i_raw + 1)
 			}
 		};
 		let v0: V3 = self.knot_points[i0].coords;
 		let v1: V3 = self.knot_points[i1].coords;
 		let offset0: V3 = self.tangent_offsets[i0];
-		let offset1: V3 = self.tangent_offsets[i1];
+		let offset1: V3 = -self.tangent_offsets[i1];// Negative is here for a reason
 		BCurve {
-			offsets: [offset0, offset1],
-			knots: [v0, v1]
+			knots: [v0, v1],
+			offsets: [offset0, offset1]
 		}
 	}
-	pub fn get_new_position(&self, curr_i: usize, new_segment_progress_unclamped: Float) -> PathPosition {
-		// TODO: this assumes all segements are the same length, fix
+	pub fn get_new_position(&self, curr_i: usize, new_segment_progress_unclamped: Float) -> (PathPosition, bool) {
+		// Returns: (next position, whether new pos has been clamped)
+		// TODO: fix: this assumes all segements are the same length
 		let progress_int: Int = new_segment_progress_unclamped as Int;// TODO: be sure this always rounds down
 		let progress_fraction: Float = new_segment_progress_unclamped - (progress_int as Float);
 		let progress_int_total = progress_int + curr_i as Int;
 		let new_prev_int = (progress_int_total.rem_euclid(self.knot_points.len() as Int)) as usize;
-		PathPosition {
-			latest_point: new_prev_int,
-			ratio_from_latest_point: progress_fraction
+		// Clamp to end if not looping
+		if (!self.loop_) && new_prev_int >= self.knot_points.len() - 1 {
+			return (self.end_position(), true);
 		}
+		// Done
+		(
+			PathPosition {
+				latest_point: new_prev_int,
+				ratio_from_latest_point: progress_fraction
+			},
+			false
+		)
 	}
 	pub fn step_position_by_world_units(&self, pos: &mut PathPosition, step: Float) -> bool {
-		// Returns: whether the position looped over to the beginning of this path
+		// Returns: whether the position looped over to the beginning of this path or is being clamped
 		let old_latest_point = pos.latest_point;
 		let bcurve = self.get_bcurve(pos);
 		let new_segment_progress_unclamped = pos.ratio_from_latest_point + step / bcurve.length();// TODO: fix: assumes linear motion across bcurve
-		*pos = self.get_new_position(pos.latest_point, new_segment_progress_unclamped);
+		let (new_pos, clamped) = self.get_new_position(pos.latest_point, new_segment_progress_unclamped);
+		*pos = new_pos;
 		// Done
-		pos.latest_point < old_latest_point// TODO: fix: assumes a step shorter than the whole path itself
-
+		clamped || (pos.latest_point < old_latest_point)// TODO: fix: assumes a step shorter than the whole path itself
 	}
 	pub fn end_position(&self) -> PathPosition {
 		PathPosition{latest_point: self.knot_points.len() - 1, ratio_from_latest_point: 1.0}
@@ -180,9 +189,9 @@ impl Path {
 		let new_velocity = state.velocity + (acc * dt) * bcurve.get_real_velocity_mulitplier(state.pos.ratio_from_latest_point);// `segment_dist`/sec units
 		// Translation: translation += V * dt
 		let new_segment_progress_unclamped = state.pos.ratio_from_latest_point + new_velocity * dt;
-		let new_pos = self.get_new_position(state.pos.latest_point, new_segment_progress_unclamped);
+		let (new_pos, _) = self.get_new_position(state.pos.latest_point, new_segment_progress_unclamped);
 		// Done
-		state.pos =  new_pos;
+		state.pos = new_pos;
 		state.velocity = new_velocity;
 	}
 	#[cfg(feature = "frontend")]
@@ -221,9 +230,26 @@ impl Path {
 			}).translation.vector
 		};
 		// Loop over segments of length `PATH_RENDER_SEGMENT_LENGTH`
-		let mut basic_mesh = BasicTriMesh::default();
-		let mut uv_coords = Vec::<[f32; 2]>::new();// For mapping the texture onto the mesh
-		basic_mesh.vertices.push(P3::from(get_edge_pos(start, -half_width)));// First vertex, bottom-left of ASCII diagram above
+		let mut basic_mesh: BasicTriMesh = BasicTriMesh::default();
+		let mut uv_coords: Vec<[f32; 2]> = Vec::<[f32; 2]>::new();// For mapping the texture onto the mesh
+		// Closure to simultaneously add mesh vertex and UV coord
+		let mut add_point = |basic_mesh: &mut BasicTriMesh, uv_coords: &mut Vec<[f32; 2]>, curr_pos: &PathPosition, sideways_offset_sign: i32, progress_along_texture: Float| {
+			// Sideqys offset
+			let sideways_offset = half_width * (sideways_offset_sign as Float);
+			// New vertex
+			basic_mesh.vertices.push(P3::from(get_edge_pos(
+				&curr_pos,
+				sideways_offset
+			)));
+			// New UV coord
+			uv_coords.push([
+				(sideways_offset_sign + 1) as Float / 2.0,
+				1.0 - progress_along_texture
+			]);
+		};
+		// First vertex, bottom-left of ASCII diagram above
+		//basic_mesh.vertices.push(P3::from(get_edge_pos(start, -half_width)));
+		add_point(&mut basic_mesh, &mut uv_coords, start, -1, 0.0);
 		let mut curr_pos: PathPosition = start.clone();/*self.get_new_position(
 			start.latest_point,
 			start.ratio_from_latest_point * start_bcurve.length() + PATH_RENDER_SEGMENT_LENGTH / 2.0
@@ -237,13 +263,9 @@ impl Path {
 			else {
 				-1
 			};
-			let sideways_offset = half_width * (sideways_offset_sign as Float);
-			// Append next edge point
-			basic_mesh.vertices.push(P3::from(get_edge_pos(
-				&curr_pos,
-				sideways_offset
-			)));
-			// TODO: UV coords
+			// Append next edge point / UV coord
+			let progress_along_texture: Float = texture_len / (i as Float * (PATH_RENDER_SEGMENT_LENGTH / 2.0));
+			add_point(&mut basic_mesh, &mut uv_coords, &curr_pos, sideways_offset_sign, progress_along_texture);
 			// New triangle from last 3 vertices
 			if i >= 1 {
 				let middle: i32 = basic_mesh.vertices.len() as i32 - 2;
@@ -252,20 +274,19 @@ impl Path {
 					middle as u32,
 					(middle+sideways_offset_sign) as u32
 				]);
-				uv_coords.push([
-					(sideways_offset_sign + 1) as Float / 2.0,
-					1.0 - (texture_len / (i as Float * (PATH_RENDER_SEGMENT_LENGTH / 2.0)))
-				]);
 			}
 			// Next pos/i
 			i += 1;
 			// Check stop conditions
 			let looped_over = self.step_position_by_world_units(&mut curr_pos, PATH_RENDER_SEGMENT_LENGTH / 2.0);
+			if looped_over {
+				print!("Hit the end of the path while creating chunk, loop should break now");
+			}
+			//dbg!(&curr_pos);
 			let end_of_texture = i as Float * (PATH_RENDER_SEGMENT_LENGTH / 2.0) >= texture_len;
 			let end = looped_over || end_of_texture;
 			// TODO: stop either at end of this path or end of texture
 			if end {
-				curr_pos = self.end_position();
 				// Last part, complicated triangles
 				// TODO
 				// Break
@@ -279,7 +300,7 @@ impl Path {
 		};
 		// Done
 		let mut mesh = basic_mesh.build_bevy_mesh();
-		//mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv_coords);
+		mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv_coords);
 		(mesh, next_pos)
 	}
 	#[cfg(feature = "frontend")]
@@ -288,29 +309,33 @@ impl Path {
 		let mut curr_pos = PathPosition::default();
 		loop {
 			// With help from https://github.com/bevyengine/bevy/blob/main/examples/3d/wireframe.rs
-			/*let texture_handle: Handle<Image> = asset_server.load("road.png");
+			let texture_handle: Handle<Image> = asset_server.load("road_squished.png");
 			let material_handle = materials.add(StandardMaterial {
 				base_color: Color::rgba(0.5, 0.5, 0.5, 1.0),
 				base_color_texture: Some(texture_handle),
-				alpha_mode: AlphaMode::Blend,
+				alpha_mode: AlphaMode::Opaque,
 				unlit: true,
 				..default()
-			});*/
+			});
 			let (mesh, next_pos_opt) = self.bevy_mesh(5.0/*220.0/708.0*/, &curr_pos);// TODO: fix hardcoded value
-			match next_pos_opt {
-				Some(next_pos) => {curr_pos = next_pos;},
-				None => break
-			}
+			dbg!(&next_pos_opt);
 			// Add mesh to meshes and get handle
 			let mesh_handle: Handle<Mesh> = meshes.add(mesh);
-			// Done
+			// Insert mesh BEFORE break
 			commands.spawn((
 				PbrBundle {
 					mesh: mesh_handle,
-					material: materials.add(Color::RED.into()),//material_handle,
+					material: material_handle,
 					..default()
 				}
 			));
+			// Check next pos and maybe break
+			match next_pos_opt {
+				Some(next_pos) => {
+					curr_pos = next_pos;
+				},
+				None => break
+			}
 		}
 	}
 }
@@ -381,3 +406,12 @@ pub struct PathBoundBodyState {
                     "velocity": 0.1,
                     "forward": true
                 } */
+/*
+"knot_points": [
+                    [-50, 10, 0],
+                    [ 50, 10, 0]
+                ],
+                "tangent_offsets": [
+                    [0, 0, -50],
+                    [0, 0,  50]
+                ]*/

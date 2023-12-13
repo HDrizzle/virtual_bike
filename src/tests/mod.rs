@@ -218,8 +218,7 @@ pub mod gis {
 
 pub mod paths {
 	use crate::map::path::PathType;
-
-use super::*;
+	use super::*;
 	// Initial states
 	fn square_loop_non_unit_edges() -> Path {// 10 x 10 square loop
 		Path {
@@ -328,17 +327,64 @@ use super::*;
 		{
 			let curr_i: usize = 0;
 			let progress_ratio: Float = 1.5;
-			assert_eq!(path.get_new_position(curr_i, progress_ratio), PathPosition::from(1, 0.5));
+			assert_eq!(path.get_new_position(curr_i, progress_ratio), (PathPosition::from(1, 0.5), false));
 		}
 		{
 			let curr_i: usize = 3;
 			let progress_ratio: Float = 0.5;
-			assert_eq!(path.get_new_position(curr_i, progress_ratio), PathPosition::from(3, 0.5));
+			assert_eq!(path.get_new_position(curr_i, progress_ratio), (PathPosition::from(3, 0.5), false));
 		}
 		{// Wraparound
 			let curr_i: usize = 3;
 			let progress_ratio: Float = 2.5;
-			assert_eq!(path.get_new_position(curr_i, progress_ratio), PathPosition::from(1, 0.5));
+			assert_eq!(path.get_new_position(curr_i, progress_ratio), (PathPosition::from(1, 0.5), false));
 		}
+	}
+	#[test]
+	fn get_bcurve() {
+		let path = Path {
+			type_: Arc::new(PathType::default()),
+			ref_: 0,
+			name: "test".to_owned(),
+			knot_points: vec![
+				P3::new( 0.0, 10.0, -100.0),
+				P3::new( 0.0, 10.0,    0.0),
+				P3::new(50.0, 1.00,  100.0)
+			],
+			tangent_offsets: vec![
+				V3::new( 0.0, 0.0, 0.0),
+				V3::new(20.0, 0.0, 0.0),
+				V3::new( 0.0, 0.0, 0.0)
+			],
+			loop_: true
+		};
+		// 1st bcurve
+		assert_eq!(
+			path.get_bcurve(&PathPosition { latest_point: 0, ratio_from_latest_point: 0.5 }),
+			BCurve {
+				knots: [
+					V3::new( 0.0, 10.0, -100.0),
+					V3::new( 0.0, 10.0,    0.0)
+				],
+				offsets: [
+					V3::new(  0.0, 0.0, 0.0),
+					V3::new(-20.0, 0.0, 0.0),
+				]
+			}
+		);
+		// 2nd bcurve
+		assert_eq!(
+			path.get_bcurve(&PathPosition { latest_point: 1, ratio_from_latest_point: 0.5 }),
+			BCurve {
+				knots: [
+					V3::new( 0.0, 10.0,   0.0),
+					V3::new(50.0, 1.00, 100.0)
+				],
+				offsets: [
+					V3::new(20.0, 0.0, 0.0),
+					V3::new( 0.0, 0.0, 0.0)
+				]
+			}
+		);
 	}
 }

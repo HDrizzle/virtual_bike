@@ -620,7 +620,7 @@ impl Chunk {
 		let material_handle = materials.add(StandardMaterial {
 			base_color: Color::rgba(0.5, 0.5, 0.5, 1.0),
 			base_color_texture: Some(texture_handle),
-			alpha_mode: AlphaMode::Blend,
+			alpha_mode: AlphaMode::Opaque,
 			unlit: true,
 			..default()
 		});
