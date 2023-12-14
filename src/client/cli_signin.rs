@@ -91,12 +91,9 @@ pub fn get_play_init_info() -> Option<play::InitInfo> {
 				match res {
 					Response::Err(e) => panic!("Server sent following error message: {}", e),
 					res => match &static_data_opt {
-						Some(static_data) => match static_data.vehicle_models_to_load(network_init_info.addr).len() == 0 {// Whether all vehicle models have been loaded
-							true => {
-								done = true;
-								println!("No more vehicle models to load, loop should exit now");
-							},
-							false => if let Response::VehicleRawGltfData(v_type, data) = res {
+						Some(static_data) => {
+							if let Response::VehicleRawGltfData(v_type, data) = res {
+								println!("Recieved model for vehicle type {}", &v_type);
 								cache::save_static_vehicle_model(network_init_info.addr, &v_type, data).unwrap();
 							}
 						}
@@ -115,6 +112,12 @@ pub fn get_play_init_info() -> Option<play::InitInfo> {
 								static_data_opt = Some(static_data);
 							}
 						}
+					}
+				}
+				if let Some(static_data) = &static_data_opt {
+					if static_data.vehicle_models_to_load(network_init_info.addr).len() == 0 {// Whether all vehicle models have been loaded
+						done = true;
+						println!("No more vehicle models to load, loop should exit now");
 					}
 				}
 			}

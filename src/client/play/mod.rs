@@ -16,9 +16,8 @@ use bevy::{
 		settings::{RenderCreation, WgpuSettings},
 		RenderPlugin,
 	},
-	pbr::wireframe::WireframePlugin
+	pbr::wireframe::WireframePlugin, gltf::Gltf
 };
-//use renet;
 use bevy_renet::renet::{RenetClient, DefaultChannel, transport::NetcodeClientTransport};
 #[cfg(feature = "debug_render_physics")]
 use bevy_rapier3d::plugin::RapierContext;
@@ -74,9 +73,17 @@ impl InitInfo {
 		mut meshes: ResMut<Assets<Mesh>>,
 		mut materials: ResMut<Assets<StandardMaterial>>,
 		asset_server: Res<AssetServer>,
+		server_addr: Res<ServerAddr>
 	) {
 		// Map init bevy
 		static_data.map.init_bevy(&mut commands, meshes.as_mut(), materials.as_mut(), &*asset_server);
+		// Load vehicle gltf model files. This is just to have the asset handles for each static vehicle type, not to display anything
+		for (_, v) in static_data.vehicles.iter() {
+			commands.spawn(StaticVehicleRenderInfo {
+				type_: v.name.clone(),
+				gltf_handle: asset_server.load(cache::get_static_vehicle_model_path(server_addr.0, &v.name))
+			});
+		}
 		// Init rapier
 		#[cfg(feature = "debug_render_physics")]
 		{
@@ -101,14 +108,18 @@ pub struct NetworkInitInfo {
 pub struct CameraComponent;
 
 #[derive(Component)]
-pub struct UsernameComponent(String);
+pub struct UsernameComponent(pub String);
+
+/*#[derive(Component)]
+pub struct VehicleNameComponent(pub String);*/
+
+#[derive(Component)]
+pub struct StaticVehicleRenderInfo {
+	pub type_: String,
+	pub gltf_handle: Handle<Gltf>
+}
 
 // Systems
-/*fn startup_test(mut client: ResMut<RenetClient>) {
-	println!("Sent init request");
-	client.send_message(DefaultChannel::ReliableOrdered, bincode::serialize(&Request::Init).unwrap());
-}*/
-
 fn vehicle_input_key_event_system(// Only for manual vehicle control should be behind the `debug_vehicle_input` feature
 	keys: Res<Input<KeyCode>>,
 	mut key_events: EventReader<KeyboardInput>,
@@ -177,6 +188,14 @@ fn misc_key_event_system(
 			}
 		}
 	}
+}
+
+fn vehicle_render_system(
+	mut commands: Commands,
+    assets_gltf: Res<Assets<Gltf>>
+) {
+	// Based on https://bevy-cheatbook.github.io/3d/gltf.html
+
 }
 
 fn update_system(
