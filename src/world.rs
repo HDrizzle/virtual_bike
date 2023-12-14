@@ -249,7 +249,7 @@ impl World {
 		// Load vehicles
 		let mut vehicles: HashMap<String, Vehicle> = HashMap::new();
 		for (user, v_save) in save.vehicles.iter() {
-			let v_static = load_static_vehicle(&v_save.static_name)?;
+			let v_static: VehicleStatic = load_static_vehicle(&v_save.static_name)?;
 			vehicles.insert(user.clone(), Vehicle::build(v_save, Arc::new(v_static), &mut physics_state.bodies, &mut physics_state.colliders, &mut physics_state.impulse_joints, &map.path_set)?);
 		}
 		// Create world

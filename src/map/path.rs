@@ -247,6 +247,15 @@ impl Path {
 				1.0 - progress_along_texture
 			]);
 		};
+		// Closure to add a new triangle from latest points
+		let mut add_triangle = |basic_mesh: &mut BasicTriMesh, sideways_offset_sign: i32| {
+			let middle: i32 = basic_mesh.vertices.len() as i32 - 2;
+			basic_mesh.indices.push([
+				(middle-sideways_offset_sign) as u32,
+				middle as u32,
+				(middle+sideways_offset_sign) as u32
+			]);
+		};
 		// First vertex, bottom-left of ASCII diagram above
 		//basic_mesh.vertices.push(P3::from(get_edge_pos(start, -half_width)));
 		add_point(&mut basic_mesh, &mut uv_coords, start, -1, 0.0);
@@ -268,27 +277,25 @@ impl Path {
 			add_point(&mut basic_mesh, &mut uv_coords, &curr_pos, sideways_offset_sign, progress_along_texture);
 			// New triangle from last 3 vertices
 			if i >= 1 {
-				let middle: i32 = basic_mesh.vertices.len() as i32 - 2;
-				basic_mesh.indices.push([
-					(middle-sideways_offset_sign) as u32,
-					middle as u32,
-					(middle+sideways_offset_sign) as u32
-				]);
+				add_triangle(&mut basic_mesh, sideways_offset_sign);
 			}
 			// Next pos/i
 			i += 1;
 			// Check stop conditions
 			let looped_over = self.step_position_by_world_units(&mut curr_pos, PATH_RENDER_SEGMENT_LENGTH / 2.0);
-			if looped_over {
+			/*if looped_over {
 				print!("Hit the end of the path while creating chunk, loop should break now");
-			}
+			}*/
 			//dbg!(&curr_pos);
 			let end_of_texture = i as Float * (PATH_RENDER_SEGMENT_LENGTH / 2.0) >= texture_len;
 			let end = looped_over || end_of_texture;
 			// TODO: stop either at end of this path or end of texture
 			if end {
-				// Last part, complicated triangles
-				// TODO
+				// Last 2 triangles
+				add_point(&mut basic_mesh, &mut uv_coords, &curr_pos, -sideways_offset_sign, 1.0);
+				add_triangle(&mut basic_mesh, -sideways_offset_sign);
+				add_point(&mut basic_mesh, &mut uv_coords, &curr_pos, sideways_offset_sign, 1.0);
+				add_triangle(&mut basic_mesh, sideways_offset_sign);
 				// Break
 				break if !looped_over {
 					Some(curr_pos)
@@ -318,7 +325,7 @@ impl Path {
 				..default()
 			});
 			let (mesh, next_pos_opt) = self.bevy_mesh(5.0/*220.0/708.0*/, &curr_pos);// TODO: fix hardcoded value
-			dbg!(&next_pos_opt);
+			//dbg!(&next_pos_opt);
 			// Add mesh to meshes and get handle
 			let mesh_handle: Handle<Mesh> = meshes.add(mesh);
 			// Insert mesh BEFORE break

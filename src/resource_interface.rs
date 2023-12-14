@@ -20,11 +20,6 @@ static CLIENT_LOGIN_FILE: &str = "../resources/client_credentials.json";
 static CALIBRATION_FILE: &str = "../resources/calibration.json";
 static PORT_FILE: &str = "../resources/port.txt";
 
-pub fn load_static_vehicle(name: &str) -> Result<VehicleStatic, Box<dyn Error>> {
-	let raw_string: String = load_file_with_better_error(&(VEHICLES_DIR.to_owned() + name + ".json"))?;
-	let vehicle: VehicleStatic = serde_json::from_str(&raw_string)?;
-	Ok(vehicle)
-}
 /*
 fn get_chunk_dir_path(chunk_ref: &ChunkRef, map_name: &str) -> String {
 	format!("{}{}/chunks/{}/", MAPS_DIR.to_owned(), map_name.to_owned(), chunk_ref.resource_dir_name())
@@ -50,6 +45,17 @@ pub fn list_created_chunks(map_name: &str) -> Result<Vec<ChunkRef>, String> {
 }
 
 // Load
+pub fn load_static_vehicle_gltf(name: &str) -> Result<Vec<u8>, String> {
+	let path = &(VEHICLES_DIR.to_owned() + name + "/model.glb");
+	to_string_err_with_message(fs::read(path), &format!("Failed to load 3D GLB file ({}) for type {}", path, name))
+}
+
+pub fn load_static_vehicle(name: &str) -> Result<VehicleStatic, Box<dyn Error>> {
+	let raw_string: String = load_file_with_better_error(&(VEHICLES_DIR.to_owned() + name + "/static_data.json"))?;
+	let vehicle: VehicleStatic = serde_json::from_str(&raw_string)?;
+	Ok(vehicle)
+}
+
 pub fn find_chunk(chunk_ref: &ChunkRef, map_name: &str) -> Result<String, Box<dyn Error>> {
 	// Tries everything to find path to chunk dir
 	// 1. Test if it exists as a normal chunk

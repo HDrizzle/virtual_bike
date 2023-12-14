@@ -11,6 +11,7 @@ use crate::{prelude::*, world::async_messages, resource_interface};
 #[derive(Serialize, Deserialize)]
 pub enum Request {// All possible requests
 	Init,
+	VehicleRawGltfData(String),
 	ClientUpdate(ClientUpdate),
 	Chunk(ChunkRef),
 	TogglePlaying,
@@ -24,6 +25,7 @@ pub enum Request {// All possible requests
 #[derive(Serialize, Deserialize)]
 pub enum Response {// All possible responses
 	InitState(StaticData),
+	VehicleRawGltfData(String, Vec<u8>),// Username, file contents
 	WorldState(WorldSend),
 	Chunk(Chunk),
 	Err(String)
@@ -116,11 +118,18 @@ impl WorldServer {
 							Request::Init => {
 								println!("Received init request");
 								self.server.send_message(*client_id, DefaultChannel::ReliableOrdered, bincode::serialize(&Response::InitState(self.static_data.clone())).expect("Unable to serialize static data with bincode"));
-							}
+							},
+							Request::VehicleRawGltfData(name) => {
+								let load_result: Result<Vec<u8>, String> = resource_interface::load_static_vehicle_gltf(&name);
+								self.server.send_message(*client_id, DefaultChannel::Unreliable, bincode::serialize(&match load_result {
+									Ok(data) => Response::VehicleRawGltfData(name.clone(), data),
+									Err(e) => Response::Err(e)
+								}).expect("Unable to serialize vehicle raw GLTF file data with bincode"));
+							},
 							Request::ClientUpdate(update) => {
 								// TODO: authenticate client
 								world_tx.send(async_messages::ToWorld::ClientUpdate(update)).expect("Unable to send client update to world");
-							}
+							},
 							Request::Chunk(chunk_ref) => {
 								// TODO: change to Reliable
 								//println!("Recieved chunk request: {:?}", &chunk_ref);
@@ -134,15 +143,15 @@ impl WorldServer {
 										//Response::Err(format!("Error loading chunk: {}", e.to_string()))
 									}
 								}
-							}
+							},
 							Request::TogglePlaying => {
 								// TODO: authenticate client
 								world_tx.send(async_messages::ToWorld::TogglePlaying).expect("Unable to send client update to world");
-							}
+							},
 							Request::RecoverVehicleFromFlip(auth) => {
 								// TODO: authenticate client
 								world_tx.send(async_messages::ToWorld::RecoverVehicleFromFlip(auth)).expect("Unable to send message to world");
-							}
+							},
 							Request::NewUser{name, psswd} => {
 								todo!();// TODO
 							}

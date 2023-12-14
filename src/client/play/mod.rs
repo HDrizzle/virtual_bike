@@ -39,6 +39,7 @@ mod chunk_manager;
 use chunk_manager::{ChunkManagerPlugin, RenderDistance, RequestedChunks};
 mod gui;
 use gui::GuiPlugin;
+mod cache;
 
 // Custom resources
 /*#[derive(Resource)]
@@ -206,6 +207,9 @@ fn update_system(
 			Response::InitState(mut static_data) => {
 				panic!("Bevy app recieved `Response::InitState(..) response which should not be possible, anything in the code block after where this is written is obsolete code.`");
 			},
+			Response::VehicleRawGltfData(v_type, data) => {
+				cache::save_static_vehicle_gltf(&v_type, data);
+			}
 			Response::WorldState(world_send) => {
 				most_recent_world_state = Some(world_send);// In case multiple come through, only use the most recent one
 			},
