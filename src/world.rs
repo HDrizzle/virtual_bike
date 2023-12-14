@@ -1,12 +1,12 @@
 // World simulation
 
-use std::{thread, error::Error, sync::{mpsc, Arc}, collections::HashMap, time::{Duration, Instant}};
+use std::{thread, error::Error, sync::{mpsc, Arc}, collections::HashMap, time::{Duration, Instant}, net::IpAddr};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 #[cfg(feature = "frontend")]
 #[cfg(feature = "debug_render_physics")]
 use bevy_rapier3d::plugin::RapierContext;
 #[cfg(feature = "frontend")]
-//use extras;
+use crate::client::cache;
 #[cfg(feature = "frontend")]
 use bevy::ecs::system::Resource;
 
@@ -39,6 +39,17 @@ impl StaticData {
 		self.partial_physics.init_bevy_rapier_context(context);// very important that this is the first thing that acts on the rapier context, NOT the map
 		// Map
 		self.map.init_rapier(&mut context.bodies);
+	}
+	#[cfg(feature = "frontend")]
+	pub fn vehicle_models_to_load(&self, server_addr: IpAddr) -> Vec<String> {
+		let mut out: Vec<String> = Vec::<String>::new();
+		for (_, v) in self.vehicles.iter() {
+			if !cache::is_vehicle_model_cached(server_addr, &v.name) {
+				out.push(v.name.clone());
+			}
+		}
+		// Done
+		out
 	}
 	pub fn debug_print_sizes(&self) {
 		println!("StaticData.debug_print_sizes() is running");

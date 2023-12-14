@@ -120,8 +120,9 @@ impl WorldServer {
 								self.server.send_message(*client_id, DefaultChannel::ReliableOrdered, bincode::serialize(&Response::InitState(self.static_data.clone())).expect("Unable to serialize static data with bincode"));
 							},
 							Request::VehicleRawGltfData(name) => {
+								println!("Recieved vehicle model request for: {}", &name);
 								let load_result: Result<Vec<u8>, String> = resource_interface::load_static_vehicle_gltf(&name);
-								self.server.send_message(*client_id, DefaultChannel::Unreliable, bincode::serialize(&match load_result {
+								self.server.send_message(*client_id, DefaultChannel::ReliableOrdered, bincode::serialize(&match load_result {
 									Ok(data) => Response::VehicleRawGltfData(name.clone(), data),
 									Err(e) => Response::Err(e)
 								}).expect("Unable to serialize vehicle raw GLTF file data with bincode"));

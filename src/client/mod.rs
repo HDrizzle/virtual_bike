@@ -19,6 +19,7 @@ mod cli_signin;
 pub mod play;
 pub mod hardware_controller;
 mod network;
+pub mod cache;
 
 #[derive(Debug)]
 struct SigninEntryState {
@@ -43,7 +44,7 @@ impl SigninEntryState {
 				IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))
 			}
 			else {// Otherwise, use LAN address
-				local_ip().expect("Could not get this machine's local ip address, this is required because the server's address is not localhost/127.0.0.1")
+				local_ip().expect("Could not get this machine's local ip address, this is required because the server's address is not localhost (127.0.0.1)")
 			},
 			0u16
 		)).unwrap();
@@ -61,7 +62,8 @@ impl SigninEntryState {
 		play::NetworkInitInfo {
 			renet_transport: transport,
 			renet_client: client,
-			auth: ClientAuth{name: self.name.clone(), psswd: self.psswd.clone()}
+			auth: ClientAuth{name: self.name.clone(), psswd: self.psswd.clone()},
+			addr: server_ip
 		}
 	}
 }

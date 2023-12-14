@@ -7,7 +7,7 @@ Bevy 3D rendering simple example: https://bevyengine.org/examples/3D%20Rendering
 Major change 2023-11-21: this module will only be used when the game is signed-in and being played
 */
 
-use std::collections::HashMap;
+use std::{collections::HashMap, net::IpAddr};
 use bevy::{
 	prelude::*,
 	input::{keyboard::KeyboardInput, ButtonState},
@@ -32,14 +32,13 @@ use crate::{
 	renet_server::{Request, Response}
 };
 
-use super::{hardware_controller::HardwareControllerPlugin, network::CustomRenetPlugin};
+use super::{hardware_controller::HardwareControllerPlugin, network::CustomRenetPlugin, cache};
 
 // Mods
 mod chunk_manager;
 use chunk_manager::{ChunkManagerPlugin, RenderDistance, RequestedChunks};
 mod gui;
 use gui::GuiPlugin;
-mod cache;
 
 // Custom resources
 /*#[derive(Resource)]
@@ -49,6 +48,9 @@ pub struct VehicleBodyHandles(pub HashMap<String, RigidBodyHandle>);*/
 #[derive(Resource)]
 #[cfg(feature = "debug_render_physics")]
 pub struct MapBodyHandle(pub RigidBodyHandle);
+
+#[derive(Resource)]
+pub struct ServerAddr(pub IpAddr);
 
 pub struct InitInfo {// Provided by the sign-in window, DOES NOT CHANGE
 	pub network: NetworkInitInfo,
@@ -61,6 +63,7 @@ impl InitInfo {
 		app.insert_resource(init_info.network.renet_transport);
 		app.insert_resource(init_info.network.renet_client);
 		app.insert_resource(init_info.network.auth);
+		app.insert_resource(ServerAddr(init_info.network.addr));
 		app.add_systems(Startup, Self::setup_system);
 	}
 	pub fn setup_system(
@@ -89,7 +92,8 @@ impl InitInfo {
 pub struct NetworkInitInfo {
 	pub renet_transport: NetcodeClientTransport,// Trying https://doc.rust-lang.org/std/mem/fn.replace.html
 	pub renet_client: RenetClient,
-	pub auth: ClientAuth
+	pub auth: ClientAuth,
+	pub addr: IpAddr
 }
 
 // Components
@@ -187,7 +191,8 @@ fn update_system(
 	#[cfg(feature = "debug_render_physics")] map_body_handle: Res<MapBodyHandle>,
 	mut requested_chunks: ResMut<RequestedChunks>,
 	mut render_distance: ResMut<RenderDistance>,
-	auth: Res<ClientAuth>
+	auth: Res<ClientAuth>,
+	server_addr: Res<ServerAddr>
 ) {
 	// How to move a camera: https://bevy-cheatbook.github.io/cookbook/pan-orbit-camera.html
 	#[cfg(feature = "debug_render_physics")]
@@ -208,7 +213,7 @@ fn update_system(
 				panic!("Bevy app recieved `Response::InitState(..) response which should not be possible, anything in the code block after where this is written is obsolete code.`");
 			},
 			Response::VehicleRawGltfData(v_type, data) => {
-				cache::save_static_vehicle_gltf(&v_type, data);
+				cache::save_static_vehicle_model(server_addr.0, &v_type, data).unwrap();
 			}
 			Response::WorldState(world_send) => {
 				most_recent_world_state = Some(world_send);// In case multiple come through, only use the most recent one
@@ -236,7 +241,7 @@ fn update_system(
 			wheel_owners.push((&w.0, owner.0.into_inner()));
 		}*/
 		#[cfg(feature = "debug_render_physics")]
-		world_state.update_bevy_rapier_context(&mut rapier_context, Some(map_body_handle.0));// TODO: fix: replacing `Some(map_body_handle)` with `None` makes the vehicle body update properly
+		world_state.update_bevy_rapier_context(&mut rapier_context, Some(map_body_handle.0));
 		// Update camera position
 		let main_vehicle = world_state.vehicles.get(&auth.name).expect(&format!("Unable to get vehicle for signed-in username: \"{}\"", &auth.name));
 		render_distance.set_position(p3_to_p2(matrix_to_opoint(main_vehicle.body_state.position.translation.vector.clone())));

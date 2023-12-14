@@ -47,7 +47,7 @@ pub fn list_created_chunks(map_name: &str) -> Result<Vec<ChunkRef>, String> {
 // Load
 pub fn load_static_vehicle_gltf(name: &str) -> Result<Vec<u8>, String> {
 	let path = &(VEHICLES_DIR.to_owned() + name + "/model.glb");
-	to_string_err_with_message(fs::read(path), &format!("Failed to load 3D GLB file ({}) for type {}", path, name))
+	to_string_err_with_message(fs::read(path), &format!("Failed to load 3D GLB file at {} for type {}", path, name))
 }
 
 pub fn load_static_vehicle(name: &str) -> Result<VehicleStatic, Box<dyn Error>> {
