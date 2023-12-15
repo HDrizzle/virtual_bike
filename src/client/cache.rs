@@ -1,7 +1,7 @@
 /* For dealing with cached assets for the client
 Caches corresponding to each server will be stored in CACHE_DIR/<IP addr>:<port #>/
 */
-const CACHE_DIR: &str = "../resources/client_cache/";
+const CACHE_DIR: &str = "assets/client_cache/";
 const VEHICLE_MODEL_FILE_NAME: &str = "model.glb";
 
 use std::{fs, path, net::IpAddr};

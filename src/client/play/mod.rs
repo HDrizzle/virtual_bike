@@ -78,10 +78,14 @@ impl InitInfo {
 		// Map init bevy
 		static_data.map.init_bevy(&mut commands, meshes.as_mut(), materials.as_mut(), &*asset_server);
 		// Load vehicle gltf model files. This is just to have the asset handles for each static vehicle type, not to display anything
+		// TODO: fix: bevy wants the assets to be loaded from a specific folder that I don't want to use and it is pissing me off
+		// FINE I'll change the client cache dir to inside `/assets`
+		// https://bevy-cheatbook.github.io/assets/assetserver.html
 		for (_, v) in static_data.vehicles.iter() {
+			let binding = cache::get_static_vehicle_model_path(server_addr.0, &v.name).strip_prefix("/assets").unwrap_or("<Error: vehicle model path does not start with correct dir ('/assets')>").to_owned();
 			commands.spawn(StaticVehicleRenderInfo {
 				type_: v.name.clone(),
-				gltf_handle: asset_server.load(cache::get_static_vehicle_model_path(server_addr.0, &v.name))
+				gltf_handle: asset_server.load(binding + "#Scene0")
 			});
 		}
 		// Init rapier
