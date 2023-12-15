@@ -133,6 +133,10 @@ mod prelude {
 			z: v.z
 		}
 	}
+	// Round float towards -inf
+	pub fn round_float_towards_neg_inf(n: Float) -> Int {
+		n.floor() as Int
+	}
 	// Copied from extras
 	pub fn to_string_err<T, E: Error>(result: Result<T, E>) -> Result<T, String> {
 		match result {

@@ -146,11 +146,11 @@ impl Path {
 	pub fn get_new_position(&self, curr_i: usize, new_segment_progress_unclamped: Float) -> (PathPosition, bool) {
 		// Returns: (next position, whether new pos has been clamped)
 		// TODO: fix: this assumes all segements are the same length
-		let progress_int: Int = new_segment_progress_unclamped as Int;// TODO: be sure this always rounds down
+		let progress_int: Int = round_float_towards_neg_inf(new_segment_progress_unclamped);
 		let progress_fraction: Float = new_segment_progress_unclamped - (progress_int as Float);
 		let progress_int_total = progress_int + curr_i as Int;
 		let new_prev_int = (progress_int_total.rem_euclid(self.knot_points.len() as Int)) as usize;
-		// Clamp to end if not looping
+		// Clamp to end if not looping TODO: clamp going backwards past 0
 		if (!self.loop_) && new_prev_int >= self.knot_points.len() - 1 {
 			return (self.end_position(), true);
 		}

@@ -295,6 +295,47 @@ pub mod paths {
 		assert_eq!(state, ideal_new_state);
 	}
 	#[test]
+	fn backward() {
+		let path = square_loop_non_unit_edges();
+		let v_static = vehicle_static();
+		let mut state = initial_path_bound_body_state();
+		// Update
+		let dt = 1.0;
+		let mut forces = VehicleLinearForces::default();
+		// 1
+		state.velocity = -0.5;
+		path.update_body(dt, &mut forces, &v_static, &mut state);
+		// Compare
+		assert_eq!(
+			state,
+				PathBoundBodyState {
+				path_ref: 0,
+				pos: PathPosition {
+					latest_point: 0,
+					ratio_from_latest_point: 0.0
+				},
+				velocity: -0.5,
+				forward: true
+			}
+		);
+		// 2
+		state.velocity = -0.7;
+		path.update_body(dt, &mut forces, &v_static, &mut state);
+		// Compare
+		assert_eq!(
+			state,
+				PathBoundBodyState {
+				path_ref: 0,
+				pos: PathPosition {
+					latest_point: 3,
+					ratio_from_latest_point: 0.3
+				},
+				velocity: -0.7,
+				forward: true
+			}
+		);
+	}
+	#[test]
 	fn adj_points() {
 		let path = square_loop_non_unit_edges();
 		let v_static = vehicle_static();
@@ -386,5 +427,17 @@ pub mod paths {
 				]
 			}
 		);
+	}
+}
+
+mod misc {
+	use super::*;
+	#[test]
+	fn rounding() {
+		assert_eq!(round_float_towards_neg_inf(3.5), 3);
+		assert_eq!(round_float_towards_neg_inf(0.0), 0);
+		assert_eq!(round_float_towards_neg_inf(-0.0), 0);
+		assert_eq!(round_float_towards_neg_inf(-3.0), -3);
+		assert_eq!(round_float_towards_neg_inf(-3.5), -4);
 	}
 }
