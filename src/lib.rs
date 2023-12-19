@@ -49,6 +49,7 @@ use rand::Rng;
 mod world;
 mod map;
 mod vehicle;
+mod physics;
 pub mod resource_interface;
 #[cfg(feature = "frontend")]
 pub mod client;
@@ -76,7 +77,7 @@ mod prelude {
 	pub type P3 = Point3<Float>;
 	pub type V3 = Vector3<Float>;
 	pub type Iso = Isometry3<Float>;
-	// Misc, important to not use anything that is behind a feature
+	// Misc
 	pub use crate::{
 		world::{StaticData, PhysicsState, World, WorldSave, WorldSend},
 		map::{Map, path::{Path, PathSet, PathBoundBodyState, PathPosition, BCurve}, chunk::{Chunk, ChunkRef, RegularElevationMesh, Gen}},
@@ -91,6 +92,7 @@ mod prelude {
 		BasicTriMesh,
 		RapierBodyCreationDeletionContext
 	};
+	#[cfg(feature = "backend")] pub use physics::{PhysicsController, PhysicsUpdateArgs, BodyAveragableState};
 	// Utility functions because nalgebra is friggin complicated
 	pub fn add_isometries(iso1: &Iso, iso2: &Iso) -> Iso {
 		// Adds two isometries together
@@ -212,12 +214,12 @@ impl<T: fmt::Display> GenericError<T> {
 }
 
 // Structs/Enums
-#[derive(Serialize, Deserialize, Clone, Copy, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default)]
 pub struct InputData {
-	steering: f64,// -1 right to 1 left
-	speed: f64,// Actual speed measured on bike
-	power: f64,// Watts
-	brake: f64// G-acceleration
+	steering: Float,// -1 right to 1 left
+	speed: Float,// Actual speed measured on bike
+	power: Float,// Watts
+	brake: Float// Acc (m/s^2)
 }
 
 impl InputData {

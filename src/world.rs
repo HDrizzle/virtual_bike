@@ -22,6 +22,10 @@ use crate::client::play::VehicleBodyHandles;*/
 
 use nalgebra::vector;
 
+// Type to use for vehicle physics controller
+type VPhys = BodyPhysicsController;
+
+// Structs
 #[derive(Serialize, Deserialize, Clone)]
 #[cfg_attr(feature = "frontend", derive(Resource))]
 pub struct StaticData {
@@ -242,7 +246,7 @@ impl WorldSend {
 
 pub struct World {// Main game simulation
 	pub map: Map,
-	pub vehicles: HashMap<String, Vehicle>,// {username: vehicle}
+	pub vehicles: HashMap<String, Vehicle<VPhys>>,// {username: vehicle}
 	pub age: Duration,
 	pub playing: bool,
 	pub gravity: Float,
@@ -258,7 +262,7 @@ impl World {
 		// Create blank physics state
 		let mut physics_state: PhysicsState = PhysicsState::new(save.gravity);
 		// Load vehicles
-		let mut vehicles: HashMap<String, Vehicle> = HashMap::new();
+		let mut vehicles: HashMap<String, Vehicle<VPhys>> = HashMap::new();
 		for (user, v_save) in save.vehicles.iter() {
 			let v_static: VehicleStatic = load_static_vehicle(&v_save.static_name)?;
 			vehicles.insert(user.clone(), Vehicle::build(v_save, Arc::new(v_static), &mut physics_state.bodies, &mut physics_state.colliders, &mut physics_state.impulse_joints, &map.path_set)?);
@@ -291,7 +295,7 @@ impl World {
 	pub fn new(map: &str) -> Result<Self, Box<dyn Error>> {
 		Ok(Self {
 			map: load_map_metadata(map)?,
-			vehicles: HashMap::<String, Vehicle>::new(),
+			vehicles: HashMap::<String, Vehicle<VPhys>>::new(),
 			age: Duration::new(0, 0),
 			playing: false,
 			gravity: -9.81,
@@ -355,7 +359,7 @@ impl World {
 			if self.playing {
 				// All vehicle physics controllers
 				for (_, v) in self.vehicles.iter_mut() {
-					v.update_physics(dt_f64 as Float, 1.225, &mut self.physics_state.bodies, &mut self.physics_state.impulse_joints, &self.map.path_set);
+					v.update_physics(dt_f64 as Float, 1.225, &mut self.physics_state.bodies, &mut self.physics_state.impulse_joints, &self.map.path_set, self.gravity);
 				}
 				// Rapier
 				self.physics_state.step();

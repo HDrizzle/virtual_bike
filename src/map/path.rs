@@ -14,7 +14,7 @@ use bevy::{prelude::*, render::mesh::PrimitiveTopology, pbr::wireframe::{NoWiref
 use crate::prelude::*;
 
 // CONSTS
-const PATH_RENDER_SEGMENT_LENGTH: Float = 1.0;
+const PATH_RENDER_SEGMENT_LENGTH: Float = 4.0;
 
 // Structs
 #[derive(PartialEq, Debug)]
@@ -150,8 +150,15 @@ impl Path {
 		let progress_fraction: Float = new_segment_progress_unclamped - (progress_int as Float);
 		let progress_int_total = progress_int + curr_i as Int;
 		let new_prev_int = (progress_int_total.rem_euclid(self.knot_points.len() as Int)) as usize;
-		// Clamp to end if not looping TODO: clamp going backwards past 0
-		if (!self.loop_) && new_prev_int >= self.knot_points.len() - 1 {
+		// Clamp to end if not looping
+		let forward = new_segment_progress_unclamped > 0.0;
+		if// TODO: test this logic
+			(!self.loop_) &&
+			(
+				( forward && new_prev_int >= self.knot_points.len() - 1) ||
+				(!forward && new_prev_int > curr_i)// Wraparound, assuming step is not huge
+			)
+		{
 			return (self.end_position(), true);
 		}
 		// Done
@@ -180,11 +187,12 @@ impl Path {
 		let bcurve = self.get_bcurve(&state.pos);
 		state.velocity * bcurve.get_real_velocity_mulitplier(state.pos.ratio_from_latest_point)
 	}
-	pub fn update_body(&self, dt: Float, forces: &mut VehicleLinearForces, v_static: &VehicleStatic, state: &mut PathBoundBodyState) {
+	pub fn update_body(&self, dt: Float, forces: &mut VehicleLinearForces, v_static: &VehicleStatic, state: &mut PathBoundBodyState, gravity: Float) {
 		let bcurve = self.get_bcurve(&state.pos);
+		// Add gravity
+		forces.gravity = self.sideways_gravity_force_component(&state.pos, v_static, gravity);
 		// Acceleration: F = m * a, a = F / m
-		// TODO: add gravity
-		let acc = forces.sum() / v_static.mass;// Standard units
+		let acc = (forces.sum() / v_static.mass) * match state.forward {true => 1.0, false =>-1.0};// Apply vehicle direction
 		// Velocity: V += a * dt
 		let new_velocity = state.velocity + (acc * dt) * bcurve.get_real_velocity_mulitplier(state.pos.ratio_from_latest_point);// `segment_dist`/sec units
 		// Translation: translation += V * dt
@@ -193,6 +201,12 @@ impl Path {
 		// Done
 		state.pos = new_pos;
 		state.velocity = new_velocity;
+	}
+	pub fn sideways_gravity_force_component(&self, pos: &PathPosition, v_static: &VehicleStatic, gravity: Float) -> Float {
+		/*v_static.mass * gravity * -{
+			// Path angle
+			self.sample(pos).rotation.euler_angles().0// https://docs.rs/nalgebra/latest/nalgebra/geometry/type.UnitQuaternion.html#method.euler_angles
+		}.sin()*/0.0
 	}
 	#[cfg(feature = "frontend")]
 	pub fn bevy_mesh(&self, texture_len_width_ratio: Float, start: &PathPosition) -> (Mesh, Option<PathPosition>) {
@@ -316,7 +330,7 @@ impl Path {
 		let mut curr_pos = PathPosition::default();
 		loop {
 			// With help from https://github.com/bevyengine/bevy/blob/main/examples/3d/wireframe.rs
-			let texture_handle: Handle<Image> = asset_server.load("road_squished.png");
+			let texture_handle: Handle<Image> = asset_server.load("road_us.png");
 			let material_handle = materials.add(StandardMaterial {
 				base_color: Color::rgba(0.5, 0.5, 0.5, 1.0),
 				base_color_texture: Some(texture_handle),
@@ -401,6 +415,18 @@ pub struct PathBoundBodyState {
 	pub pos: PathPosition,
 	pub velocity: Float,// in current-curve-length-units / second
 	pub forward: bool
+}
+
+impl PathBoundBodyState {
+	pub fn full_step(&mut self) {
+
+	}
+	pub fn partial_step(&mut self) {
+
+	}
+	pub fn average(&mut self, other: &Self) {
+		
+	}
 }
 
 /*

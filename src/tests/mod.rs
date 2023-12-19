@@ -281,7 +281,7 @@ pub mod paths {
 		// Update
 		let dt = 1.0;
 		let mut forces = VehicleLinearForces::default();
-		path.update_body(dt, &mut forces, &v_static, &mut state);
+		path.update_body(dt, &mut forces, &v_static, &mut state, 0.0);
 		// Compare
 		let ideal_new_state = PathBoundBodyState {
 			path_ref: 0,
@@ -304,7 +304,7 @@ pub mod paths {
 		let mut forces = VehicleLinearForces::default();
 		// 1
 		state.velocity = -0.5;
-		path.update_body(dt, &mut forces, &v_static, &mut state);
+		path.update_body(dt, &mut forces, &v_static, &mut state, 0.0);
 		// Compare
 		assert_eq!(
 			state,
@@ -320,7 +320,7 @@ pub mod paths {
 		);
 		// 2
 		state.velocity = -0.7;
-		path.update_body(dt, &mut forces, &v_static, &mut state);
+		path.update_body(dt, &mut forces, &v_static, &mut state, 0.0);
 		// Compare
 		assert_eq!(
 			state,

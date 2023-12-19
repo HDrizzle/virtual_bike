@@ -133,17 +133,20 @@ fn vehicle_input_key_event_system(// Only for manual vehicle control should be b
 	// Process user input (ONLY TEMPORARY)
 	// Key state polling
 	let input = {
-		// Detect motion
-		// Translation
-		let mut power_forward = 0.0;
-		let power_magnitude = 20.0;
-		// Y
-		if keys.pressed(KeyCode::W) {
-			power_forward += power_magnitude;
+		// Drive
+		let power_forward = if keys.pressed(KeyCode::W) {
+			20.0
 		}
-		if keys.pressed(KeyCode::S) {
-			power_forward -= power_magnitude;
+		else {
+			0.0
+		};
+		// Braking
+		let brake = if keys.pressed(KeyCode::S) {
+			0.2
 		}
+		else {
+			0.0
+		};
 		// Rotation/Steering
 		let mut steering = 0.0;
 		if keys.pressed(KeyCode::A) {
@@ -154,10 +157,10 @@ fn vehicle_input_key_event_system(// Only for manual vehicle control should be b
 		}
 		// Create input
 		InputData {
-			steering: steering,
+			steering,
 			speed: power_forward,
 			power: power_forward,// TODO: fix
-			brake: 0.0
+			brake
 		}
 	};
 	let client_update = ClientUpdate {

@@ -24,17 +24,17 @@ const MAX_LINE_LEN: usize = 100;// To prevent infinite loop in case hardware isn
 
 #[derive(Serialize, Deserialize)]
 pub struct Calibration {// ISO Units
-	wheel_dia: f64,// Meters
+	wheel_dia: Float,// Meters
 	pulses_per_rev: u32,// Unitless
-	power_mult: f64,// Unitless
-	steering_offset: f64,// Arbitrary units, depends on hardware, applied before steering_mult
-	steering_mult: f64,// Unitless, applied after steering_offset
-	brake_sensitivity: f64,// Unitless
+	power_mult: Float,// Unitless
+	steering_offset: Float,// Arbitrary units, depends on hardware, applied before steering_mult
+	steering_mult: Float,// Unitless, applied after steering_offset
+	brake_sensitivity: Float,// Unitless
 	pub timeout: u32// Seconds
 }
 
 impl Calibration {
-	pub fn calibrate(&self, t_between: f64, t_last: f64, steering_raw: f64, brake_raw: f64) -> InputData {
+	pub fn calibrate(&self, t_between: Float, t_last: Float, steering_raw: Float, brake_raw: Float) -> InputData {
 		// Times are in microseconds
 		// Steering
 		let steering = (steering_raw + self.steering_offset) * self.steering_mult;
@@ -45,7 +45,7 @@ impl Calibration {
 		else {
 			t_last
 		};
-		let speed = (self.wheel_dia * 3.14159)/* Wheel circumference (m) */ / ((t_micros * self.pulses_per_rev as f64) / 1000000.0)/* Time per rev (S)*/;// meters / sec
+		let speed = (self.wheel_dia * 3.14159)/* Wheel circumference (m) */ / ((t_micros * self.pulses_per_rev as Float) / 1000000.0)/* Time per rev (S)*/;// meters / sec
 		let power = speed.powf(3.0) * self.power_mult;
 		// Brake
 		let brake = brake_raw * self.brake_sensitivity;
@@ -107,9 +107,9 @@ impl HardwareInterface {
     fn decode(&self, s: &str) -> Result<InputData, Box<dyn Error>> {
         let parts: Vec<&str> = s.split(",").collect();
 		if parts.len() != 4 {return Result::Err(format!("Incorrect amount of CSVs: \"{}\"", s).into())}
-		let mut n_vec = Vec::<f64>::new();
+		let mut n_vec = Vec::<Float>::new();
 		for part in parts {
-			n_vec.push(part.trim().parse::<f64>()?);
+			n_vec.push(part.trim().parse::<Float>()?);
 		}
 		Ok(self.cal.calibrate(
 			n_vec[0],
