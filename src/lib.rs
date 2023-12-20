@@ -81,7 +81,7 @@ mod prelude {
 	pub use crate::{
 		world::{StaticData, PhysicsState, World, WorldSave, WorldSend},
 		map::{Map, path::{Path, PathSet, PathBoundBodyState, PathPosition, BCurve}, chunk::{Chunk, ChunkRef, RegularElevationMesh, Gen}},
-		vehicle::{Vehicle, VehicleStatic, VehicleSave, VehicleSend, Wheel, WheelStatic, BodyStateSerialize, BodyPhysicsController, VehicleLinearForces},
+		vehicle::{Vehicle, VehicleStatic, VehicleSave, VehicleSend, Wheel, WheelStatic, BodyStateSerialize, BodyForces},
 		GenericError,
 		InputData,
 		ClientAuth,
@@ -92,7 +92,7 @@ mod prelude {
 		BasicTriMesh,
 		RapierBodyCreationDeletionContext
 	};
-	#[cfg(feature = "backend")] pub use physics::{PhysicsController, PhysicsUpdateArgs, BodyAveragableState};
+	#[cfg(feature = "backend")] pub use physics::{PhysicsController, PhysicsUpdateArgs, BodyAveragableState, defaut_extra_forces_calculator};
 	// Utility functions because nalgebra is friggin complicated
 	pub fn add_isometries(iso1: &Iso, iso2: &Iso) -> Iso {
 		// Adds two isometries together

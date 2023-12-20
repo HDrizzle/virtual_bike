@@ -4,7 +4,7 @@ Any vehicle can be in one of two states: normal physics and path-bound. Normal p
 when path-bound it will be controlled by the specific Path it is bound to. it's velocity will be a single scalar value whose sign indicates which direction it is travelling on the path.
 */
 
-use std::{error::Error, sync::Arc};
+use std::{error::Error, sync::Arc, rc::Rc, ops::{self, AddAssign}};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 #[cfg(feature = "frontend")]
 use bevy::{prelude::*, ecs::component::Component};
@@ -203,7 +203,7 @@ pub struct VehicleSave {// This is saved to and loaded from a world (game save f
 #[derive(Serialize, Deserialize)]
 pub struct VehicleSend {// This is sent over the network to the client
 	static_name: String,// Name of static vehicle file
-	pub latest_forces: Option<VehicleLinearForces>,
+	pub latest_forces: Option<BodyForces>,
 	pub body_state: BodyStateSerialize,
 	input: Option<InputData>,
 	latest_input_t: u64
@@ -245,25 +245,25 @@ impl VehicleSend {
 }
 
 #[cfg(feature = "backend")]//#[cfg_attr(feature = "frontend", derive(Component))]
-pub struct Vehicle<PHYS: PhysicsController> {// This is used for physics
-	pub static_: Arc<VehicleStatic>,
-	latest_forces: Option<VehicleLinearForces>,
+pub struct Vehicle {// This is used for physics
+	pub static_: Rc<VehicleStatic>,
+	latest_forces: Option<BodyForces>,
 	latest_input: Option<InputData>,
 	latest_input_t: u64,
-	physics_controller: PHYS
+	physics_controller: Box<dyn PhysicsController>
 }
 
 #[cfg(feature = "backend")]
-impl<PHYS: PhysicsController + Send + Sync> Vehicle<PHYS> {
+impl Vehicle {
 	pub fn build(
 		save: &VehicleSave,
-		static_: Arc<VehicleStatic>,
+		static_: Rc<VehicleStatic>,
 		bodies: &mut RigidBodySet,
 		colliders: &mut ColliderSet,
 		joints: &mut ImpulseJointSet,
 		paths: &PathSet
-	) -> Result<Vehicle<PHYS>, Box<dyn Error>> {
-		let physics_controller = PHYS::build(&save.body_state, bodies, colliders, joints, paths, static_.clone());
+	) -> Result<Vehicle, Box<dyn Error>> {
+		let physics_controller = save.body_state.build_physics_controller(bodies, colliders, joints, paths, static_.clone());
 		// Done
 		Ok(Self {
 			static_,
@@ -281,13 +281,11 @@ impl<PHYS: PhysicsController + Send + Sync> Vehicle<PHYS> {
 	pub fn update_physics(&mut self, dt: Float, fluid_density: Float, physics_state: &mut PhysicsState, paths: &PathSet, gravity: Float) {
 		// Run every frame
 		//update(&mut self, dt: Float, drag_force: V3, latest_input: Option<InputData>, paths: &PathSet, bodies: &mut RigidBodySet, joints: &mut ImpulseJointSet)
-		let mut lin_forces = VehicleLinearForces::default();
-		lin_forces.drag = self.drag_force(fluid_density, &physics_state.bodies, paths).z;
-		self.physics_controller.update(PhysicsUpdateArgs{dt, gravity, rapier: physics_state, paths, latest_input: &self.latest_input});
+		let forces = self.physics_controller.update(PhysicsUpdateArgs{dt, gravity, rapier: physics_state, paths, latest_input: &self.latest_input, extra_forces_calculator: &Self::forces_calculator});
 		// Save forces
-		self.latest_forces = Some(lin_forces);
+		self.latest_forces = Some(forces);
 	}
-	pub fn recover_from_flip(&self, physics_state: &mut PhysicsState) {
+	pub fn recover_from_flip(&mut self, physics_state: &mut PhysicsState) {
 		self.physics_controller.recover_from_flip(physics_state);
 	}
 	pub fn create_serialize_state(&self, bodies: &RigidBodySet, paths: &PathSet) -> BodyStateSerialize {
@@ -308,9 +306,9 @@ impl<PHYS: PhysicsController + Send + Sync> Vehicle<PHYS> {
 			latest_input_t: self.latest_input_t
 		}
 	}
-	pub fn drag_force(&self, fluid_density: Float, bodies: &RigidBodySet, paths: &PathSet) -> V3 {
+	pub fn forces_calculator(lin: V3, ang: V3) -> BodyForces {
 		// Drag force wrt this vehicle
-		V3::zeros()// TODO
+		BodyForces::default()
 	}
 }
 
@@ -332,146 +330,161 @@ impl BodyStateSerialize {
 			path_bound_opt
 		}
 	}
-}
-
-#[cfg(feature = "backend")]
-pub enum BodyPhysicsController {
-	RegularPhysics{
-		body_handle: RigidBodyHandle,
-		collider_handle: ColliderHandle,
-		wheels: Vec<Wheel>
-	},
-	PathBound(PathBoundBodyState, Arc<VehicleStatic>)
-}
-
-#[cfg(feature = "backend")]
-impl BodyPhysicsController {
-	pub fn is_path_bound(&self) -> bool {
-		match self {
-			Self::RegularPhysics{..} => false,
-			Self::PathBound(..) => true
+	pub fn build_physics_controller(
+		&self,
+		bodies: &mut RigidBodySet,
+		colliders: &mut ColliderSet,
+		joints: &mut ImpulseJointSet,
+		paths: &PathSet,
+		v_static: Rc<VehicleStatic>
+	) -> Box<dyn PhysicsController> {
+		match &self.path_bound_opt {
+			Some(path_state) => {
+				Box::new(VehiclePathBoundController::build(path_state.clone(), v_static))
+			},
+			None => {
+				Box::new(VehicleRapierController::build(&self, bodies, colliders, joints, paths, v_static))
+			}
 		}
 	}
 }
 
 #[cfg(feature = "backend")]
-impl PhysicsController for BodyPhysicsController {
-	fn build (
+pub struct VehicleRapierController {
+	body_handle: RigidBodyHandle,
+	collider_handle: ColliderHandle,
+	wheels: Vec<Wheel>
+}
+
+impl VehicleRapierController {
+	pub fn build (
 		body_state: &BodyStateSerialize,
 		bodies: &mut RigidBodySet,
 		colliders: &mut ColliderSet,
 		joints: &mut ImpulseJointSet,
 		paths: &PathSet,
-		static_: Arc<VehicleStatic>
-	) -> BodyPhysicsController {
-		match &body_state.path_bound_opt {
-			Some(path_bound_state) => {
-				BodyPhysicsController::PathBound((*path_bound_state).clone(), static_.clone())
-			},
-			None => {
-				// Body
-				let mut body = RigidBodyBuilder::dynamic().ccd_enabled(true).build();
-				body_state.init_rapier_body(&mut body);
-				let body_handle = bodies.insert(body);
-				let collider = static_.build_rapier_collider();
-				let collider_handle = colliders.insert_with_parent(collider, body_handle, bodies);
-				// Wheels
-				let mut wheels = Vec::<Wheel>::new();
-				for w_static in &static_.wheels {
-					wheels.push(Wheel::build(w_static, bodies, colliders, joints, body_handle));
-					//joints.insert(body_handle, w_body_handle, joint, true);
-				}
-				// Set mass
-				let b_ref = bodies.get_mut(body_handle).expect("Unable to get body w/ handle");
-				b_ref.set_additional_mass(static_.mass as Float - b_ref.mass(), true);
-				// Done
-				BodyPhysicsController::RegularPhysics{
-					body_handle,
-					collider_handle,
-					wheels
-				}
-			}
+		static_: Rc<VehicleStatic>
+	) -> Self {
+		// Body
+		let mut body = RigidBodyBuilder::dynamic().ccd_enabled(true).build();
+		body_state.init_rapier_body(&mut body);
+		let body_handle = bodies.insert(body);
+		let collider = static_.build_rapier_collider();
+		let collider_handle = colliders.insert_with_parent(collider, body_handle, bodies);
+		// Wheels
+		let mut wheels = Vec::<Wheel>::new();
+		for w_static in &static_.wheels {
+			wheels.push(Wheel::build(w_static, bodies, colliders, joints, body_handle));
+			//joints.insert(body_handle, w_body_handle, joint, true);
 		}
-	}
-	fn serializable(&self, bodies: &RigidBodySet, paths: &PathSet) -> BodyStateSerialize {
-		match self {
-			Self::RegularPhysics{body_handle, ..} => {
-				let body: &RigidBody = bodies.get(*body_handle).expect("Unable to get body with BodyPhysicsController::RegularPhysics.body_handle");
-				BodyStateSerialize::from_rapier_body(body, None)
-			},
-			Self::PathBound(path_body_state, ..) => {
-				let path: &Path = paths.get_with_ref(&path_body_state.path_ref).expect("Unable to get path with path body state");
-				path.create_body_state(path_body_state.clone())
-			}
-		}
-	}
-	fn update(&mut self, args: PhysicsUpdateArgs) {
-		match self {
-			Self::RegularPhysics{body_handle, collider_handle, wheels} => match args.latest_input {
-				Some(control) => match args.rapier.bodies.get_mut(*body_handle) {
-					Some(body) => {
-						// Get vehicle position and velocity
-						let position = body.position().clone();
-						// Forces
-						body.reset_forces(true);
-						body.reset_torques(true);
-						body.add_force(position.rotation.transform_point(&P3::new(0.0, 0.0, -(control.speed as Float * 5.0))).coords, true);
-						let torque_magnitude: Float = 800.0;
-						body.add_torque(P3::new(0.0, control.steering as Float * torque_magnitude, 0.0).coords, true);
-						/*for w in self.wheels.iter() {
-							w.update_steering(control.steering as Float, bodies, joints);
-						}*/
-					},
-					None => panic!("Unable to get vehicle body during update")
-				},
-				None => {}
-			},
-			Self::PathBound(ref mut path_body_state, v_static) => {
-				// Get path
-				let path: &Path = args.paths.get_with_ref(&path_body_state.path_ref).unwrap();
-				// User input
-				(forces.drive, forces.brake) = match args.latest_input {
-					Some(input) => {
-						// Power = force * velocity; force = power / velocity
-						let vel_raw = path.get_real_velocity(path_body_state);
-						let vel_corrected = if vel_raw >= 0.0 {// Make sure it cannot == 0
-							vel_raw + 1e-2
-						}
-						else {
-							vel_raw - 1e-2
-						};
-						let force_limit = v_static.mass * STATIONARY_DRIVE_ACC_LIMIT;// F = ma
-						let drive_force = (input.power as Float / vel_corrected).clamp(-force_limit, force_limit);
-						// Brake
-						let brake_force: Float = input.brake * v_static.mass * match path_body_state.forward {true => 1.0, false =>-1.0} * -path_body_state.velocity;
-						// Done
-						(drive_force, brake_force)
-					},
-					None => (0.0, 0.0)
-				};
-				// Update
-				path.update_body(dt, forces, &v_static, path_body_state, gravity);
-			}
-		}
-	}
-	fn step(&mut self, info: PhysicsUpdateArgs) {}
-	fn average(&mut self, other: &Self) {}
-	fn recover_from_flip(&mut self, physics_state: &mut PhysicsState) {
-		match self {
-			Self::RegularPhysics{body_handle, collider_handle, wheels} => {
-				// TODO: fix
-				let body = physics_state.bodies.get_mut(*body_handle).expect("Unable to get vehicle body during unflip");
-				body.set_rotation(UnitQuaternion::identity(), true);
-				body.set_translation(body.translation() + vector![0.0, 10.0, 0.0], true);// TODO: fix: arbitrary value
-				physics_state.bodies.propagate_modified_body_positions_to_colliders(&mut physics_state.colliders);
-			},
-			Self::PathBound(..) => {}
+		// Set mass
+		let b_ref = bodies.get_mut(body_handle).expect("Unable to get body w/ handle");
+		b_ref.set_additional_mass(static_.mass as Float - b_ref.mass(), true);
+		// Done
+		Self {
+			body_handle,
+			collider_handle,
+			wheels
 		}
 	}
 }
 
-#[derive(Serialize, Deserialize, Default, Clone)]
-pub struct VehicleLinearForces {// Standard units, so Newtons. Always wrt the body even if it is facing backwards on a path
+#[cfg(feature = "backend")]
+impl PhysicsController for VehicleRapierController {
+	fn serializable(&self, bodies: &RigidBodySet, paths: &PathSet) -> BodyStateSerialize {
+		let body: &RigidBody = bodies.get(self.body_handle).expect("Unable to get body with BodyPhysicsController::RegularPhysics.body_handle");
+		BodyStateSerialize::from_rapier_body(body, None)
+	}
+	fn update(&mut self, args: PhysicsUpdateArgs) -> BodyForces {
+		match args.latest_input {
+			Some(control) => match args.rapier.bodies.get_mut(self.body_handle) {
+				Some(body) => {
+					// Get vehicle position and velocity
+					let position = body.position().clone();
+					// Forces
+					body.reset_forces(true);
+					body.reset_torques(true);
+					body.add_force(position.rotation.transform_point(&P3::new(0.0, 0.0, -(control.speed as Float * 5.0))).coords, true);
+					let torque_magnitude: Float = 800.0;
+					body.add_torque(P3::new(0.0, control.steering as Float * torque_magnitude, 0.0).coords, true);
+					/*for w in self.wheels.iter() {
+						w.update_steering(control.steering as Float, bodies, joints);
+					}*/
+				},
+				None => panic!("Unable to get vehicle body during update")
+			},
+			None => {}
+		}
+		BodyForces::default()
+	}
+	fn recover_from_flip(&mut self, physics_state: &mut PhysicsState) {
+		// TODO: fix
+		let body = physics_state.bodies.get_mut(self.body_handle).expect("Unable to get vehicle body during unflip");
+		body.set_rotation(UnitQuaternion::identity(), true);
+		body.set_translation(body.translation() + vector![0.0, 10.0, 0.0], true);// TODO: fix: arbitrary value
+		physics_state.bodies.propagate_modified_body_positions_to_colliders(&mut physics_state.colliders);
+	}
+}
+
+#[cfg(feature = "backend")]
+pub struct VehiclePathBoundController {
+	state: PathBoundBodyState,
+	v_static: Rc<VehicleStatic>
+}
+
+impl VehiclePathBoundController {
+	pub fn build (
+		state: PathBoundBodyState,
+		v_static: Rc<VehicleStatic>
+	) -> Self {
+		Self {
+			state,
+			v_static: v_static.clone()
+		}
+	}
+}
+
+#[cfg(feature = "backend")]
+impl PhysicsController for VehiclePathBoundController{
+	fn serializable(&self, bodies: &RigidBodySet, paths: &PathSet) -> BodyStateSerialize {
+		let path: &Path = paths.get_with_ref(&self.state.path_ref).expect("Unable to get path with path body state");
+		path.create_body_state(self.state.clone())
+	}
+	fn update(&mut self, args: PhysicsUpdateArgs) -> BodyForces {
+		// Forces
+		let mut forces = BodyForces::default();
+		forces += (args.extra_forces_calculator)(V3::new(0.0, 0.0, self.state.velocity), V3::zeros());// TODO
+		// Get path
+		let path: &Path = args.paths.get_with_ref(&self.state.path_ref).unwrap();
+		// User input
+		let (drive_force, brake_force): (Float, Float) = match args.latest_input {
+			Some(input) => {
+				// Power = force * velocity; force = power / velocity
+				let vel_raw = path.get_real_velocity(&self.state);
+				let vel_corrected = if vel_raw >= 0.0 {// Make sure it cannot == 0
+					vel_raw + 1e-2
+				}
+				else {
+					vel_raw - 1e-2
+				};
+				let force_limit = self.v_static.mass * STATIONARY_DRIVE_ACC_LIMIT;// F = ma
+				let drive_force = (input.power as Float / vel_corrected).clamp(-force_limit, force_limit);
+				// Brake
+				let brake_force: Float = input.brake * self.v_static.mass * -self.state.velocity;
+				// Done
+				(drive_force, brake_force)
+			},
+			None => (0.0, 0.0)
+		};
+		forces.lin += V3::new(0.0, 0.0, drive_force + brake_force);
+		// Update
+		path.update_body(args.dt, &forces, &self.v_static, &mut self.state, args.gravity);
+		forces
+	}
+}
+
+/*#[derive(Serialize, Deserialize, Default, Clone)]
+pub struct BodyLinearForces {// Standard units, so Newtons. Always wrt the body even if it is facing backwards on a path
 	pub rolling_resistance: Float,
 	pub drag: Float,
 	pub drive: Float,
@@ -480,8 +493,23 @@ pub struct VehicleLinearForces {// Standard units, so Newtons. Always wrt the bo
 	pub other: Float
 }
 
-impl VehicleLinearForces {
+impl BodyLinearForces {
 	pub fn sum(&self) -> Float {
 		self.rolling_resistance + self.drag + self.drive + self.gravity + self.brake + self.other
+	}
+}*/
+
+#[derive(Serialize, Deserialize, Default, Clone)]
+pub struct BodyForces {// Standard units, so Newtons. Always wrt the body even if it is facing backwards on a path
+	pub lin: V3,
+	pub ang: V3
+}
+
+impl AddAssign for BodyForces {
+	fn add_assign(&mut self, rhs: Self) {
+		// Linear
+		self.lin += rhs.lin;
+		// Angular
+		self.ang += rhs.ang;// TODO: I'm pretty sure this is correct, but not certain
 	}
 }

@@ -187,19 +187,14 @@ impl Path {
 		let bcurve = self.get_bcurve(&state.pos);
 		state.velocity * bcurve.get_real_velocity_mulitplier(state.pos.ratio_from_latest_point)
 	}
-	pub fn update_body(&self, dt: Float, forces: &mut VehicleLinearForces, v_static: &VehicleStatic, state: &mut PathBoundBodyState, gravity: Float) {
+	pub fn update_body(&self, dt: Float, forces: &BodyForces, v_static: &VehicleStatic, state: &mut PathBoundBodyState, gravity: Float) {
 		let bcurve = self.get_bcurve(&state.pos);
-		// Add gravity
-		forces.gravity = self.sideways_gravity_force_component(&state.pos, v_static, gravity);
 		// Acceleration: F = m * a, a = F / m
-		let acc = (forces.sum() / v_static.mass) * match state.forward {true => 1.0, false =>-1.0};// Apply vehicle direction
+		let acc = (forces.lin.z / v_static.mass);
 		// Velocity: V += a * dt
-		let new_velocity = state.velocity + (acc * dt) * bcurve.get_real_velocity_mulitplier(state.pos.ratio_from_latest_point);// `segment_dist`/sec units
+		let new_velocity = state.velocity + (acc * dt) * bcurve.get_real_velocity_mulitplier(state.pos.ratio_from_latest_point);
 		// Translation: translation += V * dt
-		let new_segment_progress_unclamped = state.pos.ratio_from_latest_point + new_velocity * dt;
-		let (new_pos, _) = self.get_new_position(state.pos.latest_point, new_segment_progress_unclamped);
-		// Done
-		state.pos = new_pos;
+		self.step_position_by_world_units(&mut state.pos, new_velocity * dt * match state.forward {true => 1.0, false =>-1.0});// Apply vehicle direction
 		state.velocity = new_velocity;
 	}
 	pub fn sideways_gravity_force_component(&self, pos: &PathPosition, v_static: &VehicleStatic, gravity: Float) -> Float {
@@ -413,7 +408,7 @@ impl Default for PathPosition {
 pub struct PathBoundBodyState {
 	pub path_ref: PathRef,
 	pub pos: PathPosition,
-	pub velocity: Float,// in current-curve-length-units / second
+	pub velocity: Float,// in world-units / second, TODO: update usages: was current-curve-len-units / second
 	pub forward: bool
 }
 

@@ -1,6 +1,6 @@
 // World simulation
 
-use std::{thread, error::Error, sync::{mpsc, Arc}, collections::HashMap, time::{Duration, Instant}, net::IpAddr};
+use std::{thread, error::Error, sync::{mpsc, Arc}, rc::Rc, collections::HashMap, time::{Duration, Instant}, net::IpAddr};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 #[cfg(feature = "frontend")]
 #[cfg(feature = "debug_render_physics")]
@@ -21,9 +21,6 @@ use crate::resource_interface::*;
 use crate::client::play::VehicleBodyHandles;*/
 
 use nalgebra::vector;
-
-// Type to use for vehicle physics controller
-type VPhys = BodyPhysicsController;
 
 // Structs
 #[derive(Serialize, Deserialize, Clone)]
@@ -246,7 +243,7 @@ impl WorldSend {
 
 pub struct World {// Main game simulation
 	pub map: Map,
-	pub vehicles: HashMap<String, Vehicle<VPhys>>,// {username: vehicle}
+	pub vehicles: HashMap<String, Vehicle>,// {username: vehicle}
 	pub age: Duration,
 	pub playing: bool,
 	pub gravity: Float,
@@ -262,10 +259,10 @@ impl World {
 		// Create blank physics state
 		let mut physics_state: PhysicsState = PhysicsState::new(save.gravity);
 		// Load vehicles
-		let mut vehicles: HashMap<String, Vehicle<VPhys>> = HashMap::new();
+		let mut vehicles: HashMap<String, Vehicle> = HashMap::new();
 		for (user, v_save) in save.vehicles.iter() {
 			let v_static: VehicleStatic = load_static_vehicle(&v_save.static_name)?;
-			vehicles.insert(user.clone(), Vehicle::build(v_save, Arc::new(v_static), &mut physics_state.bodies, &mut physics_state.colliders, &mut physics_state.impulse_joints, &map.path_set)?);
+			vehicles.insert(user.clone(), Vehicle::build(v_save, Rc::new(v_static), &mut physics_state.bodies, &mut physics_state.colliders, &mut physics_state.impulse_joints, &map.path_set)?);
 		}
 		// Create world
 		let mut out = Self {
@@ -295,7 +292,7 @@ impl World {
 	pub fn new(map: &str) -> Result<Self, Box<dyn Error>> {
 		Ok(Self {
 			map: load_map_metadata(map)?,
-			vehicles: HashMap::<String, Vehicle<VPhys>>::new(),
+			vehicles: HashMap::<String, Vehicle>::new(),
 			age: Duration::new(0, 0),
 			playing: false,
 			gravity: -9.81,
@@ -359,7 +356,7 @@ impl World {
 			if self.playing {
 				// All vehicle physics controllers
 				for (_, v) in self.vehicles.iter_mut() {
-					v.update_physics(dt_f64 as Float, 1.225, &mut self.physics_state.bodies, &mut self.physics_state.impulse_joints, &self.map.path_set, self.gravity);
+					v.update_physics(dt_f64 as Float, 1.225, &mut self.physics_state, &self.map.path_set, self.gravity);
 				}
 				// Rapier
 				self.physics_state.step();

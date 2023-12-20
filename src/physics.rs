@@ -6,27 +6,23 @@ use std::sync::Arc;
 use rapier3d::prelude::*;
 use crate::prelude::*;
 
+pub fn defaut_extra_forces_calculator(lin: V3, ang: V3) -> BodyForces {
+	BodyForces::default()
+}
+
 pub struct PhysicsUpdateArgs<'a> {
 	pub dt: Float,
 	pub gravity: Float,
 	pub rapier: &'a mut PhysicsState,
 	pub paths: &'a PathSet,
-	pub latest_input: &'a Option<InputData>
+	pub latest_input: &'a Option<InputData>,
+	pub extra_forces_calculator: &'a dyn Fn(V3, V3) -> BodyForces// (linear velocity, angular velocity) -> (linear force, torque); Both wrt body (not global)
 }
 
 pub trait PhysicsController {
-	fn build(
-		body_state: &BodyStateSerialize,
-		bodies: &mut RigidBodySet,
-		colliders: &mut ColliderSet,
-		joints: &mut ImpulseJointSet,
-		paths: &PathSet,
-		static_: Arc<VehicleStatic>
-	) -> Self where Self: Sized + Send + Sync;
 	fn serializable(&self, bodies: &RigidBodySet, paths: &PathSet) -> BodyStateSerialize;
-	fn update(&mut self, info: PhysicsUpdateArgs);
-	fn step(&mut self, info: PhysicsUpdateArgs);
-	fn recover_from_flip(&mut self, physics_state: &mut PhysicsState);
+	fn update(&mut self, info: PhysicsUpdateArgs) -> BodyForces;
+	fn recover_from_flip(&mut self, physics_state: &mut PhysicsState) {}
 }
 
 pub trait BodyAveragableState {

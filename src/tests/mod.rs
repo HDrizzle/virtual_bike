@@ -280,7 +280,7 @@ pub mod paths {
 		let mut state = initial_path_bound_body_state();
 		// Update
 		let dt = 1.0;
-		let mut forces = VehicleLinearForces::default();
+		let mut forces = BodyForces::default();
 		path.update_body(dt, &mut forces, &v_static, &mut state, 0.0);
 		// Compare
 		let ideal_new_state = PathBoundBodyState {
@@ -301,7 +301,7 @@ pub mod paths {
 		let mut state = initial_path_bound_body_state();
 		// Update
 		let dt = 1.0;
-		let mut forces = VehicleLinearForces::default();
+		let mut forces = BodyForces::default();
 		// 1
 		state.velocity = -0.5;
 		path.update_body(dt, &mut forces, &v_static, &mut state, 0.0);
