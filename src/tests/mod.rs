@@ -278,6 +278,7 @@ pub mod paths {
 		let path = square_loop_non_unit_edges();
 		let v_static = vehicle_static();
 		let mut state = initial_path_bound_body_state();
+		state.velocity = 12.0;
 		// Update
 		let dt = 1.0;
 		let mut forces = BodyForces::default();
@@ -286,10 +287,10 @@ pub mod paths {
 		let ideal_new_state = PathBoundBodyState {
 			path_ref: 0,
 			pos: PathPosition {
-				latest_point: 0,
-				ratio_from_latest_point: 0.7
+				latest_point: 1,
+				ratio_from_latest_point: 0.70000005
 			},// side length is 10, 0.5 side length (5 units) + 1 unit = 0.6 of a side length
-			velocity: 0.2,
+			velocity: 12.0,
 			forward: true
 		};
 		assert_eq!(state, ideal_new_state);
@@ -303,7 +304,7 @@ pub mod paths {
 		let dt = 1.0;
 		let mut forces = BodyForces::default();
 		// 1
-		state.velocity = -0.5;
+		state.velocity = -5.0;
 		path.update_body(dt, &mut forces, &v_static, &mut state, 0.0);
 		// Compare
 		assert_eq!(
@@ -314,12 +315,12 @@ pub mod paths {
 					latest_point: 0,
 					ratio_from_latest_point: 0.0
 				},
-				velocity: -0.5,
+				velocity: -5.0,
 				forward: true
 			}
 		);
 		// 2
-		state.velocity = -0.7;
+		state.velocity = -7.0;
 		path.update_body(dt, &mut forces, &v_static, &mut state, 0.0);
 		// Compare
 		assert_eq!(
@@ -330,7 +331,7 @@ pub mod paths {
 					latest_point: 3,
 					ratio_from_latest_point: 0.3
 				},
-				velocity: -0.7,
+				velocity: -7.0,
 				forward: true
 			}
 		);
