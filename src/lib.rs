@@ -39,7 +39,7 @@ use rapier3d::{dynamics::{RigidBodySet, IslandManager}, geometry::ColliderSet};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 use nalgebra::{Point3, Point2, Vector3, Vector2, point, Matrix, Const, ArrayStorage, OPoint, Translation, Isometry3, UnitQuaternion};
 #[cfg(feature = "frontend")]
-use bevy::{ecs::system::Resource, render::{mesh::{Mesh, Indices}, render_resource::PrimitiveTopology}};
+use bevy::{prelude::Transform, ecs::system::Resource, render::{mesh::{Mesh, Indices}, render_resource::PrimitiveTopology}};
 #[cfg(feature = "debug_render_physics")]
 use bevy_rapier3d::plugin::RapierContext;
 use dialoguer;
@@ -133,6 +133,14 @@ mod prelude {
 			x: v.x,
 			y: v.y,
 			z: v.z
+		}
+	}
+	#[cfg(feature = "frontend")]
+	pub fn nalgebra_iso_to_bevy_transform(iso: Iso) -> Transform {
+		Transform {
+			translation: nalgebra_vec3_to_bevy_vec3(&iso.translation.vector),
+			rotation: nalgebra_quat_to_bevy_quat(&iso.rotation),
+			scale: bevy::math::Vec3::ONE
 		}
 	}
 	// Round float towards -inf

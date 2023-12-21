@@ -196,13 +196,13 @@ impl VehicleStatic {
 
 #[derive(Serialize, Deserialize)]
 pub struct VehicleSave {// This is saved to and loaded from a world (game save file)
-	pub static_name: String,// Name of static vehicle file
+	pub type_: String,// Name of static vehicle file
 	body_state: BodyStateSerialize
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct VehicleSend {// This is sent over the network to the client
-	static_name: String,// Name of static vehicle file
+	pub type_: String,// Name of static vehicle file
 	pub latest_forces: Option<BodyForces>,
 	pub body_state: BodyStateSerialize,
 	input: Option<InputData>,
@@ -225,7 +225,7 @@ impl VehicleSend {
 		let mut pov_trans = Transform::default();
 		//pov_trans.translation = Vec3{x: 0.0, y: 0.0, z: -30.0};
 		//pov_trans.rotation = rot;
-		new_trans.translation = new_trans.translation + rot.mul_vec3(Vec3{x: 0.0, y: 0.0, z: 30.0});
+		new_trans.translation = new_trans.translation + rot.mul_vec3(Vec3{x: 0.0, y: 0.0, z: 8.0});
 		new_trans.rotation = rot;
 		*transform = new_trans;
 		/* *transform = Transform {
@@ -293,13 +293,13 @@ impl Vehicle {
 	}
 	pub fn save(&self, body_set: &RigidBodySet, paths: &PathSet) -> VehicleSave {
 		VehicleSave {
-			static_name: self.static_.name.clone(),
+			type_: self.static_.name.clone(),
 			body_state: self.create_serialize_state(body_set, paths)
 		}
 	}
 	pub fn send(&self, body_set: &RigidBodySet, paths: &PathSet) -> VehicleSend {
 		VehicleSend {
-			static_name: self.static_.name.clone(),
+			type_: self.static_.name.clone(),
 			latest_forces: self.latest_forces.clone(),
 			body_state: self.create_serialize_state(body_set, paths),
 			input: self.latest_input,
@@ -312,7 +312,7 @@ impl Vehicle {
 	}
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct BodyStateSerialize {// This is saved/sent over the network to the client. It will NOT be used inside the server game logic.
 	pub position: Iso,
 	pub lin_vel: V3,

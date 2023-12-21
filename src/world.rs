@@ -27,7 +27,7 @@ use nalgebra::vector;
 #[cfg_attr(feature = "frontend", derive(Resource))]
 pub struct StaticData {
 	pub map: Map,
-	pub vehicles: HashMap<String, VehicleStatic>,
+	pub static_vehicles: HashMap<String, VehicleStatic>,// Vehicle type: VehicleStatic
 	#[cfg(feature = "debug_render_physics")]
 	pub partial_physics: PhysicsStateSend
 }
@@ -44,7 +44,7 @@ impl StaticData {
 	#[cfg(feature = "frontend")]
 	pub fn vehicle_models_to_load(&self, server_addr: IpAddr) -> Vec<String> {
 		let mut out: Vec<String> = Vec::<String>::new();
-		for (_, v) in self.vehicles.iter() {
+		for (_, v) in self.static_vehicles.iter() {
 			if !cache::is_vehicle_model_cached(server_addr, &v.name) {
 				out.push(v.name.clone());
 			}
@@ -59,7 +59,7 @@ impl StaticData {
 			println!("map: {}", map.len());
 		}
 		{
-			let vehicles = bincode::serialize(&self.vehicles).unwrap();
+			let vehicles = bincode::serialize(&self.static_vehicles).unwrap();
 			println!("vehicles: {}", vehicles.len());
 		}
 		#[cfg(feature = "debug_render_physics")]
@@ -217,6 +217,7 @@ pub struct WorldSave {
 }
 
 #[derive(Serialize, Deserialize)]
+#[cfg_attr(feature = "frontend", derive(Resource, Default))]
 pub struct WorldSend {// Sent to the client
 	pub vehicles: HashMap<String, VehicleSend>,
 	pub age: f64,
@@ -261,7 +262,7 @@ impl World {
 		// Load vehicles
 		let mut vehicles: HashMap<String, Vehicle> = HashMap::new();
 		for (user, v_save) in save.vehicles.iter() {
-			let v_static: VehicleStatic = load_static_vehicle(&v_save.static_name)?;
+			let v_static: VehicleStatic = load_static_vehicle(&v_save.type_)?;
 			vehicles.insert(user.clone(), Vehicle::build(v_save, Rc::new(v_static), &mut physics_state.bodies, &mut physics_state.colliders, &mut physics_state.impulse_joints, &map.path_set)?);
 		}
 		// Create world
@@ -432,8 +433,8 @@ impl World {
 	pub fn build_static_data(&self) -> StaticData {
 		// build static vehicles
 		let mut static_vehicles: HashMap<String, VehicleStatic> = HashMap::new();
-		for (user, vehicle) in self.vehicles.iter() {
-			static_vehicles.insert(user.to_owned(), (*vehicle.static_).clone());
+		for (_, vehicle) in self.vehicles.iter() {
+			static_vehicles.insert(vehicle.static_.name.clone(), (*vehicle.static_).clone());
 		}
 		// Physics send
 		#[cfg(feature = "debug_render_physics")]
@@ -441,7 +442,7 @@ impl World {
 		// Done
 		StaticData {
 			map: self.map.send(#[cfg(feature = "debug_render_physics")] &mut partial_physics),// Need to remove map colliders from physics send as they are redundant and makes the StaticData very large
-			vehicles: static_vehicles,
+			static_vehicles,
 			#[cfg(feature = "debug_render_physics")]
 			partial_physics
 		}

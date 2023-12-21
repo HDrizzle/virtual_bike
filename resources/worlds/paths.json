@@ -2,7 +2,7 @@
 	"map": "rollercoaster",
 	"vehicles": {
 		"admin": {
-			"static_name": "test-bike",
+			"type_": "cool_bike",
 			"body_state": {
 				"position": {
 					"translation": [50, 20, 50],

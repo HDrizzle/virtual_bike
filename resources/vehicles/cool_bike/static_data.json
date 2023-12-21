@@ -1,0 +1,57 @@
+{
+	"name": "cool_bike",
+	"type_": "",
+	"mass": 100,
+	"ctr_g_hight": 1,
+	"drag": [0, 0],
+	"wheels": [
+		{
+			"dia": 4,
+			"width": 0.25,
+			"friction": 1.5,
+			"position_wrt_body": {
+				"translation": [5, 0, 5],
+				"rotation": [0, 0, 0, 1]
+			},
+			"driven": false,
+			"steering": false,
+			"steering_rotation_axis_offset": 0
+		},
+		{
+			"dia": 4,
+			"width": 0.25,
+			"friction": 1.5,
+			"position_wrt_body": {
+				"translation": [5, 0, -5],
+				"rotation": [0, 0, 0, 1]
+			},
+			"driven": false,
+			"steering": true,
+			"steering_rotation_axis_offset": 1
+		},
+		{
+			"dia": 4,
+			"width": 0.25,
+			"friction": 1.5,
+			"position_wrt_body": {
+				"translation": [-5, 0, 5],
+				"rotation": [0, 0, 0, 1]
+			},
+			"driven": false,
+			"steering": false,
+			"steering_rotation_axis_offset": 0
+		},
+		{
+			"dia": 4,
+			"width": 0.25,
+			"friction": 1.5,
+			"position_wrt_body": {
+				"translation": [-5, 0, -5],
+				"rotation": [0, 0, 0, 1]
+			},
+			"driven": false,
+			"steering": true,
+			"steering_rotation_axis_offset": 1
+		}
+	]
+}

@@ -7,7 +7,7 @@ Bevy 3D rendering simple example: https://bevyengine.org/examples/3D%20Rendering
 Major change 2023-11-21: this module will only be used when the game is signed-in and being played
 */
 
-use std::{collections::HashMap, net::IpAddr};
+use std::{collections::{HashMap, HashSet}, net::IpAddr};
 use bevy::{
 	prelude::*,
 	input::{keyboard::KeyboardInput, ButtonState},
@@ -46,13 +46,24 @@ pub struct VehicleBodyHandles(pub HashMap<String, RigidBodyHandle>);*/
 
 #[derive(Resource)]
 #[cfg(feature = "debug_render_physics")]
-pub struct MapBodyHandle(pub RigidBodyHandle);
+struct MapBodyHandle(pub RigidBodyHandle);
 
 #[derive(Resource)]
 pub struct ServerAddr(pub IpAddr);
 
-#[derive(Resource, Default)]
-pub struct StaticVehicleAssetHandles(pub HashMap<Handle<Scene>, String>);// Vehicle type, scene handle
+#[derive(Resource, Default, Debug)]
+struct StaticVehicleAssetHandles(pub HashMap<String, Handle<Scene>>);// Vehicle type, scene handle
+
+/*#[derive(Resource, Default)]
+struct VehicleBodyStates(pub HashMap<String, BodyStateSerialize>);
+
+impl VehicleBodyStates {
+	pub fn update_from_world_state(&mut self, world: &WorldSend) {
+		for (name, v_send) in world.vehicles.iter() {
+			self.0.insert(name.to_owned(), v_send.body_state.clone());
+		}
+	}
+}*/
 
 pub struct InitInfo {// Provided by the sign-in window, DOES NOT CHANGE
 	pub network: NetworkInitInfo,
@@ -67,6 +78,7 @@ impl InitInfo {
 		app.insert_resource(init_info.network.auth);
 		app.insert_resource(ServerAddr(init_info.network.addr));
 		app.add_systems(Startup, Self::setup_system);
+		app.insert_resource(WorldSend::default());
 	}
 	pub fn setup_system(
 		mut commands: Commands,
@@ -83,16 +95,17 @@ impl InitInfo {
 		// Load static vehicle gltf model files. This is just to have the asset handles for each vehicle type, not to display anything
 		// https://bevy-cheatbook.github.io/3d/gltf.html, https://bevy-cheatbook.github.io/assets/assetserver.html
 		let mut static_v_asset_handles = StaticVehicleAssetHandles::default();
-		for (v_type, v) in static_data.vehicles.iter() {
+		for (v_type, v) in static_data.static_vehicles.iter() {
 			let asset_path = cache::get_static_vehicle_model_path(server_addr.0, &v.name).strip_prefix("assets/").unwrap_or("<Error: vehicle model path does not start with correct dir ('assets/')>").to_owned() + "#Scene0";
 			dbg!(&asset_path);
 			let handle = asset_server.load(asset_path);
-			static_v_asset_handles.0.insert(handle, v_type.clone());
+			static_v_asset_handles.0.insert(v_type.clone(), handle);
 		}
+		//dbg!(&static_v_asset_handles);
 		commands.insert_resource(static_v_asset_handles);
 		// GLTF render test, https://bevy-cheatbook.github.io/3d/gltf.html
 		/*let scene0 = asset_server.load("test_asset.glb#Scene0");
-		commands.spawn(SceneBundle {
+		commands.spawn(SceneBundle {// 1
 			scene: scene0,
 			..Default::default()
 		});*/
@@ -202,14 +215,36 @@ fn misc_key_event_system(
 fn vehicle_render_system(
 	mut commands: Commands,
     v_static_asset_handles: Res<StaticVehicleAssetHandles>,
-	mut v_scenes: Query<(&Handle<Scene>, &UsernameComponent, &mut Transform)>
+	mut v_scenes: Query<(&Handle<Scene>, &UsernameComponent, &mut Transform)>,
+	world: Res<WorldSend>
 ) {
 	// Based on https://bevy-cheatbook.github.io/3d/gltf.html
-	// TODO
-	for (handle, user, mut transform) in v_scenes.iter_mut() {
-		match v_static_asset_handles.0.get(&handle) {
-			Some(v_type)
+	// Update already created vehicle scene entities
+	let all_vehicles: HashSet<String> = world.vehicles.keys().cloned().collect();
+	let mut rendered_vehicles: HashSet<String> = HashSet::<String>::new();
+	for (handle, username, mut transform) in v_scenes.iter_mut() {
+		match world.vehicles.get(&username.0) {
+			Some(v) => {
+				*transform = nalgebra_iso_to_bevy_transform(v.body_state.position);
+				rendered_vehicles.insert(username.0.clone());
+			},
+			None => panic!("Vehicle scene entity exists with a username (\"{}\") not included in `Res<VehicleBodyStates>`", &username.0)
 		}
+	}
+	// Create new ones
+	for username in all_vehicles.difference(&rendered_vehicles) {
+		let v_type = &world.vehicles.get(username).unwrap().type_;
+		println!("Creating scene for \"{}\" with vehicle type \"{}\"", username, v_type);
+		commands.spawn((
+			SceneBundle {// TODO: include UsernameComponent
+				scene: match v_static_asset_handles.0.get(v_type) {
+					Some(handle) => handle.clone(),
+					None => panic!("Static vehicle scene asset handle for \"{}\" does not exist in `Res<StaticVehicleAssetHandles>`", v_type)
+				},
+				..Default::default()
+			},
+			UsernameComponent(username.clone())
+		));
 	}
 }
 
@@ -226,7 +261,8 @@ fn update_system(
 	mut requested_chunks: ResMut<RequestedChunks>,
 	mut render_distance: ResMut<RenderDistance>,
 	auth: Res<ClientAuth>,
-	server_addr: Res<ServerAddr>
+	server_addr: Res<ServerAddr>,
+	mut world_state_res: ResMut<WorldSend>
 ) {
 	// How to move a camera: https://bevy-cheatbook.github.io/cookbook/pan-orbit-camera.html
 	#[cfg(feature = "debug_render_physics")]
@@ -243,8 +279,8 @@ fn update_system(
 	for message in messages {
 		let res = bincode::deserialize::<Response>(&message).unwrap();
 		match res {
-			Response::InitState(mut static_data) => {
-				panic!("Bevy app recieved `Response::InitState(..) response which should not be possible, anything in the code block after where this is written is obsolete code.`");
+			Response::InitState(..) => {
+				panic!("Bevy app recieved `Response::InitState(..) response which should not be possible.`");
 			},
 			Response::VehicleRawGltfData(v_type, data) => {
 				cache::save_static_vehicle_model(server_addr.0, &v_type, data).unwrap();
@@ -265,15 +301,6 @@ fn update_system(
 	// This will be like the "main loop"
 	if let Some(world_state) = most_recent_world_state {
 		// Update all bevy things, first get vect of wheels
-		/*let mut wheel_owners = Vec::<(&String, &mut Wheel)>::new();
-		for (mut w, owner) in wheel_query.iter_mut() {
-			wheel_owners.push((&owner.0, &mut w));
-		}
-		let mut wheel_owners = Vec::<(&String, &mut Wheel)>::new();
-		for mut owner in wheel_query.iter_mut() {
-			let w = &mut owner.1;
-			wheel_owners.push((&w.0, owner.0.into_inner()));
-		}*/
 		#[cfg(feature = "debug_render_physics")]
 		world_state.update_bevy_rapier_context(&mut rapier_context, Some(map_body_handle.0));
 		// Update camera position
@@ -286,6 +313,8 @@ fn update_system(
 		}
 		#[cfg(feature = "debug_render_physics")]
 		rapier_context.propagate_modified_body_positions_to_colliders();// Just what I needed https://docs.rs/bevy_rapier3d/latest/bevy_rapier3d/plugin/struct.RapierContext.html#method.propagate_modified_body_positions_to_colliders
+		// Save world state
+		*world_state_res = world_state;
 	}
 }
 
@@ -374,11 +403,6 @@ impl Plugin for MainClientPlugin {
 		app.add_systems(Update, vehicle_input_key_event_system);
 		#[cfg(feature = "debug_camera_control")]
 		app.add_systems(Update, manual_camera_control);
-		// App state
-		/*app.insert_resource(ClientAuth{// TODO: sign-in screen
-			name: "admin".to_owned(),
-			psswd: "1234".to_owned()
-		});*/
 		app.add_systems(Update, update_system);
 		// bevy_rapier3d
 		#[cfg(feature = "debug_render_physics")]
@@ -391,6 +415,7 @@ impl Plugin for MainClientPlugin {
 		// Rendering
 		app.insert_resource(ClearColor(Color::rgb(0.7, 0.7, 0.7)));// https://bevy-cheatbook.github.io/window/clear-color.html
 		app.add_systems(Startup, render_test);
+		app.add_systems(Update, vehicle_render_system.after(update_system));// Vehicle rendering AFTER recieving latest world state
 	}
 }
 

@@ -2,7 +2,7 @@
 	"map": "flat",
 	"vehicles": {
 		"admin": {
-			"static_name": "test-bike",
+			"type_": "test-bike",
 			"body_state": {
 				"position": {
 					"translation": [50, 20, 50],
