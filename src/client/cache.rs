@@ -12,7 +12,7 @@ fn get_or_create_cache_dir(addr: IpAddr) -> String {
 }
 
 pub fn get_static_vehicle_model_path(addr: IpAddr, type_: &str) -> String {
-    format!("{}vehicles/{}/{}", get_or_create_cache_dir(addr), type_, VEHICLE_MODEL_FILE_NAME)
+    format!("{}static_vehicles/{}/{}", get_or_create_cache_dir(addr), type_, VEHICLE_MODEL_FILE_NAME)
 }
 
 pub fn save_static_vehicle_model(addr: IpAddr, type_: &str, data: Vec<u8>) -> Result<(), String> {

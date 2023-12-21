@@ -51,6 +51,9 @@ pub struct MapBodyHandle(pub RigidBodyHandle);
 #[derive(Resource)]
 pub struct ServerAddr(pub IpAddr);
 
+#[derive(Resource, Default)]
+pub struct StaticVehicleAssetHandles(pub HashMap<Handle<Scene>, String>);// Vehicle type, scene handle
+
 pub struct InitInfo {// Provided by the sign-in window, DOES NOT CHANGE
 	pub network: NetworkInitInfo,
 	pub static_data: StaticData,
@@ -77,17 +80,22 @@ impl InitInfo {
 	) {
 		// Map init bevy
 		static_data.map.init_bevy(&mut commands, meshes.as_mut(), materials.as_mut(), &*asset_server);
-		// Load vehicle gltf model files. This is just to have the asset handles for each static vehicle type, not to display anything
-		// TODO: fix: bevy wants the assets to be loaded from a specific folder that I don't want to use and it is pissing me off
-		// FINE I'll change the client cache dir to inside `/assets`
-		// https://bevy-cheatbook.github.io/assets/assetserver.html
-		/*for (_, v) in static_data.vehicles.iter() {
-			let binding = cache::get_static_vehicle_model_path(server_addr.0, &v.name).strip_prefix("/assets").unwrap_or("<Error: vehicle model path does not start with correct dir ('/assets')>").to_owned();
-			commands.spawn(StaticVehicleRenderInfo {
-				type_: v.name.clone(),
-				gltf_handle: asset_server.load(binding + "#Scene0")
-			});
-		}*/
+		// Load static vehicle gltf model files. This is just to have the asset handles for each vehicle type, not to display anything
+		// https://bevy-cheatbook.github.io/3d/gltf.html, https://bevy-cheatbook.github.io/assets/assetserver.html
+		let mut static_v_asset_handles = StaticVehicleAssetHandles::default();
+		for (v_type, v) in static_data.vehicles.iter() {
+			let asset_path = cache::get_static_vehicle_model_path(server_addr.0, &v.name).strip_prefix("assets/").unwrap_or("<Error: vehicle model path does not start with correct dir ('assets/')>").to_owned() + "#Scene0";
+			dbg!(&asset_path);
+			let handle = asset_server.load(asset_path);
+			static_v_asset_handles.0.insert(handle, v_type.clone());
+		}
+		commands.insert_resource(static_v_asset_handles);
+		// GLTF render test, https://bevy-cheatbook.github.io/3d/gltf.html
+		/*let scene0 = asset_server.load("test_asset.glb#Scene0");
+		commands.spawn(SceneBundle {
+			scene: scene0,
+			..Default::default()
+		});*/
 		// Init rapier
 		#[cfg(feature = "debug_render_physics")]
 		{
@@ -117,12 +125,6 @@ pub struct UsernameComponent(pub String);
 /*#[derive(Component)]
 pub struct VehicleNameComponent(pub String);*/
 
-#[derive(Component)]
-pub struct StaticVehicleRenderInfo {
-	pub type_: String,
-	pub gltf_handle: Handle<Gltf>
-}
-
 // Systems
 fn vehicle_input_key_event_system(// Only for manual vehicle control should be behind the `debug_vehicle_input` feature
 	keys: Res<Input<KeyCode>>,
@@ -134,8 +136,8 @@ fn vehicle_input_key_event_system(// Only for manual vehicle control should be b
 	// Key state polling
 	let input = {
 		// Drive
-		let power_forward = if keys.pressed(KeyCode::W) {
-			20.0
+		let power_forward: Float = if keys.pressed(KeyCode::W) {
+			500.0
 		}
 		else {
 			0.0
@@ -158,8 +160,8 @@ fn vehicle_input_key_event_system(// Only for manual vehicle control should be b
 		// Create input
 		InputData {
 			steering,
-			speed: power_forward,
-			power: power_forward,// TODO: fix
+			speed: power_forward.powf(1.0/3.0),// TODO: fix
+			power: power_forward,
 			brake
 		}
 	};
@@ -199,10 +201,16 @@ fn misc_key_event_system(
 
 fn vehicle_render_system(
 	mut commands: Commands,
-    assets_gltf: Res<Assets<Gltf>>
+    v_static_asset_handles: Res<StaticVehicleAssetHandles>,
+	mut v_scenes: Query<(&Handle<Scene>, &UsernameComponent, &mut Transform)>
 ) {
 	// Based on https://bevy-cheatbook.github.io/3d/gltf.html
-
+	// TODO
+	for (handle, user, mut transform) in v_scenes.iter_mut() {
+		match v_static_asset_handles.0.get(&handle) {
+			Some(v_type)
+		}
+	}
 }
 
 fn update_system(

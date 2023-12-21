@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["backend", "frontend", "client_default_signin", "debug_vehicle_input", "path_rendering"]#, "debug_camera_control", "experimental_terrain_gen", "debug_render_physics"]
+default = ["backend", "frontend", "client_default_signin", "debug_vehicle_input", "path_rendering", "debug_camera_control"]#, "experimental_terrain_gen", "debug_render_physics"]
 
 backend = ["reqwest", "rapier3d"]
 frontend = ["serialport", "bevy", "bevy-inspector-egui", "bevy_renet", "image", "eframe"]
