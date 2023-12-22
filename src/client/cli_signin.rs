@@ -91,7 +91,7 @@ pub fn get_play_init_info() -> Option<play::InitInfo> {
 				match res {
 					Response::Err(e) => panic!("Server sent following error message: {}", e),
 					res => match &static_data_opt {
-						Some(static_data) => {
+						Some(_) => {
 							if let Response::VehicleRawGltfData(v_type, data) = res {
 								println!("Recieved model for vehicle type {}", &v_type);
 								cache::save_static_vehicle_model(network_init_info.addr, &v_type, data).unwrap();

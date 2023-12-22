@@ -190,9 +190,9 @@ pub mod gen {
 	}*/
 }
 
+#[cfg(feature = "backend")]
 pub mod gis {
 	// For crate::map::real_world_gen
-	use std::f64::consts::E;
 	use super::*;
 	use crate::map::gis::*;
 	#[test]
@@ -282,7 +282,7 @@ pub mod paths {
 		// Update
 		let dt = 1.0;
 		let mut forces = BodyForces::default();
-		path.update_body(dt, &mut forces, &v_static, &mut state, 0.0);
+		path.update_body(dt, &mut forces, &v_static, &mut state);
 		// Compare
 		let ideal_new_state = PathBoundBodyState {
 			path_ref: 0,
@@ -305,7 +305,7 @@ pub mod paths {
 		let mut forces = BodyForces::default();
 		// 1
 		state.velocity = -5.0;
-		path.update_body(dt, &mut forces, &v_static, &mut state, 0.0);
+		path.update_body(dt, &mut forces, &v_static, &mut state);
 		// Compare
 		assert_eq!(
 			state,
@@ -321,7 +321,7 @@ pub mod paths {
 		);
 		// 2
 		state.velocity = -7.0;
-		path.update_body(dt, &mut forces, &v_static, &mut state, 0.0);
+		path.update_body(dt, &mut forces, &v_static, &mut state);
 		// Compare
 		assert_eq!(
 			state,
@@ -339,7 +339,6 @@ pub mod paths {
 	#[test]
 	fn adj_points() {
 		let path = square_loop_non_unit_edges();
-		let v_static = vehicle_static();
 		// 0 - 1
 		assert_eq!(
 			path.get_bcurve(&initial_path_bound_body_state().pos),

@@ -1,6 +1,6 @@
 // Created 2023-7-29, some things copied from `web_server`
 // see README on https://github.com/lucaspoffo/renet
-use std::{net::{SocketAddr, UdpSocket, IpAddr, Ipv4Addr}, time::{SystemTime, Duration}, thread, sync::{mpsc, Arc, Mutex}, mem};
+use std::{net::{SocketAddr, UdpSocket, IpAddr, Ipv4Addr}, time::{SystemTime, Duration}, thread, sync::mpsc, mem};
 use renet::{RenetServer, ServerEvent, ConnectionConfig, transport::{ServerAuthentication, ServerConfig}, transport::NetcodeServerTransport, DefaultChannel};
 use serde::{Serialize, Deserialize};
 use bincode;
@@ -31,6 +31,7 @@ pub enum Response {// All possible responses
 	Err(String)
 }
 
+#[cfg(feature = "backend")]
 struct NetworkRuntimeManager {
 	pub server: RenetServer,
 	pub addr: SocketAddr,
@@ -38,6 +39,7 @@ struct NetworkRuntimeManager {
 	pub static_data: StaticData
 }
 
+#[cfg(feature = "backend")]
 impl NetworkRuntimeManager {
 	pub fn main_loop(&mut self, rx: mpsc::Receiver<async_messages::FromWorld>, tx: mpsc::Sender<async_messages::ToWorld>) {
 		// Main loop
@@ -140,11 +142,13 @@ impl NetworkRuntimeManager {
 	}
 }
 
+#[cfg(feature = "backend")]
 pub struct WorldServer {
 	world: World,
 	net_manager_opt: Option<NetworkRuntimeManager>
 }
 
+#[cfg(feature = "backend")]
 impl WorldServer {
 	pub fn init(world_name: &str, localhost: bool) -> Self {
 		// Load world
@@ -201,6 +205,6 @@ impl WorldServer {
 		self.world.main_loop(world_rx, world_tx);
 		// Join network thread
 		println!("World done, joining network thread");
-		network_thread_handle.join();
+		network_thread_handle.join().unwrap();
 	}
 }

@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 #[cfg(feature = "frontend")]
-use bevy::{prelude::*, render::mesh::{PrimitiveTopology, Indices}};
+use bevy::prelude::*;
 #[cfg(feature = "frontend")]
 #[cfg(feature = "debug_render_physics")]
 use bevy_rapier3d::plugin::RapierContext;
@@ -75,7 +75,7 @@ impl Map {
 		out
 	}
     #[cfg(feature = "frontend")]
-	pub fn unload_chunk_client(&mut self, ref_: &ChunkRef, #[cfg(feature = "debug_render_physics")] mut context: &mut RapierContext, commands: &mut Commands, meshes: &mut ResMut<Assets<Mesh>>, materials: &mut ResMut<Assets<StandardMaterial>>) {
+	pub fn unload_chunk_client(&mut self, ref_: &ChunkRef, #[cfg(feature = "debug_render_physics")] mut context: &mut RapierContext, meshes: &mut ResMut<Assets<Mesh>>, materials: &mut ResMut<Assets<StandardMaterial>>) {
 		match self.get_chunk_id(ref_) {
 			Some(i) => {
 				let chunk = &mut self.loaded_chunks[i];
@@ -161,7 +161,7 @@ impl Map {
 			return false;//panic!("Attempt to insert already loaded chunk");
 		}
 		match rapier_data_opt {
-			Some(mut rapier_data) => {
+			Some(rapier_data) => {
 				let body_handle = self.body_handle_opt.expect("Map body handle is None when trying to insert chunk, help: maybe init_rapier() hasn\'t been called yet");
 				chunk.init_rapier(rapier_data, body_handle);
 			},

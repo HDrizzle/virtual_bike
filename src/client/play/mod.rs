@@ -10,13 +10,7 @@ Major change 2023-11-21: this module will only be used when the game is signed-i
 use std::{collections::{HashMap, HashSet}, net::IpAddr};
 use bevy::{
 	prelude::*,
-	input::{keyboard::KeyboardInput, ButtonState},
-	render::{
-		render_resource::WgpuFeatures,
-		settings::{RenderCreation, WgpuSettings},
-		RenderPlugin,
-	},
-	pbr::wireframe::WireframePlugin, gltf::Gltf
+	input::{keyboard::KeyboardInput, ButtonState}
 };
 use bevy_renet::renet::{RenetClient, DefaultChannel, transport::NetcodeClientTransport};
 #[cfg(feature = "debug_render_physics")]
@@ -82,8 +76,7 @@ impl InitInfo {
 	}
 	pub fn setup_system(
 		mut commands: Commands,
-		mut renet_client: ResMut<RenetClient>,
-		#[cfg(feature = "debug_render_physics")] mut rapier_context_res: ResMut<RapierContext>,
+		#[cfg(feature = "debug_render_physics")] rapier_context_res: ResMut<RapierContext>,
 		mut static_data: ResMut<StaticData>,
 		mut meshes: ResMut<Assets<Mesh>>,
 		mut materials: ResMut<Assets<StandardMaterial>>,
@@ -141,9 +134,8 @@ pub struct VehicleNameComponent(pub String);*/
 // Systems
 fn vehicle_input_key_event_system(// Only for manual vehicle control should be behind the `debug_vehicle_input` feature
 	keys: Res<Input<KeyCode>>,
-	mut key_events: EventReader<KeyboardInput>,
 	mut renet_client: ResMut<RenetClient>,
-	mut auth: ResMut<ClientAuth>,
+	auth: Res<ClientAuth>,
 ) {
 	// Process user input (ONLY TEMPORARY)
 	// Key state polling
@@ -186,14 +178,13 @@ fn vehicle_input_key_event_system(// Only for manual vehicle control should be b
 }
 
 fn misc_key_event_system(
-	keys: Res<Input<KeyCode>>,
 	mut key_events: EventReader<KeyboardInput>,
 	mut renet_client: ResMut<RenetClient>,
-	mut auth_res: ResMut<ClientAuth>,
+	auth_res: Res<ClientAuth>,
 ) {
 	let auth = auth_res.into_inner().clone();
 	// Key events
-	for ev in key_events.iter() {
+	for ev in key_events.read() {
 		match ev.state {
 			ButtonState::Pressed => {
 				match ev.key_code {
@@ -222,7 +213,7 @@ fn vehicle_render_system(
 	// Update already created vehicle scene entities
 	let all_vehicles: HashSet<String> = world.vehicles.keys().cloned().collect();
 	let mut rendered_vehicles: HashSet<String> = HashSet::<String>::new();
-	for (handle, username, mut transform) in v_scenes.iter_mut() {
+	for (_, username, mut transform) in v_scenes.iter_mut() {
 		match world.vehicles.get(&username.0) {
 			Some(v) => {
 				*transform = nalgebra_iso_to_bevy_transform(v.body_state.position);
@@ -255,7 +246,7 @@ fn update_system(
 	mut static_data: ResMut<StaticData>,
 	asset_server: Res<AssetServer>,
 	mut renet_client: ResMut<RenetClient>,
-	#[cfg(feature = "debug_render_physics")] mut rapier_context_res: ResMut<RapierContext>,
+	#[cfg(feature = "debug_render_physics")] rapier_context_res: ResMut<RapierContext>,
 	mut camera_query: Query<(&mut CameraComponent, &mut Transform, &Projection)>,
 	#[cfg(feature = "debug_render_physics")] map_body_handle: Res<MapBodyHandle>,
 	mut requested_chunks: ResMut<RequestedChunks>,
@@ -306,7 +297,7 @@ fn update_system(
 		// Update camera position
 		let main_vehicle = world_state.vehicles.get(&auth.name).expect(&format!("Unable to get vehicle for signed-in username: \"{}\"", &auth.name));
 		render_distance.set_position(p3_to_p2(matrix_to_opoint(main_vehicle.body_state.position.translation.vector.clone())));
-		for (_, mut transform, projection) in camera_query.iter_mut() {
+		for (_, mut transform, _) in camera_query.iter_mut() {
 			// Comment this out and add manual_camera_control() for debugging
 			#[cfg(not(feature = "debug_camera_control"))]
 			main_vehicle.update_bevy_camera_transform(&mut transform);
@@ -318,6 +309,7 @@ fn update_system(
 	}
 }
 
+#[cfg(feature = "debug_camera_control")]
 fn manual_camera_control(
 	keys: Res<Input<KeyCode>>,
 	mut camera_query: Query<(&mut CameraComponent, &mut Transform, &Projection)>
@@ -372,7 +364,7 @@ fn manual_camera_control(
 	}
 }
 
-fn render_test(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>, mut materials: ResMut<Assets<StandardMaterial>>) {
+fn render_test(mut commands: Commands) {
 	// Copied from https://bevyengine.org/examples/3D%20Rendering/3d-scene/
 	// Camera
 	commands.spawn((
@@ -422,7 +414,13 @@ impl Plugin for MainClientPlugin {
 pub fn start(init_info: InitInfo) {
 	let mut app = App::new();
 	app.add_plugins((
-		DefaultPlugins/*.set(RenderPlugin {// From https://github.com/bevyengine/bevy/blob/main/examples/3d/wireframe.rs
+		DefaultPlugins.set(WindowPlugin {
+			primary_window: Some(Window {
+				title: APP_NAME.to_string(),
+				..Default::default()
+			}),
+			..Default::default()
+		})/*.set(RenderPlugin {// From https://github.com/bevyengine/bevy/blob/main/examples/3d/wireframe.rs
 			render_creation: RenderCreation::Automatic(WgpuSettings {
 				// WARN this is a native only feature. It will not work with webgl or webgpu
 				features: WgpuFeatures::POLYGON_MODE_LINE,

@@ -4,9 +4,9 @@ use std::{error::Error, fs, collections::HashMap};
 use std::io::Error as IoError;
 use serde_json;
 
-use crate::{vehicle::VehicleStatic, ClientAuth, world::*, map::{Map, chunk::{Chunk, ChunkRef, RegularElevationMesh, Gen}}};
+use crate::prelude::*;
 #[cfg(feature = "frontend")]
-use crate::{prelude::*, client::hardware_controller::Calibration};
+use crate::client::hardware_controller::Calibration;
 
 // STATICS
 pub static RESOURCES_DIR: &str = "../resources";
@@ -56,6 +56,7 @@ pub fn load_static_vehicle(name: &str) -> Result<VehicleStatic, Box<dyn Error>> 
 	Ok(vehicle)
 }
 
+#[cfg(feature = "backend")]
 pub fn find_chunk(chunk_ref: &ChunkRef, map_name: &str) -> Result<String, Box<dyn Error>> {
 	// Tries everything to find path to chunk dir
 	// 1. Test if it exists as a normal chunk
@@ -70,6 +71,7 @@ pub fn find_chunk(chunk_ref: &ChunkRef, map_name: &str) -> Result<String, Box<dy
 	Err(Box::new(GenericError::new(format!("Could not find regular or generic chunk for: {:?}", chunk_ref))))
 }
 
+#[cfg(feature = "backend")]
 pub fn does_generic_chunk_exist(map_name: &str) -> Option<String> {
 	// Tests if map has generic chunk, if so returns path to it
 	let path = ChunkRef{position: IntP2(0, 0)}.resource_path(map_name, true);
@@ -81,6 +83,7 @@ pub fn does_generic_chunk_exist(map_name: &str) -> Option<String> {
 	}
 }
 
+#[cfg(feature = "backend")]
 pub fn does_non_generic_chunk_exist(chunk_ref: &ChunkRef, map_name: &str) -> Option<String> {
 	// Explicitly uses path for non-generic chunk, even if `chunk_ref.generic` is `true`
 	let path = chunk_ref.resource_path(map_name, false);
@@ -92,12 +95,14 @@ pub fn does_non_generic_chunk_exist(chunk_ref: &ChunkRef, map_name: &str) -> Opt
 	}
 }
 
+#[cfg(feature = "backend")]
 pub fn load_chunk_texture(chunk_ref: &ChunkRef, map_name: &str) -> Result<Vec<u8>, Box<dyn Error>> {
 	let path: String = find_chunk(chunk_ref, map_name)?;
 	let data: Vec<u8> = fs::read(path + "texture.png")?;
 	Ok(data)
 }
 
+#[cfg(feature = "backend")]
 pub fn load_chunk_data(chunk_ref: &ChunkRef, map_name: &str) -> Result<Chunk, Box<dyn Error>> {
 	let path: String = find_chunk(chunk_ref, map_name)?;
 	let raw_string: String = load_file_with_better_error(&(path + "data.json"))?;

@@ -34,7 +34,7 @@ Created by Hadrian Ward, 2023-6-8
 2023-12-9: I decided to not use rapier in the client except when `debug_render_physics` is enabled
 */
 #![allow(warnings)]// TODO: remove when I have a lot of free-time
-use std::{fmt, env, ops, error::Error, collections::{HashMap, hash_map::DefaultHasher}, hash::{Hash, Hasher}, time::{SystemTime, UNIX_EPOCH}};
+use std::{fmt, env, ops, error::Error, collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, time::{SystemTime, UNIX_EPOCH}};
 use rapier3d::{dynamics::{RigidBodySet, IslandManager}, geometry::ColliderSet};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 use nalgebra::{Point3, Point2, Vector3, Vector2, point, Matrix, Const, ArrayStorage, OPoint, Translation, Isometry3, UnitQuaternion};
@@ -55,7 +55,6 @@ pub mod resource_interface;
 pub mod client;
 #[cfg(feature = "web_server")]
 pub mod web_server;
-#[cfg(feature = "backend")]
 pub mod renet_server;
 
 // Tests
@@ -79,9 +78,10 @@ mod prelude {
 	pub type Iso = Isometry3<Float>;
 	// Misc
 	pub use crate::{
-		world::{StaticData, PhysicsState, World, WorldSave, WorldSend},
+		world::{StaticData, PhysicsState, WorldSave, WorldSend},
 		map::{Map, path::{Path, PathSet, PathBoundBodyState, PathPosition, BCurve}, chunk::{Chunk, ChunkRef, RegularElevationMesh, Gen}},
-		vehicle::{Vehicle, VehicleStatic, VehicleSave, VehicleSend, Wheel, WheelStatic, BodyStateSerialize, BodyForces},
+		vehicle::{VehicleStatic, VehicleSave, VehicleSend, Wheel, WheelStatic, BodyStateSerialize, BodyForces},
+		renet_server::{Request, Response},
 		GenericError,
 		InputData,
 		ClientAuth,
@@ -92,7 +92,11 @@ mod prelude {
 		BasicTriMesh,
 		RapierBodyCreationDeletionContext
 	};
-	#[cfg(feature = "backend")] pub use physics::{PhysicsController, PhysicsUpdateArgs, BodyAveragableState, defaut_extra_forces_calculator};
+	#[cfg(feature = "backend")] pub use crate::{
+		physics::{PhysicsController, PhysicsUpdateArgs, BodyAveragableState, defaut_extra_forces_calculator},
+		vehicle::Vehicle,
+		world::World
+	};
 	// Utility functions because nalgebra is friggin complicated
 	pub fn add_isometries(iso1: &Iso, iso2: &Iso) -> Iso {
 		// Adds two isometries together

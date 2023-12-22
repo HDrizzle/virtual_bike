@@ -4,13 +4,10 @@ Any vehicle can be in one of two states: normal physics and path-bound. Normal p
 when path-bound it will be controlled by the specific Path it is bound to. it's velocity will be a single scalar value whose sign indicates which direction it is travelling on the path.
 */
 
-use std::{error::Error, sync::Arc, rc::Rc, ops::{self, AddAssign}};
+use std::{error::Error, rc::Rc, ops::AddAssign};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 #[cfg(feature = "frontend")]
 use bevy::{prelude::*, ecs::component::Component};
-#[cfg(feature = "frontend")]
-#[cfg(feature = "debug_render_physics")]
-use bevy_rapier3d::plugin::RapierContext;
 use nalgebra::{vector, point, UnitQuaternion};
 
 // Rapier 3D physics
@@ -222,9 +219,6 @@ impl VehicleSend {
 		rot = rot.mul_quat(rot_offset);
 		new_trans.translation = nalgebra_vec3_to_bevy_vec3(&p.translation.vector);
 		// 2nd POV
-		let mut pov_trans = Transform::default();
-		//pov_trans.translation = Vec3{x: 0.0, y: 0.0, z: -30.0};
-		//pov_trans.rotation = rot;
 		new_trans.translation = new_trans.translation + rot.mul_vec3(Vec3{x: 0.0, y: 0.0, z: 8.0});
 		new_trans.rotation = rot;
 		*transform = new_trans;
@@ -281,7 +275,14 @@ impl Vehicle {
 	pub fn update_physics(&mut self, dt: Float, fluid_density: Float, physics_state: &mut PhysicsState, paths: &PathSet, gravity: Float) {
 		// Run every frame
 		//update(&mut self, dt: Float, drag_force: V3, latest_input: Option<InputData>, paths: &PathSet, bodies: &mut RigidBodySet, joints: &mut ImpulseJointSet)
-		let forces = self.physics_controller.update(PhysicsUpdateArgs{dt, gravity, rapier: physics_state, paths, latest_input: &self.latest_input, extra_forces_calculator: &Self::forces_calculator});
+		let forces = self.physics_controller.update(PhysicsUpdateArgs{
+			dt,
+			gravity,
+			rapier: physics_state,
+			paths,
+			latest_input: &self.latest_input,
+			extra_forces_calculator: &|lin: V3, ang: V3| -> BodyForces {BodyForces::default()}// TODO
+		});
 		// Save forces
 		self.latest_forces = Some(forces);
 	}
@@ -306,7 +307,7 @@ impl Vehicle {
 			latest_input_t: self.latest_input_t
 		}
 	}
-	pub fn forces_calculator(lin: V3, ang: V3) -> BodyForces {
+	pub fn calculate_forces(&self, lin: V3, ang: V3, fluid_density: Float) -> BodyForces {
 		// Drag force wrt this vehicle
 		BodyForces::default()
 	}
@@ -330,6 +331,7 @@ impl BodyStateSerialize {
 			path_bound_opt
 		}
 	}
+	#[cfg(feature = "backend")]
 	pub fn build_physics_controller(
 		&self,
 		bodies: &mut RigidBodySet,
@@ -356,6 +358,7 @@ pub struct VehicleRapierController {
 	wheels: Vec<Wheel>
 }
 
+#[cfg(feature = "backend")]
 impl VehicleRapierController {
 	pub fn build (
 		body_state: &BodyStateSerialize,
@@ -432,6 +435,7 @@ pub struct VehiclePathBoundController {
 	v_static: Rc<VehicleStatic>
 }
 
+#[cfg(feature = "backend")]
 impl VehiclePathBoundController {
 	pub fn build (
 		state: PathBoundBodyState,
@@ -478,7 +482,7 @@ impl PhysicsController for VehiclePathBoundController{
 		};
 		forces.lin += V3::new(0.0, 0.0, drive_force + brake_force);
 		// Update
-		path.update_body(args.dt, &forces, &self.v_static, &mut self.state, args.gravity);
+		path.update_body(args.dt, &forces, &self.v_static, &mut self.state);
 		forces
 	}
 }

@@ -1,15 +1,15 @@
 // Created 2023-9-29
 
 use std::{rc::Rc, error::Error, collections::HashMap};
-use bevy::asset::Handle;
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 #[cfg(feature = "frontend")]
-use bevy::{prelude::*, render::mesh::{PrimitiveTopology, Indices}};
+use bevy::prelude::*;
 // Rapier 3D physics
 use rapier3d::prelude::*;
 
 use crate::{prelude::*, resource_interface};
 
+#[cfg(feature = "backend")]
 use super::gis;
 
 // Structs
@@ -81,7 +81,7 @@ impl RegularElevationMesh {
 		// Advanced debug
 		for i in 0..adj_chunks.len() {
 			match &adj_chunks[i] {
-				Some(mesh) => println!("Mesh at index: {}", i),
+				Some(_) => println!("Mesh at index: {}", i),
 				None => {}
 			}
 		}
@@ -535,6 +535,7 @@ impl ChunkRef {
 		}
 		out
 	}
+	#[cfg(feature = "backend")]
 	pub fn exists(&self, map_name: &str) -> bool {
 		resource_interface::find_chunk(&self, map_name).is_ok()
 	}
@@ -571,9 +572,11 @@ pub struct Chunk {
 }
 
 impl Chunk {
+	#[cfg(feature = "backend")]
 	pub fn load(ref_: &ChunkRef, map_name: &str) -> Result<Self, Box<dyn Error>> {
 		resource_interface::load_chunk_data(ref_, map_name)
 	}
+	#[cfg(feature = "backend")]
 	pub fn new(position: V3, size: u64, grid_size: u64, gen: &Gen, background_color: [u8; 3], map_name: &str, map_real_world_location: Option<[Float; 2]>) -> Self {
 		let ref_ = ChunkRef::from_chunk_offset_position(position);
 		let elevation = match map_real_world_location {
@@ -591,7 +594,7 @@ impl Chunk {
 			grid_size,
 			background_color,
 			collider_handle: None,
-			asset_id_opt: None
+			#[cfg(feature = "frontend")] asset_id_opt: None
 		};
 		// Save chunk
 		//println!("Creating and saving chunk at {}", out.ref_.resource_dir_name());
@@ -599,7 +602,7 @@ impl Chunk {
 		// Done
 		out
 	}
-	pub fn init_rapier(&mut self, mut rapier_data: &mut RapierBodyCreationDeletionContext, parent_body_handle: RigidBodyHandle) {
+	pub fn init_rapier(&mut self, rapier_data: &mut RapierBodyCreationDeletionContext, parent_body_handle: RigidBodyHandle) {
 		// Make sure this can only be called once
 		if let Some(_) = self.collider_handle {
 			panic!("init_rapier() called when self.collider_handle is not None, meaning it has been called more than once");

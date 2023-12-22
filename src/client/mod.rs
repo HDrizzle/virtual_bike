@@ -2,14 +2,11 @@
 This module contains the bevy-based module `play` and sign-in screen logic using egui and eframe
 Template for using `eframe` copied from https://github.com/appcove/egui.info/blob/master/examples/egui-101-basic/src/main.rsc
 */
-use std::{net::{SocketAddr, UdpSocket, IpAddr, Ipv4Addr}, time::SystemTime, thread, collections::hash_map::DefaultHasher};
+use std::{net::{SocketAddr, UdpSocket, IpAddr, Ipv4Addr}, time::SystemTime};
 use bevy_renet::renet::{RenetClient, ConnectionConfig, transport::{NetcodeClientTransport, ClientAuthentication}};
 use local_ip_address::local_ip;
 
-use crate::{
-	prelude::*,
-	resource_interface
-};
+use crate::prelude::*;
 
 // Mods
 #[cfg(feature = "egui_signin")]

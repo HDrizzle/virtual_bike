@@ -2,10 +2,10 @@
 This is where the `PhysicsController` trait is
 */
 
-use std::sync::Arc;
 use rapier3d::prelude::*;
 use crate::prelude::*;
 
+#[allow(unused)]
 pub fn defaut_extra_forces_calculator(lin: V3, ang: V3) -> BodyForces {
 	BodyForces::default()
 }

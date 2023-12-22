@@ -11,7 +11,7 @@ use bevy_inspector_egui::{
 	bevy_egui::{egui, EguiContexts}// Importing from re-export to prevent conflicting versions of bevy_egui
 };
 
-use crate::{prelude::*, renet_server::Request};
+use crate::prelude::*;
 
 const MAX_LINE_LEN: usize = 100;// To prevent infinite loop in case hardware isn't responding correctly
 
@@ -63,8 +63,7 @@ impl Calibration {
 pub struct HardwareInterface {// Recieves data from the bike hardware over a serial connection
 	port: Arc<Mutex<Box<dyn serialport::SerialPort>>>,
 	latest_update: Instant,
-	cal: Calibration,
-	partial_received: String
+	cal: Calibration
 }
 
 impl HardwareInterface {
@@ -76,8 +75,7 @@ impl HardwareInterface {
 		Self {
 			port: Arc::new(Mutex::new(port)),
 			latest_update: Instant::now(),
-			cal,
-			partial_received: String::new()
+			cal
 		}
 	}
 	pub fn get(&mut self) -> Result<InputData, Box<dyn Error>> {
@@ -123,8 +121,8 @@ impl HardwareInterface {
 fn update_system(
 	mut commands: Commands,
 	mut egui_contexts: EguiContexts,
-	mut hardward_opt: Option<ResMut<HardwareInterface>>,
-	mut renet_client: ResMut<RenetClient>,
+	hardward_opt: Option<ResMut<HardwareInterface>>,
+	renet_client: ResMut<RenetClient>,
 	mut input_state: Local<String>,
 	auth: Res<ClientAuth>,
 ) {

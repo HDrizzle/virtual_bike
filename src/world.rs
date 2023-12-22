@@ -1,6 +1,6 @@
 // World simulation
 
-use std::{thread, error::Error, sync::{mpsc, Arc}, rc::Rc, collections::HashMap, time::{Duration, Instant}, net::IpAddr};
+use std::{thread, error::Error, sync::mpsc, rc::Rc, collections::HashMap, time::{Duration, Instant}, net::IpAddr};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 #[cfg(feature = "frontend")]
 #[cfg(feature = "debug_render_physics")]
@@ -131,6 +131,7 @@ impl PhysicsState {
 		self.colliders.insert_with_parent(collider, body_handle, &mut self.bodies)
 	}
 	#[cfg(feature = "debug_render_physics")]
+	#[cfg(feature = "backend")]
 	pub fn send(&self, vehicles: &HashMap<String, Vehicle>) -> PhysicsStateSend {// TODO: only send the states of vehicles, wheel mounts and wheels
 		let (mut bodies_v, mut colliders_v, mut impulse_joints_v): (Vec<RigidBodyHandle>, Vec<ColliderHandle>, Vec<ImpulseJointHandle>) = (Vec::new(), Vec::new(), Vec::new());
 		PhysicsStateSend {
@@ -242,6 +243,7 @@ impl WorldSend {
 	}
 }
 
+#[cfg(feature = "backend")]
 pub struct World {// Main game simulation
 	pub map: Map,
 	pub vehicles: HashMap<String, Vehicle>,// {username: vehicle}

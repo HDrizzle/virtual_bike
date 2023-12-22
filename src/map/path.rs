@@ -6,9 +6,10 @@ Technically there are two tangent points for each knot point on a spline, but th
 */
 
 use std::{collections::HashMap, sync::Arc};
-use nalgebra::{UnitQuaternion, vector};
+use nalgebra::UnitQuaternion;
 use serde::{Serialize, Deserialize};
-use bevy::{prelude::*, render::mesh::PrimitiveTopology, pbr::wireframe::{NoWireframe, Wireframe, WireframeColor, WireframeConfig, WireframePlugin}};
+#[cfg(feature = "frontend")]
+use bevy::prelude::*;
 
 //use super::*;
 use crate::prelude::*;
@@ -40,19 +41,19 @@ impl BCurve {
 		let mut coords = Vec::<Float>::new();
 		for i in 0..3 {
 			// Points
-			let P0 = self.knots[0][i];
-			let P1 = self.knots[0][i] + self.offsets[0][i];
-			let P2 = self.knots[1][i] + self.offsets[1][i];
-			let P3 = self.knots[1][i];
+			let p0 = self.knots[0][i];
+			let p1 = self.knots[0][i] + self.offsets[0][i];
+			let p2 = self.knots[1][i] + self.offsets[1][i];
+			let p3 = self.knots[1][i];
 			// Quick calculation
 			let t2 = t.powi(2);
 			let t3 = t.powi(3);
 			// Done
 			coords.push(
-				P0 +
-				t*(-3.*P0 + 3.*P1) +
-				t2*(3.*P0 - 6.*P1 + 3.*P2) +
-				t3*(-P0 + 3.*P1 - 3.*P2 + P3)
+				p0 +
+				t*(-3.*p0 + 3.*p1) +
+				t2*(3.*p0 - 6.*p1 + 3.*p2) +
+				t3*(-p0 + 3.*p1 - 3.*p2 + p3)
 			);
 		}
 		V3::from_vec(coords)
@@ -187,10 +188,10 @@ impl Path {
 		let bcurve = self.get_bcurve(&state.pos);
 		state.velocity * bcurve.get_real_velocity_mulitplier(state.pos.ratio_from_latest_point)
 	}
-	pub fn update_body(&self, dt: Float, forces: &BodyForces, v_static: &VehicleStatic, state: &mut PathBoundBodyState, gravity: Float) {
+	pub fn update_body(&self, dt: Float, forces: &BodyForces, v_static: &VehicleStatic, state: &mut PathBoundBodyState) {
 		let bcurve = self.get_bcurve(&state.pos);
 		// Acceleration: F = m * a, a = F / m
-		let acc = (forces.lin.z / v_static.mass);
+		let acc = forces.lin.z / v_static.mass;
 		// Velocity: V += a * dt
 		let new_velocity = state.velocity + (acc * dt) * bcurve.get_real_velocity_mulitplier(state.pos.ratio_from_latest_point);
 		// Translation: translation += V * dt
@@ -229,7 +230,6 @@ impl Path {
 		let half_width = self.type_.width / 2.0;
 		// Get length used by texture
 		let texture_len = self.type_.width * texture_len_width_ratio;
-		let start_bcurve = self.get_bcurve(start);
 		// Function to get edge positions on the road, TODO: verify
 		let get_edge_pos = |center_pos: &PathPosition, sideways_offset: Float| -> V3 {
 			let center_iso = self.sample(center_pos);
@@ -242,7 +242,7 @@ impl Path {
 		let mut basic_mesh: BasicTriMesh = BasicTriMesh::default();
 		let mut uv_coords: Vec<[f32; 2]> = Vec::<[f32; 2]>::new();// For mapping the texture onto the mesh
 		// Closure to simultaneously add mesh vertex and UV coord
-		let mut add_point = |basic_mesh: &mut BasicTriMesh, uv_coords: &mut Vec<[f32; 2]>, curr_pos: &PathPosition, sideways_offset_sign: i32, progress_along_texture: Float| {
+		let add_point = |basic_mesh: &mut BasicTriMesh, uv_coords: &mut Vec<[f32; 2]>, curr_pos: &PathPosition, sideways_offset_sign: i32, progress_along_texture: Float| {
 			// Sideqys offset
 			let sideways_offset = half_width * (sideways_offset_sign as Float);
 			// New vertex
@@ -257,7 +257,7 @@ impl Path {
 			]);
 		};
 		// Closure to add a new triangle from latest points
-		let mut add_triangle = |basic_mesh: &mut BasicTriMesh, sideways_offset_sign: i32| {
+		let add_triangle = |basic_mesh: &mut BasicTriMesh, sideways_offset_sign: i32| {
 			let middle: i32 = basic_mesh.vertices.len() as i32 - 2;
 			basic_mesh.indices.push([
 				(middle-sideways_offset_sign) as u32,
@@ -338,13 +338,13 @@ impl Path {
 			// Add mesh to meshes and get handle
 			let mesh_handle: Handle<Mesh> = meshes.add(mesh);
 			// Insert mesh BEFORE break
-			commands.spawn((
+			commands.spawn(
 				PbrBundle {
 					mesh: mesh_handle,
 					material: material_handle,
 					..default()
 				}
-			));
+			);
 			// Check next pos and maybe break
 			match next_pos_opt {
 				Some(next_pos) => {
@@ -410,18 +410,6 @@ pub struct PathBoundBodyState {
 	pub pos: PathPosition,
 	pub velocity: Float,// in world-units / second, TODO: update usages: was current-curve-len-units / second
 	pub forward: bool
-}
-
-impl PathBoundBodyState {
-	pub fn full_step(&mut self) {
-
-	}
-	pub fn partial_step(&mut self) {
-
-	}
-	pub fn average(&mut self, other: &Self) {
-		
-	}
 }
 
 /*

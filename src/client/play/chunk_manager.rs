@@ -3,7 +3,6 @@
 use std::{time::{SystemTime, Duration}, collections::HashMap};
 use bevy::prelude::*;
 use bevy_renet::renet::*;
-use bevy_renet::*;
 #[cfg(feature = "debug_render_physics")]
 use bevy_rapier3d::plugin::RapierContext;
 
@@ -31,7 +30,6 @@ impl RenderDistance {
 		map: &mut Map,
 		#[cfg(feature = "debug_render_physics")]
 		context: &mut RapierContext,
-		commands: &mut Commands,
 		meshes: &mut ResMut<Assets<Mesh>>,
 		materials: &mut ResMut<Assets<StandardMaterial>>
 	) -> Vec<ChunkRef> {
@@ -72,7 +70,7 @@ impl RenderDistance {
 			}
 		}
 		for ref_ in chunks_to_unload {
-			map.unload_chunk_client(&ref_, #[cfg(feature = "debug_render_physics")]context, commands, meshes, materials);
+			map.unload_chunk_client(&ref_, #[cfg(feature = "debug_render_physics")]context, meshes, materials);
 		}
 		chunks_to_load
 	}
@@ -129,7 +127,6 @@ impl RequestedChunks {
 
 // Systems
 pub fn update_chunks_system(// TODO get this to only run when main vehicle is moved
-	mut commands: Commands,
 	mut meshes: ResMut<Assets<Mesh>>,
 	mut materials: ResMut<Assets<StandardMaterial>>,
 	render_distance: Res<RenderDistance>,
@@ -139,7 +136,7 @@ pub fn update_chunks_system(// TODO get this to only run when main vehicle is mo
 	mut renet_client: ResMut<RenetClient>,
 	mut requested_chunks: ResMut<RequestedChunks>
 ) {
-	let chunks_to_load: Vec<ChunkRef> = render_distance.load_unload_chunks(&mut static_data.map, #[cfg(feature = "debug_render_physics")] &mut rapier_context_res, &mut commands, &mut meshes, &mut materials);
+	let chunks_to_load: Vec<ChunkRef> = render_distance.load_unload_chunks(&mut static_data.map, #[cfg(feature = "debug_render_physics")] &mut rapier_context_res, &mut meshes, &mut materials);
 	for chunk_ref in chunks_to_load {
 		requested_chunks.add(chunk_ref, &mut renet_client);
 	}

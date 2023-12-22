@@ -18,7 +18,7 @@ pub fn get_static_vehicle_model_path(addr: IpAddr, type_: &str) -> String {
 pub fn save_static_vehicle_model(addr: IpAddr, type_: &str, data: Vec<u8>) -> Result<(), String> {
     let path: String = get_static_vehicle_model_path(addr, type_);
     // This will create the dir if it doesn't exist. If it does it will return an Err(), which can be ignored. TODO: crash if the error is something other than `dir_` already existing
-    fs::create_dir_all(path.strip_suffix(VEHICLE_MODEL_FILE_NAME).unwrap_or("<Error: vehicle model path does not contain correct ending>"));//.split("/").next().unwrap_or("<Error: path could not be split with forward slash>"));
+    fs::create_dir_all(path.strip_suffix(VEHICLE_MODEL_FILE_NAME).unwrap_or("<Error: vehicle model path does not contain correct ending>")).unwrap();//.split("/").next().unwrap_or("<Error: path could not be split with forward slash>"));
     to_string_err_with_message(fs::write(&path, data), &format!("Error writing static vehicle glb model file to {}", path))
 }
 
