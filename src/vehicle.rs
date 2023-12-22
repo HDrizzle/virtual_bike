@@ -11,10 +11,13 @@ use bevy::{prelude::*, ecs::component::Component};
 use nalgebra::{vector, point, UnitQuaternion};
 
 // Rapier 3D physics
+#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
 use rapier3d::{prelude::*, math::Real};
 //use nalgebra::{Isometry3, Vector3, vector, Point3, point, geometry::Quaternion, UnitQuaternion, Const};
 
-use crate::{prelude::*, map::path::PathBoundBodyState, physics::PhysicsController};
+use crate::{prelude::*, map::path::PathBoundBodyState};
+#[cfg(feature = "backend")]
+use crate::physics::PhysicsController;
 
 const STATIONARY_DRIVE_ACC_LIMIT: Float = 10.0;// m/s^2
 
@@ -30,6 +33,7 @@ pub struct WheelStatic {
 }
 
 impl WheelStatic {
+	#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
 	pub fn build_rapier_collider(&self) -> Collider {
 		ColliderBuilder::cylinder((self.width / 2.0) as Real, (self.dia / 2.0) as Real)
 			.restitution(0.9)
@@ -44,17 +48,19 @@ impl WheelStatic {
 	}
 }
 
+#[cfg(feature = "backend")]
 type WheelSteering = Option<(RigidBodyHandle, ImpulseJointHandle)>;
 
 #[derive(Clone)]
 #[cfg_attr(feature = "frontend", derive(Component))]
 pub struct Wheel {
 	static_: WheelStatic,
-	body_handle: RigidBodyHandle,
-	collider_handle: ColliderHandle,
-	steering: WheelSteering// None if not static_.steering or built in client
+	#[cfg(feature = "backend")] body_handle: RigidBodyHandle,
+	#[cfg(feature = "backend")] collider_handle: ColliderHandle,
+	#[cfg(feature = "backend")] steering: WheelSteering// None if not static_.steering or built in client
 }
 
+#[cfg(feature = "backend")]
 impl Wheel {
 	pub fn build(static_: &WheelStatic, bodies: &mut RigidBodySet, colliders: &mut ColliderSet, joints: &mut ImpulseJointSet, v_body_handle: RigidBodyHandle) -> Self {
 		// Get vehicle position
@@ -146,44 +152,8 @@ pub struct VehicleStatic {// This is loaded from the resources and is identified
 	pub wheels: Vec<WheelStatic>
 }
 
+#[cfg(feature = "backend")]
 impl VehicleStatic {
-    /*pub fn build(&self, bodies: &mut RigidBodySet, colliders: &mut ColliderSet, joints: &mut ImpulseJointSet, vehicle_position_opt: Option<&Iso>, paths: &PathSet) ->
-	(
-		RigidBodyHandle,
-		ColliderHandle,
-		Vec<Wheel>
-	) {
-		// Get position, otherwise use default
-		let default_binding = Iso::identity();// Compiler said to do this, and it worked. Don't touch it.
-		let vehicle_position = match vehicle_position_opt {
-			Some(pos) => pos,
-			None => &default_binding//Iso::new(UnitQuaternion::new(V3::x_axis()), V3::new(0., 0., 0.))// TODO: fix default value
-		};
-		// Body
-        let mut body = match dynamic {
-			true => RigidBodyBuilder::dynamic().ccd_enabled(true).build(),
-			false => RigidBodyBuilder::kinematic_position_based().build()// The client does no actual simulation, so use this body type
-		};
-		body.set_position(*vehicle_position, true);
-		let body_handle = bodies.insert(body);
-		let collider = self.build_rapier_collider();
-		let collider_handle = colliders.insert_with_parent(collider, body_handle, bodies);
-		// Wheels
-		let mut wheels = Vec::<Wheel>::new();
-		for w_static in &self.wheels {
-			wheels.push(Wheel::build(w_static, bodies, colliders, joints, body_handle));
-			//joints.insert(body_handle, w_body_handle, joint, true);
-		}
-		// Set mass
-		let b_ref = bodies.get_mut(body_handle).expect("Unable to get body w/ handle");
-		b_ref.set_additional_mass(self.mass as Float - b_ref.mass(), true);
-		//colliders.get_mut(c_handle).unwrap().
-		(
-			body_handle,
-			collider_handle,
-			wheels
-		)
-    }*/
 	pub fn build_rapier_collider(&self) -> Collider {
 		ColliderBuilder::cuboid(2.0, 0.5, 10.0)
 			.restitution(0.2)// TODO
@@ -228,14 +198,14 @@ impl VehicleSend {
     		scale: Vec3::ONE,
 		}.looking_at();*/
     }
-	pub fn update_rapier(&self, bodies: &mut RigidBodySet, wheels: Vec<&mut Wheel>) {
+	/*pub fn update_rapier(&self, bodies: &mut RigidBodySet, wheels: Vec<&mut Wheel>) {
 		self.check_wheel_positions(bodies, wheels);
 	}
 	pub fn check_wheel_positions(&self, bodies: &mut RigidBodySet, wheels: Vec<&mut Wheel>) {
 		for w in wheels {
 			w.set_position_wrt_body(bodies, &self.body_state.position);
 		}
-	}
+	}*/
 }
 
 #[cfg(feature = "backend")]//#[cfg_attr(feature = "frontend", derive(Component))]
@@ -321,9 +291,11 @@ pub struct BodyStateSerialize {// This is saved/sent over the network to the cli
 }
 
 impl BodyStateSerialize {
+	#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
 	pub fn init_rapier_body(&self, body: &mut RigidBody) {
 		body.set_position(self.position, true);// TODO: velocity
 	}
+	#[cfg(feature = "backend")]
 	pub fn from_rapier_body(body: &RigidBody, path_bound_opt: Option<PathBoundBodyState>) -> Self {
 		Self {
 			position: *body.position(),
@@ -450,7 +422,7 @@ impl VehiclePathBoundController {
 
 #[cfg(feature = "backend")]
 impl PhysicsController for VehiclePathBoundController{
-	fn serializable(&self, bodies: &RigidBodySet, paths: &PathSet) -> BodyStateSerialize {
+	fn serializable(&self, _: &RigidBodySet, paths: &PathSet) -> BodyStateSerialize {
 		let path: &Path = paths.get_with_ref(&self.state.path_ref).expect("Unable to get path with path body state");
 		path.create_body_state(self.state.clone())
 	}

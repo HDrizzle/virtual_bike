@@ -35,6 +35,7 @@ Created by Hadrian Ward, 2023-6-8
 */
 #![allow(warnings)]// TODO: remove when I have a lot of free-time
 use std::{fmt, env, ops, error::Error, collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, time::{SystemTime, UNIX_EPOCH}};
+#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
 use rapier3d::{dynamics::{RigidBodySet, IslandManager}, geometry::ColliderSet};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 use nalgebra::{Point3, Point2, Vector3, Vector2, point, Matrix, Const, ArrayStorage, OPoint, Translation, Isometry3, UnitQuaternion};
@@ -49,6 +50,7 @@ use rand::Rng;
 mod world;
 mod map;
 mod vehicle;
+#[cfg(feature = "backend")]
 mod physics;
 pub mod resource_interface;
 #[cfg(feature = "frontend")]
@@ -78,7 +80,7 @@ mod prelude {
 	pub type Iso = Isometry3<Float>;
 	// Misc
 	pub use crate::{
-		world::{StaticData, PhysicsState, WorldSave, WorldSend},
+		world::{StaticData, WorldSave, WorldSend},
 		map::{Map, path::{Path, PathSet, PathBoundBodyState, PathPosition, BCurve}, chunk::{Chunk, ChunkRef, RegularElevationMesh, Gen}},
 		vehicle::{VehicleStatic, VehicleSave, VehicleSend, Wheel, WheelStatic, BodyStateSerialize, BodyForces},
 		renet_server::{Request, Response},
@@ -89,14 +91,14 @@ mod prelude {
 		EightWayDir,
 		IntP2,
 		resource_interface,
-		BasicTriMesh,
-		RapierBodyCreationDeletionContext
+		BasicTriMesh
 	};
 	#[cfg(feature = "backend")] pub use crate::{
 		physics::{PhysicsController, PhysicsUpdateArgs, BodyAveragableState, defaut_extra_forces_calculator},
 		vehicle::Vehicle,
-		world::World
+		world::{World, PhysicsState}
 	};
+	#[cfg(any(feature = "backend", feature = "debug_render_physics"))] pub use crate::RapierBodyCreationDeletionContext;
 	// Utility functions because nalgebra is friggin complicated
 	pub fn add_isometries(iso1: &Iso, iso2: &Iso) -> Iso {
 		// Adds two isometries together
@@ -408,12 +410,14 @@ impl Default for BasicTriMesh {
 	}
 }
 
+#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
 pub struct RapierBodyCreationDeletionContext<'a> {
 	pub bodies: &'a mut RigidBodySet,
 	pub colliders: &'a mut ColliderSet,
 	pub islands: &'a mut IslandManager
 }
 
+#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
 impl<'a> RapierBodyCreationDeletionContext<'a> {// From ChatGPT
     #[cfg(feature = "debug_render_physics")]
     pub fn from_bevy_rapier_context(ctx: &'a mut RapierContext) -> Self {

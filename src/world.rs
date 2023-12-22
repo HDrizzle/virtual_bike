@@ -11,6 +11,7 @@ use crate::client::cache;
 use bevy::ecs::system::Resource;
 
 // Rapier 3D physics
+#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
 use rapier3d::prelude::*;
 
 use crate::prelude::*;
@@ -71,6 +72,7 @@ impl StaticData {
 }
 
 // Copied from https://rapier.rs/docs/user_guides/rust/serialization
+#[cfg(feature = "backend")]
 pub struct PhysicsState {
 	pub pipeline: PhysicsPipeline,
 	pub islands: IslandManager,
@@ -88,6 +90,7 @@ pub struct PhysicsState {
 	pub event_handler: (),
 }
 
+#[cfg(feature = "backend")]
 impl PhysicsState {
 	pub fn new(gravity: Float) -> Self {
 		Self {
@@ -189,6 +192,7 @@ impl PhysicsStateSend {
 	}
 }
 
+#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
 pub type BodyStates = HashMap<RigidBodyHandle, BodyStateSerialize>;
 
 pub mod async_messages {// These are sent between the thread running World::main_loop() and the master thread

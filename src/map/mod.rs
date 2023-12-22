@@ -18,6 +18,7 @@ pub mod path;
 pub mod gis;
 
 // Rapier 3D physics
+#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
 use rapier3d::prelude::*;
 
 //#[cfg(feature = "backend")]
@@ -39,7 +40,7 @@ pub struct Map {
 	pub background_color: [u8; 3],
 	pub auto_gen_chunks: bool,
 	#[serde(skip)]
-	pub body_handle_opt: Option<RigidBodyHandle>,
+	#[cfg(any(feature = "backend", feature = "debug_render_physics"))] pub body_handle_opt: Option<RigidBodyHandle>,
 	pub real_world_location: Option<[Float; 2]>
 }
 
@@ -55,10 +56,11 @@ impl Map {
 			landmarks: HashMap::<String, V2>::new(),
 			background_color,
 			auto_gen_chunks: true,
-			body_handle_opt: None,
+			#[cfg(any(feature = "backend", feature = "debug_render_physics"))] body_handle_opt: None,
 			real_world_location: None
 		}
 	}
+	#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
 	pub fn init_rapier(&mut self, bodies: &mut RigidBodySet) {
 		// Create immovable body
 		let body = RigidBodyBuilder::kinematic_position_based().position(Iso::identity()).build();
@@ -82,11 +84,21 @@ impl Map {
 				// Remove Bevy mesh
 				meshes.remove(chunk.asset_id_opt.expect("Client-side chunk unloading expects chunks to have Some(HandleId)"));
 				// Generic unload
-				self.unload_chunk(
-					i,
-					#[cfg(feature = "debug_render_physics")] Some(&mut RapierBodyCreationDeletionContext::from_bevy_rapier_context(&mut context)),
-					#[cfg(not(feature = "debug_render_physics"))] None
-				);
+				#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
+				{
+					#[cfg(feature = "debug_render_physics")]
+					self.unload_chunk(
+						i,
+						Some(&mut RapierBodyCreationDeletionContext::from_bevy_rapier_context(&mut context))
+					);
+					#[cfg(not(feature = "debug_render_physics"))]
+					self.unload_chunk(
+						i,
+						None
+					);
+				}
+				#[cfg(not(any(feature = "backend", feature = "debug_render_physics")))]
+				self.unload_chunk(i);
 			},
 			None => {}
 		}
@@ -95,11 +107,11 @@ impl Map {
 	pub fn unload_chunk(
 		&mut self,
 		i: usize,
-		rapier_data_opt: Option<&mut RapierBodyCreationDeletionContext>
+		#[cfg(any(feature = "backend", feature = "debug_render_physics"))] rapier_data_opt: Option<&mut RapierBodyCreationDeletionContext>
 	) {
 		let chunk = &mut self.loaded_chunks[i];
 		// Can't simply delete chunk, 1st must remove it from the physics engine
-		match rapier_data_opt {
+		#[cfg(any(feature = "backend", feature = "debug_render_physics"))] match rapier_data_opt {
 			Some(mut rapier_data) => chunk.remove_from_rapier(&mut rapier_data),
 			None => {}
 		}
@@ -148,18 +160,29 @@ impl Map {
 			chunk.bevy_pbr_bundle(commands, meshes, materials, asset_server);
 		}
 		// Generic insert
-		let loaded = self.insert_chunk(
-			chunk,
-			#[cfg(feature = "debug_render_physics")] Some(rapier_data),
-			#[cfg(not(feature = "debug_render_physics"))] None
-		);
+		#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
+		let loaded: bool = {
+			#[cfg(feature = "debug_render_physics")]
+			{self.insert_chunk(
+				chunk,
+				Some(rapier_data)
+			)}
+			#[cfg(not(feature = "debug_render_physics"))]
+			{self.insert_chunk(
+				chunk,
+				None
+			)}
+		};
+		#[cfg(not(any(feature = "backend", feature = "debug_render_physics")))]
+		let loaded = self.insert_chunk(chunk);
 		assert!(loaded, "self.insert_chunk says the chunk was not loaded, however a previous check says the chunk didn't already exist. This should not be possible.");
 	}
-	pub fn insert_chunk(&mut self, mut chunk: Chunk, rapier_data_opt: Option<&mut RapierBodyCreationDeletionContext>) -> bool {
+	pub fn insert_chunk(&mut self, mut chunk: Chunk, #[cfg(any(feature = "backend", feature = "debug_render_physics"))] rapier_data_opt: Option<&mut RapierBodyCreationDeletionContext>) -> bool {
 		// IMPORTANT: THIS SHOULD BE THE ONLY PLACE WHERE self.loaded_chunks.push() IS CALLED
 		if self.is_chunk_loaded(&chunk.ref_) {
 			return false;//panic!("Attempt to insert already loaded chunk");
 		}
+		#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
 		match rapier_data_opt {
 			Some(rapier_data) => {
 				let body_handle = self.body_handle_opt.expect("Map body handle is None when trying to insert chunk, help: maybe init_rapier() hasn\'t been called yet");

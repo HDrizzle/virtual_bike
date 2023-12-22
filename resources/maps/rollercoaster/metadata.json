@@ -81,6 +81,28 @@
 					[-27.5,-4.5,0]
 				],
 				"loop_": true
+			},
+			"1": {
+				"type_": {
+					"ref_": 0,
+					"name": "Generic path",
+					"width": 5
+				},
+				"ref_": 1,
+				"name": "square",
+				"knot_points": [
+					[50,50,-100],
+					[-50,50,0],
+					[50,50,100],
+					[150,50,0]
+				],
+				"tangent_offsets": [
+					[-55.3,0,0],
+					[0,0,55.3],
+					[55.3,0,0],
+					[0,0,-55.3]
+				],
+				"loop_": true
 			}
 		},
 		"query_grid_scale": 0

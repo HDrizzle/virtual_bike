@@ -5,6 +5,7 @@ use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113
 #[cfg(feature = "frontend")]
 use bevy::prelude::*;
 // Rapier 3D physics
+#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
 use rapier3d::prelude::*;
 
 use crate::{prelude::*, resource_interface};
@@ -160,6 +161,7 @@ impl RegularElevationMesh {
 			indices
 		}
 	}
+	#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
 	pub fn rapier_collider(&self, offset: &V3) -> Collider {
 		// https://docs.rs/rapier3d/0.17.2/rapier3d/geometry/struct.ColliderBuilder.html#method.trimesh
 		let mesh = self.build_trimesh(offset);
@@ -565,6 +567,7 @@ pub struct Chunk {
 	pub grid_size: UInt,// Number of spaces inside grid, for example if this is 4 then the elevation grid coordinates should be 5x5, because fenc-post problem
 	pub background_color: [u8; 3],
 	#[serde(skip)]
+	#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
 	collider_handle: Option<ColliderHandle>,
 	#[serde(skip)]
 	#[cfg(feature = "frontend")]
@@ -602,6 +605,7 @@ impl Chunk {
 		// Done
 		out
 	}
+	#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
 	pub fn init_rapier(&mut self, rapier_data: &mut RapierBodyCreationDeletionContext, parent_body_handle: RigidBodyHandle) {
 		// Make sure this can only be called once
 		if let Some(_) = self.collider_handle {
@@ -611,6 +615,7 @@ impl Chunk {
 		//collider.set_position(Iso{rotation: UnitQuaternion::identity(), translation: matrix_to_opoint(self.position).into()});
 		self.collider_handle = Some(rapier_data.colliders.insert_with_parent(collider, parent_body_handle, &mut rapier_data.bodies));
 	}
+	#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
 	pub fn remove_from_rapier(&mut self, rapier_data: &mut RapierBodyCreationDeletionContext) {
 		rapier_data.colliders.remove(self.collider_handle.expect("Removing collider from rapier, but self.collider_handle is None"), &mut rapier_data.islands, &mut rapier_data.bodies, false);
 		self.collider_handle = None;
