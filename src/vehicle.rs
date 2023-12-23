@@ -157,34 +157,6 @@ pub struct VehicleStatic {// This is loaded from the resources and is identified
 #[cfg(feature = "backend")]
 impl VehicleStatic {
 	pub fn build_rapier_collider(&self) -> Collider {
-		/*ColliderBuilder::cuboid(2.0, 0.5, 10.0)
-			.restitution(0.2)// TODO
-			.build()// Basic shape for now*/
-		// Use GLTF crate to load from static vehicle model.glb, https://chat.openai.com/share/2f69562f-c578-4b24-9479-ee88d5ba69bd
-		/*let gltf: Gltf = Gltf::from_slice(&resource_interface::load_static_vehicle_gltf(&self.name).unwrap()).expect("Unable to decode gltf for static vehicle model file");
-		for scene in gltf.scenes() {
-			// Iterate through scene nodes
-			for node in scene.nodes() {
-				// Extract translation, rotation, and scale from the node
-				//let translation = node.transform().matrix().column(3).xyz();
-				//let rotation = UnitQuaternion::from_matrix(node.transform().matrix().fixed_slice::<3, 3>(0, 0));
-			
-				// Process meshes if the node has meshes
-				if let Some(mesh) = node.mesh() {
-					for primitive in mesh.primitives() {
-						// Extract vertex positions and indices from the primitive
-						let positions = primitive.reader(|buffer| buffer.read_positions().unwrap()).collect();
-						let indices = primitive.reader(|buffer| buffer.read_indices().unwrap()).collect();
-				
-						// Scale vertex positions
-						let scaled_positions: Vec<V3> = positions.into_iter().collect();
-				
-						// Create Rapier3D collider
-						return ColliderBuilder::trimesh(scaled_positions, indices).build();
-					}
-				}
-			}
-		}*/
 		let scenes = easy_gltf::load(&(resource_interface::VEHICLES_DIR.to_owned() + &self.name + "/model.glb")).expect("Unable to load gltf for static vehicle model file");
 		for scene in scenes {
 			/*println!(

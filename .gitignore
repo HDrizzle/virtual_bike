@@ -17,5 +17,8 @@ Cargo.lock
 # Don't upload maps because they can be large
 resources/maps/*/chunks/
 
+# Client cache
+client/assets/client_cache/
+
 # Apple thing
 .DS_Store
