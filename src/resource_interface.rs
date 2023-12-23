@@ -10,7 +10,7 @@ use crate::client::hardware_controller::Calibration;
 
 // STATICS
 pub static RESOURCES_DIR: &str = "../resources";
-static VEHICLES_DIR: &str = "../resources/vehicles/";
+pub static VEHICLES_DIR: &str = "../resources/vehicles/";
 pub static MAPS_DIR: &str = "../resources/maps/";
 static WORLDS_DIR: &str = "../resources/worlds/";
 static PATHS_DIR: &str = "../resources/paths/";

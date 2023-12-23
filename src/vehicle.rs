@@ -9,6 +9,8 @@ use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113
 #[cfg(feature = "frontend")]
 use bevy::{prelude::*, ecs::component::Component};
 use nalgebra::{vector, point, UnitQuaternion};
+#[cfg(feature = "backend")]
+use easy_gltf;
 
 // Rapier 3D physics
 #[cfg(any(feature = "backend", feature = "debug_render_physics"))]
@@ -155,9 +157,67 @@ pub struct VehicleStatic {// This is loaded from the resources and is identified
 #[cfg(feature = "backend")]
 impl VehicleStatic {
 	pub fn build_rapier_collider(&self) -> Collider {
-		ColliderBuilder::cuboid(2.0, 0.5, 10.0)
+		/*ColliderBuilder::cuboid(2.0, 0.5, 10.0)
 			.restitution(0.2)// TODO
-			.build()// Basic shape for now, TODO: change
+			.build()// Basic shape for now*/
+		// Use GLTF crate to load from static vehicle model.glb, https://chat.openai.com/share/2f69562f-c578-4b24-9479-ee88d5ba69bd
+		/*let gltf: Gltf = Gltf::from_slice(&resource_interface::load_static_vehicle_gltf(&self.name).unwrap()).expect("Unable to decode gltf for static vehicle model file");
+		for scene in gltf.scenes() {
+			// Iterate through scene nodes
+			for node in scene.nodes() {
+				// Extract translation, rotation, and scale from the node
+				//let translation = node.transform().matrix().column(3).xyz();
+				//let rotation = UnitQuaternion::from_matrix(node.transform().matrix().fixed_slice::<3, 3>(0, 0));
+			
+				// Process meshes if the node has meshes
+				if let Some(mesh) = node.mesh() {
+					for primitive in mesh.primitives() {
+						// Extract vertex positions and indices from the primitive
+						let positions = primitive.reader(|buffer| buffer.read_positions().unwrap()).collect();
+						let indices = primitive.reader(|buffer| buffer.read_indices().unwrap()).collect();
+				
+						// Scale vertex positions
+						let scaled_positions: Vec<V3> = positions.into_iter().collect();
+				
+						// Create Rapier3D collider
+						return ColliderBuilder::trimesh(scaled_positions, indices).build();
+					}
+				}
+			}
+		}*/
+		let scenes = easy_gltf::load(&(resource_interface::VEHICLES_DIR.to_owned() + &self.name + "/model.glb")).expect("Unable to load gltf for static vehicle model file");
+		for scene in scenes {
+			/*println!(
+				"Cameras: #{}  Lights: #{}  Models: #{}",
+				scene.cameras.len(),
+				scene.lights.len(),
+				scene.models.len()
+			)*/
+			for model in scene.models {// https://docs.rs/easy-gltf/latest/easy_gltf/model/struct.Model.html#
+				// Extract vertices
+				let mut vertices = Vec::<P3>::new();
+				for gltf_vertex in model.vertices() {
+					let p = gltf_vertex.position;
+					vertices.push(P3::new(p.x, p.y, p.z));
+				}
+				// Extract indices
+				let mut indices = Vec::<[u32; 3]>::new();
+				let mut curr_triangle: [u32; 3] = [0; 3];// Placeholder
+				let mut i = 0;
+				for flat_index in model.indices().expect(&format!("Model for static vehicle {} has no indices", &self.name)) {
+					curr_triangle[i] = *flat_index;
+					i += 1;
+					if i == 3 {
+						indices.push(curr_triangle);
+						curr_triangle = [0; 3];
+						i = 0;
+					}
+				}
+				// https://docs.rs/rapier3d/latest/rapier3d/geometry/struct.ColliderBuilder.html#method.trimesh
+				return ColliderBuilder::trimesh(vertices, indices).build();
+			}
+		}
+		panic!("no scenes or nodes with primitives found in model file for vehicle type {}", &self.name);
 	}
 }
 
@@ -189,7 +249,7 @@ impl VehicleSend {
 		rot = rot.mul_quat(rot_offset);
 		new_trans.translation = nalgebra_vec3_to_bevy_vec3(&p.translation.vector);
 		// 2nd POV
-		new_trans.translation = new_trans.translation + rot.mul_vec3(Vec3{x: 0.0, y: 0.0, z: 8.0});
+		new_trans.translation = new_trans.translation + rot.mul_vec3(Vec3{x: 0.0, y: 0.0, z: 20.0});
 		new_trans.rotation = rot;
 		*transform = new_trans;
 		/* *transform = Transform {
@@ -380,7 +440,7 @@ impl PhysicsController for VehicleRapierController {
 					body.reset_forces(true);
 					body.reset_torques(true);
 					body.add_force(position.rotation.transform_point(&P3::new(0.0, 0.0, -(control.speed as Float * 5.0))).coords, true);
-					let torque_magnitude: Float = 800.0;
+					let torque_magnitude: Float = 2000.0;
 					body.add_torque(P3::new(0.0, control.steering as Float * torque_magnitude, 0.0).coords, true);
 					/*for w in self.wheels.iter() {
 						w.update_steering(control.steering as Float, bodies, joints);

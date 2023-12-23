@@ -1,5 +1,5 @@
 {
-	"map": "flat",
+	"map": "rollercoaster",
 	"vehicles": {
 		"admin": {
 			"type_": "test-bike",

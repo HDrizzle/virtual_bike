@@ -6,9 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["debug_vehicle_input", "path_rendering", "client_default_signin"]#, "debug_render_physics", "backend", "frontend", "debug_camera_control", "experimental_terrain_gen"]
+default = ["debug_vehicle_input", "path_rendering", "debug_render_physics"]#, "backend", "client_default_signin", "frontend", "debug_camera_control", "experimental_terrain_gen"]
 
-backend = ["reqwest", "rapier3d"]
+backend = ["reqwest", "rapier3d", "easy-gltf"]
 frontend = ["serialport", "bevy", "bevy-inspector-egui", "bevy_renet", "image", "eframe"]
 
 web_server = ["backend", "hyper", "futures"]
@@ -44,6 +44,8 @@ rand = "0.8.5"
 
 # Server-only
 reqwest = {version = "0.11.22", optional = true, features = ["blocking", "json"]}
+#gltf = {version = "1.4.0", optional = true}
+easy-gltf = {version = "1.1.1", optional = true}
 #noise = {version = "0.8.2", optional = true}
 
 # Client-only
