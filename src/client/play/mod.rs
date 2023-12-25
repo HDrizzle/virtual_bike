@@ -142,14 +142,14 @@ fn vehicle_input_key_event_system(// Only for manual vehicle control should be b
 	let input = {
 		// Drive
 		let power_forward: Float = if keys.pressed(KeyCode::W) {
-			500.0
+			200.0
 		}
 		else {
 			0.0
 		};
 		// Braking
 		let brake = if keys.pressed(KeyCode::S) {
-			0.2
+			1.0
 		}
 		else {
 			0.0

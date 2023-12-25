@@ -186,7 +186,7 @@ impl VehicleStatic {
 					}
 				}
 				// https://docs.rs/rapier3d/latest/rapier3d/geometry/struct.ColliderBuilder.html#method.trimesh
-				return ColliderBuilder::trimesh(vertices, indices).build();
+				return ColliderBuilder::convex_decomposition(&vertices, &indices).restitution(0.2).mass(self.mass).friction(0.2).build();
 			}
 		}
 		panic!("no scenes or nodes with primitives found in model file for vehicle type {}", &self.name);
@@ -359,7 +359,8 @@ impl BodyStateSerialize {
 pub struct VehicleRapierController {
 	body_handle: RigidBodyHandle,
 	collider_handle: ColliderHandle,
-	wheels: Vec<Wheel>
+	wheels: Vec<Wheel>,
+	v_static: Rc<VehicleStatic>
 }
 
 #[cfg(feature = "backend")]
@@ -391,7 +392,8 @@ impl VehicleRapierController {
 		Self {
 			body_handle,
 			collider_handle,
-			wheels
+			wheels,
+			v_static: static_.clone()
 		}
 	}
 }
@@ -411,8 +413,9 @@ impl PhysicsController for VehicleRapierController {
 					// Forces
 					body.reset_forces(true);
 					body.reset_torques(true);
-					body.add_force(position.rotation.transform_point(&P3::new(0.0, 0.0, -(control.speed as Float * 5.0))).coords, true);
-					let torque_magnitude: Float = 2000.0;
+					body.add_force(position.rotation.transform_point(&P3::new(0.0, 0.0, -control.power)).coords, true);// Drive, TODO: fix
+					body.add_force(position.rotation.transform_point(&P3::new(0.0, 0.0, control.brake * self.v_static.mass)).coords, true);// Brake
+					let torque_magnitude: Float = 1000.0;
 					body.add_torque(P3::new(0.0, control.steering as Float * torque_magnitude, 0.0).coords, true);
 					/*for w in self.wheels.iter() {
 						w.update_steering(control.steering as Float, bodies, joints);
