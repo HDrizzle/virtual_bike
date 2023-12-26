@@ -9,7 +9,15 @@
 					"rotation": [0, 0, 0, 1]
 				},
 				"lin_vel": [0, 0, 0],
-				"path_bound_opt": null
+				"path_bound_opt": {
+                    "path_ref": 0,
+					"pos": {
+						"latest_point": 10,
+                    	"t": 0.0
+					},
+                    "velocity": 10,
+                    "forward": true
+                }
 			}
 		},
 		"user1": {

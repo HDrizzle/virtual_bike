@@ -497,7 +497,7 @@ pub mod paths {
 			}
 		);
 		// - 45
-		assert!(path.step_position_by_world_units(&mut pos, 45.0, None));
+		assert!(path.step_position_by_world_units(&mut pos, -45.0, None));
 		assert_eq!(
 			pos,
 			PathPosition {
@@ -522,9 +522,11 @@ mod misc {
 	fn fancy_modulus() {
 		assert_eq!(mod_or_clamp(5, 10, true), (5, false));
 		assert_eq!(mod_or_clamp(5, 10, false), (5, false));
-		assert_eq!(mod_or_clamp(10, 10, false), (10, false));
+		assert_eq!(mod_or_clamp(0, 10, false), (0, false));
+		assert_eq!(mod_or_clamp(9, 10, false), (9, false));
+		assert_eq!(mod_or_clamp(10, 10, false), (9, true));
 		assert_eq!(mod_or_clamp(-1, 10, false), (0, true));
-		assert_eq!(mod_or_clamp(11, 10, true), (1, true));
+		assert_eq!(mod_or_clamp(10, 10, true), (0, true));
 		assert_eq!(mod_or_clamp(-1, 10, true), (9, true));
 	}
 	#[test]

@@ -17,6 +17,7 @@ use crate::prelude::*;
 const PATH_RENDER_SEGMENT_LENGTH: Float = 4.0;// Arbitrary
 pub const BCURVE_LENGTH_ESTIMATION_SEGMENTS: usize = 200;// Arbitrary
 const BCURVE_SAMPLE_ORIENTATION_DT: Float = 0.01;// Arbitrary
+const BCURVE_BINARY_SEARCH_ITERATIONS: usize = 30;// Arbitrary
 
 // Structs
 pub struct BCurveSample {
@@ -113,7 +114,7 @@ impl BCurve {
 		};
 
 		// Binary search to find the parameter value (t) corresponding to the desired distance
-		for _ in 0..30 {
+		for _ in 0..BCURVE_BINARY_SEARCH_ITERATIONS {
 			let length = self.estimate_length(t, BCURVE_LENGTH_ESTIMATION_SEGMENTS);
 
 			if length > target_length {
@@ -226,14 +227,16 @@ impl Path {
 					},
 					_ => panic!("BCurve step position change left over != 0, however the new t-value is not 0 or 1")
 				};
-				curr_t = updated_t;
-				dbg!((new_index_raw, loop_));
+				dbg!((new_index_raw, updated_t));
 				let (new_bcurve_index, looped_this_time) = mod_or_clamp(new_index_raw, (self.knot_points.len() - 0) as UInt, loop_);
 				dbg!((new_bcurve_index, looped_this_time));
 				bcurve_index = new_bcurve_index as usize;
 				looped = looped || looped_this_time;
 				if looped && !loop_ {
 					break;
+				}
+				else {
+					curr_t = updated_t;
 				}
 			}
 			//dbg!((bcurve_index, curr_t, looped));
@@ -486,7 +489,7 @@ impl PathBoundBodyState {
 						"latest_point": 0,
                     	"t": 0.5
 					},
-                    "velocity": 0.1,
+                    "velocity": 10,
                     "forward": true
                 } */
 /*

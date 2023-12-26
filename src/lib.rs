@@ -153,15 +153,16 @@ mod prelude {
 	pub fn round_float_towards_neg_inf(n: Float) -> Int {
 		n.floor() as Int
 	}
-	pub fn mod_or_clamp(n: Int, max: UInt, loop_: bool) -> (Int, bool) {// With help from ChatGPT
+	pub fn mod_or_clamp(n: Int, max_u: UInt, loop_: bool) -> (Int, bool) {// With help from ChatGPT
 		// If loop_: modulus on `n` / `max`, else: clamps to range [0, max]
 		// Returns: whether looped or clamped
+		let max = max_u as Int;
 		if loop_ {
-			let result = n.rem_euclid(max as Int);
+			let result = n.rem_euclid(max);
 			(result, result != n)
 		} else {
-			let clamped = n.max(0).min(max as Int) as UInt;
-			(clamped as Int, n != clamped as Int)
+			let clamped: Int = n.max(0).min(max as Int - 1);
+			(clamped, n != clamped as Int)
 		}
 	}
 	// Copied from extras
