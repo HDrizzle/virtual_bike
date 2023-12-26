@@ -471,7 +471,7 @@ impl PhysicsController for VehiclePathBoundController{
 		let (drive_force, brake_force): (Float, Float) = match args.latest_input {
 			Some(input) => {
 				// Power = force * velocity; force = power / velocity
-				let vel_raw = path.get_real_velocity(&self.state);
+				let vel_raw = self.state.velocity;
 				let vel_corrected = if vel_raw >= 0.0 {// Make sure it cannot == 0
 					vel_raw + 1e-2
 				}

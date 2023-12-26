@@ -1,5 +1,5 @@
 use std::{collections::HashMap, rc::Rc, sync::Arc, f64::consts::PI};
-use approx::relative_eq;
+use approx::assert_relative_eq;
 use crate::prelude::*;
 
 const EPSILON: Float = 1.0e-4;// Arbitrary
@@ -197,14 +197,14 @@ pub mod gis {
 	use crate::map::gis::*;
 	#[test]
 	fn conversion() {
-		relative_eq!(meters_to_degrees((EARTH_RADIUS * 2.0 * (PI as Float)) as Int), 360.0, epsilon = EPSILON);
+		assert_relative_eq!(meters_to_degrees((EARTH_RADIUS * 2.0 * (PI as Float)) as Int), 360.0, epsilon = EPSILON);
 		assert_eq!(degrees_to_meters(180.0), (EARTH_RADIUS * (PI as Float)) as Int);
 	}
 	#[test]
 	fn composition() {
 		assert_eq!(degrees_to_meters(meters_to_degrees(1000)), 1000);
-		relative_eq!(meters_to_degrees(degrees_to_meters(1.0)), 1.0, epsilon = EPSILON);
-		relative_eq!(meters_to_degrees(degrees_to_meters(180.0)), 180.0, epsilon = EPSILON);
+		assert_relative_eq!(meters_to_degrees(degrees_to_meters(1.0)), 1.0, epsilon = EPSILON);
+		assert_relative_eq!(meters_to_degrees(degrees_to_meters(180.0)), 180.0, epsilon = EPSILON);
 	}
 	#[test]
 	fn chunk_edge_alignment() {
@@ -245,7 +245,7 @@ pub mod paths {
 			path_ref: 0,
 			pos: PathPosition {
 				latest_point: 0,
-				ratio_from_latest_point: 0.5
+				t: 0.5
 			},
 			velocity: 0.2,
 			forward: true
@@ -256,7 +256,7 @@ pub mod paths {
 			path_ref: 0,
 			pos: PathPosition {
 				latest_point: 3,
-				ratio_from_latest_point: 0.5
+				t: 0.5
 			},
 			velocity: 0.2,
 			forward: true
@@ -288,7 +288,7 @@ pub mod paths {
 			path_ref: 0,
 			pos: PathPosition {
 				latest_point: 1,
-				ratio_from_latest_point: 0.70000005
+				t: 0.6367426
 			},// side length is 10, 0.5 side length (5 units) + 1 unit = 0.6 of a side length
 			velocity: 12.0,
 			forward: true
@@ -309,11 +309,11 @@ pub mod paths {
 		// Compare
 		assert_eq!(
 			state,
-				PathBoundBodyState {
+			PathBoundBodyState {
 				path_ref: 0,
 				pos: PathPosition {
 					latest_point: 0,
-					ratio_from_latest_point: 0.0
+					t: 0.0
 				},
 				velocity: -5.0,
 				forward: true
@@ -325,11 +325,11 @@ pub mod paths {
 		// Compare
 		assert_eq!(
 			state,
-				PathBoundBodyState {
+			PathBoundBodyState {
 				path_ref: 0,
 				pos: PathPosition {
 					latest_point: 3,
-					ratio_from_latest_point: 0.3
+					t: 0.36325753
 				},
 				velocity: -7.0,
 				forward: true
@@ -341,7 +341,7 @@ pub mod paths {
 		let path = square_loop_non_unit_edges();
 		// 0 - 1
 		assert_eq!(
-			path.get_bcurve(&initial_path_bound_body_state().pos),
+			path.get_bcurve(initial_path_bound_body_state().pos.latest_point),
 			BCurve {
 				offsets: [V3::zeros(); 2],
 				knots: [
@@ -352,7 +352,7 @@ pub mod paths {
 		);
 		// 3 - 0
 		assert_eq!(
-			path.get_bcurve(&initial_path_bound_body_state_past_end().pos),
+			path.get_bcurve(initial_path_bound_body_state_past_end().pos.latest_point),
 			BCurve {
 				offsets: [V3::zeros(); 2],
 				knots: [
@@ -361,25 +361,6 @@ pub mod paths {
 				]
 			}
 		);
-	}
-	#[test]
-	fn get_new_index_and_ratio() {
-		let path = square_loop_non_unit_edges();
-		{
-			let curr_i: usize = 0;
-			let progress_ratio: Float = 1.5;
-			assert_eq!(path.get_new_position(curr_i, progress_ratio), (PathPosition::from(1, 0.5), false));
-		}
-		{
-			let curr_i: usize = 3;
-			let progress_ratio: Float = 0.5;
-			assert_eq!(path.get_new_position(curr_i, progress_ratio), (PathPosition::from(3, 0.5), false));
-		}
-		{// Wraparound
-			let curr_i: usize = 3;
-			let progress_ratio: Float = 2.5;
-			assert_eq!(path.get_new_position(curr_i, progress_ratio), (PathPosition::from(1, 0.5), false));
-		}
 	}
 	#[test]
 	fn get_bcurve() {
@@ -401,7 +382,7 @@ pub mod paths {
 		};
 		// 1st bcurve
 		assert_eq!(
-			path.get_bcurve(&PathPosition { latest_point: 0, ratio_from_latest_point: 0.5 }),
+			path.get_bcurve(0),
 			BCurve {
 				knots: [
 					V3::new( 0.0, 10.0, -100.0),
@@ -415,7 +396,7 @@ pub mod paths {
 		);
 		// 2nd bcurve
 		assert_eq!(
-			path.get_bcurve(&PathPosition { latest_point: 1, ratio_from_latest_point: 0.5 }),
+			path.get_bcurve(1),
 			BCurve {
 				knots: [
 					V3::new( 0.0, 10.0,   0.0),
@@ -425,6 +406,103 @@ pub mod paths {
 					V3::new(20.0, 0.0, 0.0),
 					V3::new( 0.0, 0.0, 0.0)
 				]
+			}
+		);
+	}
+	#[test]
+	fn bcurve_length_estimation() {
+		let bcurve = BCurve {
+			knots: [
+				V3::new( 0.0, 0.0, 0.0),
+				V3::new(50.0, 0.0, 0.0)
+			],
+			offsets: [
+				V3::new(0.0, 0.0, 0.0),
+				V3::new(0.0, 0.0, 0.0)
+			]
+		};
+		assert_relative_eq!(bcurve.estimate_length(0.5, BCURVE_LENGTH_ESTIMATION_SEGMENTS), 25.0, epsilon = EPSILON);// only half-way through will work
+	}
+	#[test]
+	fn bcurve_step_distance() {
+		let bcurve = BCurve {
+			knots: [
+				V3::new( 0.0, 0.0, 0.0),
+				V3::new(50.0, 0.0, 0.0)
+			],
+			offsets: [
+				V3::new(0.0, 0.0, 0.0),
+				V3::new(0.0, 0.0, 0.0)
+			]
+		};
+		assert_eq!(bcurve.step_distance(0.5, 50.0), (1.0, 25.0));
+		assert_eq!(bcurve.step_distance(0.5, -50.0), (0.0, -25.0));
+		assert_eq!(bcurve.step_distance(0.0, 50.0), (1.0, 0.0));
+	}
+	#[test]
+	fn step_position_by_world_units() {
+		// Setup
+		let path: Path = square_loop_non_unit_edges();
+		let mut pos: PathPosition = PathPosition::default();
+		// + 15
+		assert!(!path.step_position_by_world_units(&mut pos, 15.0, None));
+		assert_eq!(
+			pos,
+			PathPosition {
+				latest_point: 1,
+				t: 0.5
+			}
+		);
+		// - 20
+		assert!(path.step_position_by_world_units(&mut pos, -20.0, None));
+		assert_eq!(
+			pos,
+			PathPosition {
+				latest_point: 3,
+				t: 0.5
+			}
+		);
+		// + 40
+		assert!(path.step_position_by_world_units(&mut pos, 40.0, None));
+		assert_eq!(
+			pos,
+			PathPosition {
+				latest_point: 3,
+				t: 0.5
+			}
+		);
+	}
+	#[test]
+	fn step_position_by_world_units_non_looping() {
+		// Setup
+		let mut path: Path = square_loop_non_unit_edges();
+		path.loop_ = false;
+		let mut pos: PathPosition = PathPosition::default();// 0
+		// + 15
+		assert!(!path.step_position_by_world_units(&mut pos, 15.0, None));
+		assert_eq!(
+			pos,
+			PathPosition {
+				latest_point: 1,
+				t: 0.5
+			}
+		);
+		// + 30
+		assert!(path.step_position_by_world_units(&mut pos, 30.0, None));
+		assert_eq!(
+			pos,
+			PathPosition {
+				latest_point: 3,
+				t: 1.0
+			}
+		);
+		// - 45
+		assert!(path.step_position_by_world_units(&mut pos, 45.0, None));
+		assert_eq!(
+			pos,
+			PathPosition {
+				latest_point: 0,
+				t: 0.0
 			}
 		);
 	}
@@ -439,5 +517,19 @@ mod misc {
 		assert_eq!(round_float_towards_neg_inf(-0.0), 0);
 		assert_eq!(round_float_towards_neg_inf(-3.0), -3);
 		assert_eq!(round_float_towards_neg_inf(-3.5), -4);
+	}
+	#[test]
+	fn fancy_modulus() {
+		assert_eq!(mod_or_clamp(5, 10, true), (5, false));
+		assert_eq!(mod_or_clamp(5, 10, false), (5, false));
+		assert_eq!(mod_or_clamp(10, 10, false), (10, false));
+		assert_eq!(mod_or_clamp(-1, 10, false), (0, true));
+		assert_eq!(mod_or_clamp(11, 10, true), (1, true));
+		assert_eq!(mod_or_clamp(-1, 10, true), (9, true));
+	}
+	#[test]
+	#[should_panic]
+	fn rel_eq_test() {
+		assert_relative_eq!(EPSILON * 2.0, 0.0, epsilon = EPSILON);// Just to make sure I'm using this right
 	}
 }

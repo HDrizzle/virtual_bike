@@ -11,13 +11,19 @@ use serde::{Serialize, Deserialize};
 #[cfg(feature = "frontend")]
 use bevy::prelude::*;
 
-//use super::*;
 use crate::prelude::*;
 
 // CONSTS
-const PATH_RENDER_SEGMENT_LENGTH: Float = 4.0;
+const PATH_RENDER_SEGMENT_LENGTH: Float = 4.0;// Arbitrary
+pub const BCURVE_LENGTH_ESTIMATION_SEGMENTS: usize = 200;// Arbitrary
+const BCURVE_SAMPLE_ORIENTATION_DT: Float = 0.01;// Arbitrary
 
 // Structs
+pub struct BCurveSample {
+	pub pos: Iso,
+	pub curvature: Float
+}
+
 #[derive(PartialEq, Debug)]
 pub struct BCurve {// Single cubic bezier curve
 	pub knots: [V3; 2],
@@ -25,17 +31,21 @@ pub struct BCurve {// Single cubic bezier curve
 }
 
 impl BCurve {
-	pub fn sample(&self, t: Float) -> Iso {// Uses the polynomial coefficients method from https://youtu.be/jvPPXbo87ds?si=a7YoNKOVflyAVVX5&t=463
+	pub fn sample(&self, t: Float) -> BCurveSample {// Uses the polynomial coefficients method from https://youtu.be/jvPPXbo87ds?si=a7YoNKOVflyAVVX5&t=463
 		let translation_0 = self.sample_translation(t);
-		let translation_1 = self.sample_translation(t + 0.01);// TODO: fix
+		let translation_1 = self.sample_translation(t + BCURVE_SAMPLE_ORIENTATION_DT);
 		let diff = translation_0 - translation_1;
 		// Orientation (no bank angle for now), TODO: set "up" vector
 		let orientaton = UnitQuaternion::face_towards(&diff, &V3::new(0.0, 1.0, 0.0));
 		// Done
-		Iso {
-			rotation: orientaton,
-			translation: nalgebra::Translation{vector: translation_0}
+		BCurveSample {
+			pos: Iso {
+				rotation: orientaton,
+				translation: nalgebra::Translation{vector: translation_0}
+			},
+			curvature: 0.0// TODO
 		}
+		
 	}
 	pub fn sample_translation(&self, t: Float) -> V3 {// Uses the polynomial coefficients method from https://youtu.be/jvPPXbo87ds?si=a7YoNKOVflyAVVX5&t=463
 		let mut coords = Vec::<Float>::new();
@@ -58,11 +68,63 @@ impl BCurve {
 		}
 		V3::from_vec(coords)
 	}
-	pub fn length(&self) -> Float {
-		v3_dist(self.knots[0], self.knots[1])// TODO: fix: https://math.stackexchange.com/questions/2154029/how-to-calculate-a-splines-length-from-its-control-points-and-knots-vector
+	pub fn estimate_length(// Estimates length until `t`, crude but good enough, from ChatGPT
+		&self,
+		t: Float,
+		num_segments: usize,
+	) -> Float {
+		let mut length = 0.0;
+		let delta_t = t / (num_segments as Float);
+	
+		for i in 0..num_segments {
+			let t0 = i as Float * delta_t;
+			let t1 = (i + 1) as Float * delta_t;
+	
+			let v0 = self.sample_translation(t0);
+			let v1 = self.sample_translation(t1);
+			length += v3_dist(v0, v1);
+		}
+	
+		length
 	}
-	pub fn get_real_velocity_mulitplier(&self, t: Float) -> Float {
-		self.length()// TODO: fix: veocity is not constant along curve
+	pub fn step_distance(&self, start_t: Float, change: Float) -> (Float, Float) {// From ChatGPT (with modifications)
+		// Estimates t value so that the new length would be `self.estimate_length(start_t, BCURVE_LENGTH_ESTIMATION_SEGMENTS)` + `change`. Works even when `change` is negative.
+		// Returns: (New t value, change left over if t would be outside the interval [0, 1])
+		assert!(0.0 <= start_t && start_t <= 1.0);
+		let start = self.estimate_length(start_t, BCURVE_LENGTH_ESTIMATION_SEGMENTS);
+		let mut t_min: Float = 0.0;
+		let mut t_max: Float = 1.0;
+		let mut t: Float = 0.5;
+
+		let target_length = {
+			let target_raw = start + change;
+			let total_length = self.estimate_length(1.0, BCURVE_LENGTH_ESTIMATION_SEGMENTS);
+			if target_raw <= 0.0 {
+				return (0.0, target_raw);
+			}
+			else {
+				if target_raw >= total_length {
+					return (1.0, target_raw - total_length);
+				}
+				else {
+					target_raw
+				}
+			}
+		};
+
+		// Binary search to find the parameter value (t) corresponding to the desired distance
+		for _ in 0..30 {
+			let length = self.estimate_length(t, BCURVE_LENGTH_ESTIMATION_SEGMENTS);
+
+			if length > target_length {
+				t_max = t;
+			} else {
+				t_min = t;
+			}
+
+			t = 0.5 * (t_min + t_max);
+		}
+		(t, 0.0)
 	}
 }
 
@@ -100,40 +162,30 @@ pub struct Path {// TODO: fix: load the path type from seperate file
 impl Path {
 	pub fn create_body_state(&self, path_body_state: PathBoundBodyState) -> BodyStateSerialize {
 		assert_eq!(path_body_state.path_ref, self.ref_);
-		let bcurve = self.get_bcurve(&path_body_state.pos);
-		let position = bcurve.sample(path_body_state.pos.ratio_from_latest_point);
-		let linvel_scalar = bcurve.length() * path_body_state.velocity;// TODO: fix: veocity is not constant along curve
+		let bcurve: BCurve = self.get_bcurve(path_body_state.pos.latest_point);
+		let sample: BCurveSample = bcurve.sample(path_body_state.pos.t);
 		// Linvel vector
-		let linvel: V3 = position.rotation.transform_vector(&V3::new(0.0, 0.0, linvel_scalar));
+		let lin_vel: V3 = sample.pos.rotation.transform_vector(&V3::new(0.0, 0.0, path_body_state.velocity));
 		// Done
 		BodyStateSerialize {
-			position,
-			lin_vel: linvel,
+			position: sample.pos,
+			lin_vel,
 			path_bound_opt: Some(path_body_state)
 		}
 	}
-	pub fn sample(&self, pos: &PathPosition) -> Iso {
-		let bcurve = self.get_bcurve(pos);
-		bcurve.sample(pos.ratio_from_latest_point)
+	pub fn sample(&self, pos: &PathPosition) -> BCurveSample {
+		let bcurve = self.get_bcurve(pos.latest_point);
+		bcurve.sample(pos.t)
 	}
-	pub fn get_bcurve(&self, pos: &PathPosition) -> BCurve {
+	pub fn get_bcurve(&self, i_raw: usize) -> BCurve {
 		// Returns: (point behind, point infront)
-		let i_raw = pos.latest_point;
 		let all_points_len = self.knot_points.len();
-		let (i0, i1): (usize, usize) = match self.loop_ {
-			true => {
-				assert!(i_raw < all_points_len, "Path position ({:?}) latest point should be < the length of the spline's knot points when the path is looping", pos);
-				if i_raw == all_points_len - 1 {
-					(i_raw, 0)
-				}
-				else {
-					(i_raw, i_raw + 1)
-				}
-			},
-			false => {
-				assert!(i_raw < all_points_len - 1, "Path position ({:?}) latest point should be < the length of the spline's knot points - 1 when the path is not looping", pos);
-				(i_raw, i_raw + 1)
-			}
+		assert!(i_raw < all_points_len, "BCurve index ({:?}) latest point should be < the length of the spline's knot points", i_raw);
+		let (i0, i1): (usize, usize) = if i_raw == all_points_len - 1 {
+			(i_raw, 0)// Loop over
+		}
+		else {
+			(i_raw, i_raw + 1)
 		};
 		let v0: V3 = self.knot_points[i0].coords;
 		let v1: V3 = self.knot_points[i1].coords;
@@ -144,58 +196,67 @@ impl Path {
 			offsets: [offset0, offset1]
 		}
 	}
-	pub fn get_new_position(&self, curr_i: usize, new_segment_progress_unclamped: Float) -> (PathPosition, bool) {
-		// Returns: (next position, whether new pos has been clamped)
-		// TODO: fix: this assumes all segements are the same length
-		let progress_int: Int = round_float_towards_neg_inf(new_segment_progress_unclamped);
-		let progress_fraction: Float = new_segment_progress_unclamped - (progress_int as Float);
-		let progress_int_total = progress_int + curr_i as Int;
-		let new_prev_int = (progress_int_total.rem_euclid(self.knot_points.len() as Int)) as usize;
-		// Clamp to end if not looping
-		let forward = new_segment_progress_unclamped > 0.0;
-		if// TODO: test this logic
-			(!self.loop_) &&
-			(
-				( forward && new_prev_int >= self.knot_points.len() - 1) ||
-				(!forward && new_prev_int > curr_i)// Wraparound, assuming step is not huge
-			)
-		{
-			return (self.end_position(), true);
+	pub fn step_position_by_world_units(&self, pos: &mut PathPosition, step: Float, loop_override_opt: Option<bool>) -> bool {
+		// Returns: whether the position looped over to the beginning/end of this path or is being clamped
+		//dbg!((&pos, step));
+		let loop_ = match loop_override_opt {
+			Some(loop_override) => loop_override,
+			None => self.loop_
+		};
+		let mut unapplied_change: f32 = step;
+		let mut bcurve_index: usize = pos.latest_point;
+		let mut curr_t: f32 = pos.t;
+		let mut looped: bool = false;
+		loop {
+			let bcurve = self.get_bcurve(bcurve_index);
+			let (new_t, change_left_over) = bcurve.step_distance(curr_t, unapplied_change);
+			curr_t = new_t;
+			unapplied_change = change_left_over;
+			//dbg!((new_t, change_left_over, bcurve_index, unapplied_change));
+			if change_left_over == 0.0 {
+				break;
+			}
+			else {
+				let (new_index_raw, updated_t): (Int, Float) = match new_t {
+					0.0 => {
+						(bcurve_index as Int - 1, 1.0)
+					},
+					1.0 => {
+						(bcurve_index as Int + 1, 0.0)
+					},
+					_ => panic!("BCurve step position change left over != 0, however the new t-value is not 0 or 1")
+				};
+				curr_t = updated_t;
+				dbg!((new_index_raw, loop_));
+				let (new_bcurve_index, looped_this_time) = mod_or_clamp(new_index_raw, (self.knot_points.len() - 0) as UInt, loop_);
+				dbg!((new_bcurve_index, looped_this_time));
+				bcurve_index = new_bcurve_index as usize;
+				looped = looped || looped_this_time;
+				if looped && !loop_ {
+					break;
+				}
+			}
+			//dbg!((bcurve_index, curr_t, looped));
 		}
-		// Done
-		(
-			PathPosition {
-				latest_point: new_prev_int,
-				ratio_from_latest_point: progress_fraction
-			},
-			false
-		)
-	}
-	pub fn step_position_by_world_units(&self, pos: &mut PathPosition, step: Float) -> bool {
-		// Returns: whether the position looped over to the beginning of this path or is being clamped
-		let old_latest_point = pos.latest_point;
-		let bcurve = self.get_bcurve(pos);
-		let new_segment_progress_unclamped = pos.ratio_from_latest_point + step / bcurve.length();// TODO: fix: assumes linear motion across bcurve
-		let (new_pos, clamped) = self.get_new_position(pos.latest_point, new_segment_progress_unclamped);
-		*pos = new_pos;
-		// Done
-		clamped || (pos.latest_point < old_latest_point)// TODO: fix: assumes a step shorter than the whole path itself
+		*pos = PathPosition {
+			t: curr_t,
+			latest_point: bcurve_index
+		};
+		//dbg!("Done");
+		looped
 	}
 	pub fn end_position(&self) -> PathPosition {
-		PathPosition{latest_point: self.knot_points.len() - 1, ratio_from_latest_point: 1.0}
-	}
-	pub fn get_real_velocity(&self, state: &PathBoundBodyState) -> Float {
-		let bcurve = self.get_bcurve(&state.pos);
-		state.velocity * bcurve.get_real_velocity_mulitplier(state.pos.ratio_from_latest_point)
+		PathPosition{latest_point: self.knot_points.len() - 1, t: 1.0}
 	}
 	pub fn update_body(&self, dt: Float, forces: &BodyForces, v_static: &VehicleStatic, state: &mut PathBoundBodyState) {
-		let bcurve = self.get_bcurve(&state.pos);
+		let bcurve = self.get_bcurve(state.pos.latest_point);
+		let dir_sign = state.direction_sign() as Float;
 		// Acceleration: F = m * a, a = F / m
 		let acc = forces.lin.z / v_static.mass;
 		// Velocity: V += a * dt
-		let new_velocity = state.velocity + (acc * dt) * bcurve.get_real_velocity_mulitplier(state.pos.ratio_from_latest_point);
+		let new_velocity = state.velocity + (acc * dt);
 		// Translation: translation += V * dt
-		self.step_position_by_world_units(&mut state.pos, new_velocity * dt * match state.forward {true => 1.0, false =>-1.0});// Apply vehicle direction
+		self.step_position_by_world_units(&mut state.pos, new_velocity * dt * dir_sign, None);// Apply vehicle direction
 		state.velocity = new_velocity;
 	}
 	pub fn sideways_gravity_force_component(&self, pos: &PathPosition, v_static: &VehicleStatic, gravity: Float) -> Float {
@@ -232,7 +293,7 @@ impl Path {
 		let texture_len = self.type_.width * texture_len_width_ratio;
 		// Function to get edge positions on the road, TODO: verify
 		let get_edge_pos = |center_pos: &PathPosition, sideways_offset: Float| -> V3 {
-			let center_iso = self.sample(center_pos);
+			let center_iso = self.sample(center_pos).pos;
 			add_isometries(&center_iso, &Iso{
 				translation: nalgebra::Translation{vector: V3::new(sideways_offset, 0.0, 0.0)},
 				rotation: UnitQuaternion::identity()
@@ -270,7 +331,7 @@ impl Path {
 		add_point(&mut basic_mesh, &mut uv_coords, start, -1, 0.0);
 		let mut curr_pos: PathPosition = start.clone();/*self.get_new_position(
 			start.latest_point,
-			start.ratio_from_latest_point * start_bcurve.length() + PATH_RENDER_SEGMENT_LENGTH / 2.0
+			start.t * start_bcurve.length() + PATH_RENDER_SEGMENT_LENGTH / 2.0
 		);*/
 		let mut i = 0;// even = right side, odd - left side
 		let next_pos: Option<PathPosition> = loop {
@@ -291,7 +352,7 @@ impl Path {
 			// Next pos/i
 			i += 1;
 			// Check stop conditions
-			let looped_over = self.step_position_by_world_units(&mut curr_pos, PATH_RENDER_SEGMENT_LENGTH / 2.0);
+			let looped_over = self.step_position_by_world_units(&mut curr_pos, PATH_RENDER_SEGMENT_LENGTH / 2.0, Some(false));
 			/*if looped_over {
 				print!("Hit the end of the path while creating chunk, loop should break now");
 			}*/
@@ -383,14 +444,14 @@ impl Default for PathSet {
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct PathPosition {
 	pub latest_point: usize,
-	pub ratio_from_latest_point: Float// 0<= this < 1
+	pub t: Float// 0<= this <= 1
 }
 
 impl PathPosition {
 	pub fn from(i: usize, f: Float) -> Self {
 		Self {
 			latest_point: i,
-			ratio_from_latest_point: f
+			t: f
 		}
 	}
 }
@@ -399,7 +460,7 @@ impl Default for PathPosition {
 	fn default() -> Self {
 		Self {
 			latest_point: 0,
-			ratio_from_latest_point: 0.0
+			t: 0.0
 		}
 	}
 }
@@ -408,8 +469,14 @@ impl Default for PathPosition {
 pub struct PathBoundBodyState {
 	pub path_ref: PathRef,
 	pub pos: PathPosition,
-	pub velocity: Float,// in world-units / second, TODO: update usages: was current-curve-len-units / second
+	pub velocity: Float,// in world-units / second. Wrt body
 	pub forward: bool
+}
+
+impl PathBoundBodyState {
+	pub fn direction_sign(&self) -> Int {
+		match self.forward {true => 1, false => -1}
+	}
 }
 
 /*
@@ -417,7 +484,7 @@ pub struct PathBoundBodyState {
                     "path_ref": 0,
 					"pos": {
 						"latest_point": 0,
-                    	"ratio_from_latest_point": 0.5
+                    	"t": 0.5
 					},
                     "velocity": 0.1,
                     "forward": true

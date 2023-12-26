@@ -81,7 +81,7 @@ mod prelude {
 	// Misc
 	pub use crate::{
 		world::{StaticData, WorldSave, WorldSend},
-		map::{Map, path::{Path, PathSet, PathBoundBodyState, PathPosition, BCurve}, chunk::{Chunk, ChunkRef, RegularElevationMesh, Gen}},
+		map::{Map, path::{Path, PathSet, PathBoundBodyState, PathPosition, BCurve, BCurveSample, BCURVE_LENGTH_ESTIMATION_SEGMENTS}, chunk::{Chunk, ChunkRef, RegularElevationMesh, Gen}},
 		vehicle::{VehicleStatic, VehicleSave, VehicleSend, Wheel, WheelStatic, BodyStateSerialize, BodyForces},
 		renet_server::{Request, Response},
 		GenericError,
@@ -152,6 +152,17 @@ mod prelude {
 	// Round float towards -inf
 	pub fn round_float_towards_neg_inf(n: Float) -> Int {
 		n.floor() as Int
+	}
+	pub fn mod_or_clamp(n: Int, max: UInt, loop_: bool) -> (Int, bool) {// With help from ChatGPT
+		// If loop_: modulus on `n` / `max`, else: clamps to range [0, max]
+		// Returns: whether looped or clamped
+		if loop_ {
+			let result = n.rem_euclid(max as Int);
+			(result, result != n)
+		} else {
+			let clamped = n.max(0).min(max as Int) as UInt;
+			(clamped as Int, n != clamped as Int)
+		}
 	}
 	// Copied from extras
 	pub fn to_string_err<T, E: Error>(result: Result<T, E>) -> Result<T, String> {
