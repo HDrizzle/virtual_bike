@@ -5,7 +5,7 @@ This will use bezier splines (wiki: https://en.wikipedia.org/wiki/Composite_B%C3
 Technically there are two tangent points for each knot point on a spline, but the tangent points are mirrored so only 1 per knot point is needed
 */
 
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, f32::consts::PI};
 use nalgebra::UnitQuaternion;
 use serde::{Serialize, Deserialize};
 #[cfg(feature = "frontend")]
@@ -164,7 +164,10 @@ impl Path {
 	pub fn create_body_state(&self, path_body_state: PathBoundBodyState) -> BodyStateSerialize {
 		assert_eq!(path_body_state.path_ref, self.ref_);
 		let bcurve: BCurve = self.get_bcurve(path_body_state.pos.latest_point);
-		let sample: BCurveSample = bcurve.sample(path_body_state.pos.t);
+		let mut sample: BCurveSample = bcurve.sample(path_body_state.pos.t);
+		if !path_body_state.forward {// If backwards, reverse orientation
+			sample.pos.rotation *= UnitQuaternion::from_axis_angle(&V3::y_axis(), PI);// TODO: bank angle
+		}
 		// Linvel vector
 		let lin_vel: V3 = sample.pos.rotation.transform_vector(&V3::new(0.0, 0.0, path_body_state.velocity));
 		// Done
@@ -227,9 +230,9 @@ impl Path {
 					},
 					_ => panic!("BCurve step position change left over != 0, however the new t-value is not 0 or 1")
 				};
-				dbg!((new_index_raw, updated_t));
+				//dbg!((new_index_raw, updated_t));
 				let (new_bcurve_index, looped_this_time) = mod_or_clamp(new_index_raw, (self.knot_points.len() - 0) as UInt, loop_);
-				dbg!((new_bcurve_index, looped_this_time));
+				//dbg!((new_bcurve_index, looped_this_time));
 				bcurve_index = new_bcurve_index as usize;
 				looped = looped || looped_this_time;
 				if looped && !loop_ {

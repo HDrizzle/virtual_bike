@@ -12,11 +12,11 @@
 				"path_bound_opt": {
                     "path_ref": 0,
 					"pos": {
-						"latest_point": 10,
+						"latest_point": 0,
                     	"t": 0.0
 					},
-                    "velocity": 10,
-                    "forward": true
+                    "velocity": 20,
+                    "forward": false
                 }
 			}
 		},

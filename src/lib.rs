@@ -116,7 +116,7 @@ mod prelude {
 	}
 	pub fn v3_dist(v0: V3, v1: V3) -> Float {
 		let diff = v1 - v0;
-		(diff[0].powi(2) + diff[1].powi(1) + diff[2].powi(2)).powf(0.5)
+		(diff[0].powi(2) + diff[1].powi(2) + diff[2].powi(2)).powf(0.5)
 	}
 	// Convert between 2D and 3D, important to note that the Y-value in 2D corresponds to the Z-value in 3D
 	pub fn v3_to_v2(v: V3) -> V2 {
