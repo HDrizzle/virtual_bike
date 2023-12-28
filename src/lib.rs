@@ -55,8 +55,6 @@ mod physics;
 pub mod resource_interface;
 #[cfg(feature = "frontend")]
 pub mod client;
-#[cfg(feature = "web_server")]
-pub mod web_server;
 pub mod renet_server;
 
 // Tests
@@ -453,21 +451,6 @@ pub fn ui_main() {
 	}
 	else {
 		match &args[1][..] {
-			"-web-server" => {
-				#[cfg(feature = "web_server")]
-				{
-					println!("WARNING: THE WEB INTERFACE IS KEPT ONLY FOR TESTING PURPOSES AND MAY NOT WORK ANYMORE");
-					assert!(args.len() >= 3, "Not enough arguments");
-					// Start WorldServer
-					let mut server = web_server::WorldServer::init(&args[2]);
-					println!("Running world");
-					server.main_loop();
-				}
-				#[cfg(not(feature = "web_server"))]
-				{
-					println!("The web server will only work if the \"web_server\" feature is enabled");
-				}
-			},
 			"-server" => {
 				assert!(args.len() >= 3, "Not enough arguments");
 				// Start server with renet

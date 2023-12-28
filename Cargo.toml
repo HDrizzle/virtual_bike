@@ -6,12 +6,11 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["path_rendering", "debug_vehicle_input", "debug_render_physics"]#, "client_default_signin", "backend", "frontend", "debug_camera_control", "experimental_terrain_gen"]
+default = ["path_rendering", "debug_vehicle_input", "debug_render_physics"]#, "backend", "frontend", "client_default_signin", "debug_camera_control", "experimental_terrain_gen"]
 
 backend = ["reqwest", "rapier3d", "easy-gltf"]
 frontend = ["serialport", "bevy", "bevy-inspector-egui", "bevy_renet", "image", "eframe"]
 
-web_server = ["backend", "hyper", "futures"]
 debug_render_physics = ["rapier3d", "bevy_rapier3d", "bevy-inspector-egui-rapier"]
 debug_camera_control = []
 experimental_terrain_gen = []
@@ -67,7 +66,3 @@ bevy-inspector-egui-rapier = {version = "0.9.0", features = ["rapier3d"], option
 bevy_renet = {version = "0.0.10", optional = true}# bevy compatibility table: https://crates.io/crates/bevy_renet
 image = {version = "^0.24", optional = true}
 eframe = {version = "0.23.0", optional = true}
-
-# web server
-hyper = {version = "0.12", optional = true}#hyper = {version = "0.14.27", features = ["server"]}# use older version so I can copy code from evolution_model
-futures = {version = "0.3.28", optional = true}

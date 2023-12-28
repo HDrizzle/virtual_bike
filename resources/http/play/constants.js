@@ -1,1 +1,0 @@
-UPDATER_MAX_FREQ = 60;
