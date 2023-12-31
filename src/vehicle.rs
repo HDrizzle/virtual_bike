@@ -221,7 +221,7 @@ impl VehicleSend {
 		rot = rot.mul_quat(rot_offset);
 		new_trans.translation = nalgebra_vec3_to_bevy_vec3(&p.translation.vector);
 		// 2nd POV
-		new_trans.translation = new_trans.translation + rot.mul_vec3(Vec3{x: 0.0, y: 0.0, z: 20.0});
+		new_trans.translation = new_trans.translation + rot.mul_vec3(Vec3{x: 0.0, y: 0.0, z: 30.0});
 		new_trans.rotation = rot;
 		*transform = new_trans;
 		/* *transform = Transform {

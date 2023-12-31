@@ -16,21 +16,19 @@ pub mod chunk;
 pub mod path;
 #[cfg(feature = "backend")]
 pub mod gis;
+#[cfg(feature = "backend")]
+pub mod map_generator;
 
 // Rapier 3D physics
 #[cfg(any(feature = "backend", feature = "debug_render_physics"))]
 use rapier3d::prelude::*;
-
-//#[cfg(feature = "backend")]
-
-//use nalgebra::{Isometry3, Point3, Point2, Vector3, Vector2, vector, point};
 
 // Structs
 #[derive(Serialize, Deserialize, Clone)]
 #[cfg_attr(feature = "frontend", derive(Resource))]
 pub struct Map {
 	pub name: String,
-	pub gen: Gen,
+	pub gen: dyn MapGenerator,
 	#[serde(skip)]
 	pub loaded_chunks: Vec<Chunk>,
 	pub path_set: PathSet,
@@ -40,12 +38,11 @@ pub struct Map {
 	pub background_color: [u8; 3],
 	pub auto_gen_chunks: bool,
 	#[serde(skip)]
-	#[cfg(any(feature = "backend", feature = "debug_render_physics"))] pub body_handle_opt: Option<RigidBodyHandle>,
-	pub real_world_location: Option<[Float; 2]>
+	#[cfg(any(feature = "backend", feature = "debug_render_physics"))] pub body_handle_opt: Option<RigidBodyHandle>
 }
 
 impl Map {
-	pub fn new(name: &str, chunk_size: UInt, chunk_grid_size: UInt, gen: Gen, background_color: [u8; 3]) -> Self {
+	pub fn new(name: &str, chunk_size: UInt, chunk_grid_size: UInt, gen: dyn MapGenerator, background_color: [u8; 3]) -> Self {
 		Self {
 			name: name.to_owned(),
 			gen,
@@ -56,8 +53,7 @@ impl Map {
 			landmarks: HashMap::<String, V2>::new(),
 			background_color,
 			auto_gen_chunks: true,
-			#[cfg(any(feature = "backend", feature = "debug_render_physics"))] body_handle_opt: None,
-			real_world_location: None
+			#[cfg(any(feature = "backend", feature = "debug_render_physics"))] body_handle_opt: None
 		}
 	}
 	#[cfg(any(feature = "backend", feature = "debug_render_physics"))]

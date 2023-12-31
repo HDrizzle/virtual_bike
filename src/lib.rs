@@ -79,7 +79,7 @@ mod prelude {
 	// Misc
 	pub use crate::{
 		world::{StaticData, WorldSave, WorldSend},
-		map::{Map, path::{Path, PathSet, PathBoundBodyState, PathPosition, BCurve, BCurveSample, BCURVE_LENGTH_ESTIMATION_SEGMENTS}, chunk::{Chunk, ChunkRef, RegularElevationMesh, Gen}},
+		map::{Map, path::{Path, PathSet, PathBoundBodyState, PathPosition, BCurve, BCurveSample, BCURVE_LENGTH_ESTIMATION_SEGMENTS}, chunk::{Chunk, ChunkRef, RegularElevationMesh}},
 		vehicle::{VehicleStatic, VehicleSave, VehicleSend, Wheel, WheelStatic, BodyStateSerialize, BodyForces},
 		renet_server::{Request, Response},
 		GenericError,
@@ -94,7 +94,8 @@ mod prelude {
 	#[cfg(feature = "backend")] pub use crate::{
 		physics::{PhysicsController, PhysicsUpdateArgs, BodyAveragableState, defaut_extra_forces_calculator},
 		vehicle::Vehicle,
-		world::{World, PhysicsState}
+		world::{World, PhysicsState},
+		map::map_generator::MapGenerator
 	};
 	#[cfg(any(feature = "backend", feature = "debug_render_physics"))] pub use crate::RapierBodyCreationDeletionContext;
 	// Utility functions because nalgebra is friggin complicated
@@ -462,7 +463,7 @@ pub fn ui_main() {
 				let name = prompt("Name");
 				let chunk_size = prompt("Chunk size").parse::<UInt>().unwrap();
 				let chunk_grid_size = prompt("Number of points along each side of chunk (chunk size)").parse::<UInt>().unwrap();
-				let gen = Gen::default();
+				let gen = MapGenerator::default();
 				// name: &str, chunk_size: UInt, chunk_grid_size: UInt, gen: gen::Gen, background_color: [u8; 3]
 				resource_interface::save_map(&Map::new(&name, chunk_size, chunk_grid_size, gen, [0, 128, 0])).unwrap();
 			},
