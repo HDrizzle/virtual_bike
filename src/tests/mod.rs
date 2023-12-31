@@ -5,6 +5,7 @@ use crate::prelude::*;
 const EPSILON: Float = 1.0e-4;// Arbitrary
 
 pub mod gen {
+	use crate::map::map_generator;
 	use super::*;
 	fn test_points() -> HashMap<IntP2, Float> {
 		let mut points = HashMap::<IntP2, Float>::new();
@@ -42,33 +43,33 @@ pub mod gen {
 	#[test]
 	fn avg_adj_value() {
 		let points = test_points();
-		assert_eq!(Gen::avg_adj_elev(IntP2(3, 0), &points), Some(4.5));
-		assert_eq!(Gen::avg_adj_elev(IntP2(1, 1), &points), Some(9.0 / 4.0));
-		assert_eq!(Gen::avg_adj_elev(IntP2(2, 1), &points), Some(14.0 / 3.0));
-		assert_eq!(Gen::avg_adj_elev(IntP2(-2, 0), &points), Some(2.0));
-		assert_eq!(Gen::avg_adj_elev(IntP2(1, -2), &points), Some(6.0 / 4.0));
-		assert_eq!(Gen::avg_adj_elev(IntP2(2, 2), &points), None);
+		assert_eq!(map_generator::avg_adj_elev(IntP2(3, 0), &points), Some(4.5));
+		assert_eq!(map_generator::avg_adj_elev(IntP2(1, 1), &points), Some(9.0 / 4.0));
+		assert_eq!(map_generator::avg_adj_elev(IntP2(2, 1), &points), Some(14.0 / 3.0));
+		assert_eq!(map_generator::avg_adj_elev(IntP2(-2, 0), &points), Some(2.0));
+		assert_eq!(map_generator::avg_adj_elev(IntP2(1, -2), &points), Some(6.0 / 4.0));
+		assert_eq!(map_generator::avg_adj_elev(IntP2(2, 2), &points), None);
 	}
 	#[test]
 	fn adj_slope() {
 		let points = test_points();
-		assert_eq!(Gen::slope_towards_point(IntP2(2, 1), EightWayDir::S, 1.0, &points), Some(7.0));
-		assert_eq!(Gen::slope_towards_point(IntP2(2, 1), EightWayDir::W, 1.0, &points), None);
-		assert_eq!(Gen::slope_towards_point(IntP2(1, 1), EightWayDir::S, 1.0, &points), Some(0.0));
-		assert_eq!(Gen::slope_towards_point(IntP2(1, 1), EightWayDir::W, 1.0, &points), Some(-6.0));
-		assert_eq!(Gen::slope_towards_point(IntP2(2, -2), EightWayDir::NE, 1.0, &points), None);
+		assert_eq!(map_generator::slope_towards_point(IntP2(2, 1), EightWayDir::S, 1.0, &points), Some(7.0));
+		assert_eq!(map_generator::slope_towards_point(IntP2(2, 1), EightWayDir::W, 1.0, &points), None);
+		assert_eq!(map_generator::slope_towards_point(IntP2(1, 1), EightWayDir::S, 1.0, &points), Some(0.0));
+		assert_eq!(map_generator::slope_towards_point(IntP2(1, 1), EightWayDir::W, 1.0, &points), Some(-6.0));
+		assert_eq!(map_generator::slope_towards_point(IntP2(2, -2), EightWayDir::NE, 1.0, &points), None);
 	}
 	#[test]
 	fn avg_adj_slope() {
 		let points = test_points();
-		assert_eq!(Gen::avg_slope_towards_point(IntP2(2, 1), 1.0, &points), Some(3.5));
-		assert_eq!(Gen::avg_slope_towards_point(IntP2(1, 1), 1.0, &points), Some(-2.0));
-		assert_eq!(Gen::avg_slope_towards_point(IntP2(3, 1), 1.0, &points), Some(7.0 * (2.0 as Float).sqrt()));
-		assert_eq!(Gen::avg_slope_towards_point(IntP2(2, -2), 1.0, &points), Some((-7.0 + (2.0 as Float).sqrt()) / 2.0));
+		assert_eq!(map_generator::avg_slope_towards_point(IntP2(2, 1), 1.0, &points), Some(3.5));
+		assert_eq!(map_generator::avg_slope_towards_point(IntP2(1, 1), 1.0, &points), Some(-2.0));
+		assert_eq!(map_generator::avg_slope_towards_point(IntP2(3, 1), 1.0, &points), Some(7.0 * (2.0 as Float).sqrt()));
+		assert_eq!(map_generator::avg_slope_towards_point(IntP2(2, -2), 1.0, &points), Some((-7.0 + (2.0 as Float).sqrt()) / 2.0));
 	}
 	#[test]
 	fn points_from_adj_meshes_basic_two_sides_1x1() {
-		let gen = Gen::default();
+		let gen = map_generator::Random::default();
 		let adj_meshes = [
 			Some(Rc::new(RegularElevationMesh {// E
 				precision: 100.0,
@@ -88,11 +89,11 @@ pub mod gen {
 			None// S
 		];
 		// Get edge points
-		//let points = Gen::get_edge_points_from_adj_meshes(1, 1, &adj_meshes);
+		//let points = map_generator::get_edge_points_from_adj_meshes(1, 1, &adj_meshes);
 		// Compare
 		//dbg!(points);
 		// Create mesh
-		let new_mesh = gen.create_mesh(100, 1, adj_meshes);
+		let new_mesh = gen.create_mesh(MeshCreationArgs{chunk_ref: &ChunkRef::origin(), size: 100, grid_size: 1, adj_meshes});
 		let new_mesh_ideal = RegularElevationMesh {
 			precision: 100.0,
 			grid: vec![
@@ -106,7 +107,7 @@ pub mod gen {
 	#[test]
 	fn points_from_adj_meshes_all_sides_2x2() {
 		let precision: Float = 50.0;
-		let gen = Gen {
+		let gen = map_generator::Random {
 			seed: 1,
 			max_slope: 10.0,
 			rand_multiplier: 0.0,// Very important to have no randomness for testing
@@ -149,11 +150,11 @@ pub mod gen {
 			}))
 		];
 		// Get edge points
-		//let points = Gen::get_edge_points_from_adj_meshes(1, 1, &adj_meshes);
+		//let points = map_generator::get_edge_points_from_adj_meshes(1, 1, &adj_meshes);
 		// Compare
 		//dbg!(points);
 		// Create mesh
-		let new_mesh = gen.create_mesh(100, 2, adj_meshes);
+		let new_mesh = gen.create_mesh(MeshCreationArgs{chunk_ref: &ChunkRef::origin(), size: 100, grid_size: 2, adj_meshes});
 		let new_mesh_ideal = RegularElevationMesh {
 			precision,
 			grid: vec![
@@ -170,7 +171,7 @@ pub mod gen {
 		// Creates a 2D terrain profile, should look similar to the 1st graph in https://docs.google.com/spreadsheets/d/1gIgTebsoACTb5TGMsN60j4T3h5qrU9yni2nVF5K2rr4/edit#gid=0
 		// All points will be along X-Axis
 		// Initial state
-		let gen = Gen::default();
+		let gen = map_generator::default();
 		let mut points = HashMap::<IntP2, Float>::new();
 		points.insert(IntP2(-2, 0), 0.0);
 		points.insert(IntP2(-1, 0), 0.0);
@@ -190,7 +191,7 @@ pub mod gen {
 	}*/
 }
 
-#[cfg(feature = "backend")]
+#[cfg(feature = "server")]
 pub mod gis {
 	// For crate::map::real_world_gen
 	use super::*;

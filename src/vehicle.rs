@@ -6,19 +6,19 @@ when path-bound it will be controlled by the specific Path it is bound to. it's 
 
 use std::{error::Error, rc::Rc, ops::AddAssign};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
-#[cfg(feature = "frontend")]
+#[cfg(feature = "client")]
 use bevy::{prelude::*, ecs::component::Component};
 use nalgebra::{vector, point, UnitQuaternion};
-#[cfg(feature = "backend")]
+#[cfg(feature = "server")]
 use easy_gltf;
 
 // Rapier 3D physics
-#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
+#[cfg(any(feature = "server", feature = "debug_render_physics"))]
 use rapier3d::{prelude::*, math::Real};
 //use nalgebra::{Isometry3, Vector3, vector, Point3, point, geometry::Quaternion, UnitQuaternion, Const};
 
 use crate::{prelude::*, map::path::PathBoundBodyState};
-#[cfg(feature = "backend")]
+#[cfg(feature = "server")]
 use crate::physics::PhysicsController;
 
 const STATIONARY_DRIVE_ACC_LIMIT: Float = 10.0;// m/s^2
@@ -35,7 +35,7 @@ pub struct WheelStatic {
 }
 
 impl WheelStatic {
-	#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
+	#[cfg(any(feature = "server", feature = "debug_render_physics"))]
 	pub fn build_rapier_collider(&self) -> Collider {
 		ColliderBuilder::cylinder((self.width / 2.0) as Real, (self.dia / 2.0) as Real)
 			.restitution(0.9)
@@ -50,19 +50,19 @@ impl WheelStatic {
 	}
 }
 
-#[cfg(feature = "backend")]
+#[cfg(feature = "server")]
 type WheelSteering = Option<(RigidBodyHandle, ImpulseJointHandle)>;
 
 #[derive(Clone)]
 #[cfg_attr(feature = "frontend", derive(Component))]
 pub struct Wheel {
 	static_: WheelStatic,
-	#[cfg(feature = "backend")] body_handle: RigidBodyHandle,
-	#[cfg(feature = "backend")] collider_handle: ColliderHandle,
-	#[cfg(feature = "backend")] steering: WheelSteering// None if not static_.steering or built in client
+	#[cfg(feature = "server")] body_handle: RigidBodyHandle,
+	#[cfg(feature = "server")] collider_handle: ColliderHandle,
+	#[cfg(feature = "server")] steering: WheelSteering// None if not static_.steering or built in client
 }
 
-#[cfg(feature = "backend")]
+#[cfg(feature = "server")]
 impl Wheel {
 	pub fn build(static_: &WheelStatic, bodies: &mut RigidBodySet, colliders: &mut ColliderSet, joints: &mut ImpulseJointSet, v_body_handle: RigidBodyHandle) -> Self {
 		// Get vehicle position
@@ -76,7 +76,7 @@ impl Wheel {
 		let collider = static_.build_rapier_collider();
 		let collider_handle = colliders.insert_with_parent(collider, body_handle, bodies);
 		// Steering with joints: https://docs.rs/rapier3d/0.17.2/rapier3d/dynamics/struct.RevoluteJointBuilder.html
-		#[cfg(feature = "backend")]
+		#[cfg(feature = "server")]
 		let steering = {
 			let (wheel_anchor_handle, wheel_position_wrt_anchor, steering): (RigidBodyHandle, Iso, WheelSteering) = match static_.steering {// The body that the wheel's "axle" will be attached to, either the vehicle itself or an intermediate body if it steers
 				true => {
@@ -111,7 +111,7 @@ impl Wheel {
 			joints.insert(wheel_anchor_handle, body_handle, joint, true);
 			steering
 		};
-		#[cfg(not(feature = "backend"))]
+		#[cfg(feature = "client")]
 		let steering = None;
 		// Done
 		let out = Self {
@@ -154,7 +154,7 @@ pub struct VehicleStatic {// This is loaded from the resources and is identified
 	pub wheels: Vec<WheelStatic>
 }
 
-#[cfg(feature = "backend")]
+#[cfg(feature = "server")]
 impl VehicleStatic {
 	pub fn build_rapier_collider(&self) -> Collider {
 		let scenes = easy_gltf::load(&(resource_interface::VEHICLES_DIR.to_owned() + &self.name + "/model.glb")).expect("Unable to load gltf for static vehicle model file");
@@ -209,7 +209,7 @@ pub struct VehicleSend {// This is sent over the network to the client
 }
 
 impl VehicleSend {
-	#[cfg(feature = "frontend")]
+	#[cfg(feature = "client")]
     pub fn update_bevy_camera_transform(&self, transform: &mut Transform) {
 		let p: &Iso = &self.body_state.position;
         //*transform = Transform::from_xyz(50.0, 10.0, 50.0).looking_at(Vec3{x: v.0 as Float, y: v.1 as Float, z: v.2 as Float}, Vec3::Y);
@@ -240,7 +240,7 @@ impl VehicleSend {
 	}*/
 }
 
-#[cfg(feature = "backend")]//#[cfg_attr(feature = "frontend", derive(Component))]
+#[cfg(feature = "server")]//#[cfg_attr(feature = "frontend", derive(Component))]
 pub struct Vehicle {// This is used for physics
 	pub static_: Rc<VehicleStatic>,
 	latest_forces: Option<BodyForces>,
@@ -249,7 +249,7 @@ pub struct Vehicle {// This is used for physics
 	physics_controller: Box<dyn PhysicsController>
 }
 
-#[cfg(feature = "backend")]
+#[cfg(feature = "server")]
 impl Vehicle {
 	pub fn build(
 		save: &VehicleSave,
@@ -323,11 +323,11 @@ pub struct BodyStateSerialize {// This is saved/sent over the network to the cli
 }
 
 impl BodyStateSerialize {
-	#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
+	#[cfg(any(feature = "server", feature = "debug_render_physics"))]
 	pub fn init_rapier_body(&self, body: &mut RigidBody) {
 		body.set_position(self.position, true);// TODO: velocity
 	}
-	#[cfg(feature = "backend")]
+	#[cfg(feature = "server")]
 	pub fn from_rapier_body(body: &RigidBody, path_bound_opt: Option<PathBoundBodyState>) -> Self {
 		Self {
 			position: *body.position(),
@@ -335,7 +335,7 @@ impl BodyStateSerialize {
 			path_bound_opt
 		}
 	}
-	#[cfg(feature = "backend")]
+	#[cfg(feature = "server")]
 	pub fn build_physics_controller(
 		&self,
 		bodies: &mut RigidBodySet,
@@ -355,7 +355,7 @@ impl BodyStateSerialize {
 	}
 }
 
-#[cfg(feature = "backend")]
+#[cfg(feature = "server")]
 pub struct VehicleRapierController {
 	body_handle: RigidBodyHandle,
 	collider_handle: ColliderHandle,
@@ -363,7 +363,7 @@ pub struct VehicleRapierController {
 	v_static: Rc<VehicleStatic>
 }
 
-#[cfg(feature = "backend")]
+#[cfg(feature = "server")]
 impl VehicleRapierController {
 	pub fn build (
 		body_state: &BodyStateSerialize,
@@ -398,7 +398,7 @@ impl VehicleRapierController {
 	}
 }
 
-#[cfg(feature = "backend")]
+#[cfg(feature = "server")]
 impl PhysicsController for VehicleRapierController {
 	fn serializable(&self, bodies: &RigidBodySet, paths: &PathSet) -> BodyStateSerialize {
 		let body: &RigidBody = bodies.get(self.body_handle).expect("Unable to get body with BodyPhysicsController::RegularPhysics.body_handle");
@@ -436,13 +436,13 @@ impl PhysicsController for VehicleRapierController {
 	}
 }
 
-#[cfg(feature = "backend")]
+#[cfg(feature = "server")]
 pub struct VehiclePathBoundController {
 	state: PathBoundBodyState,
 	v_static: Rc<VehicleStatic>
 }
 
-#[cfg(feature = "backend")]
+#[cfg(feature = "server")]
 impl VehiclePathBoundController {
 	pub fn build (
 		state: PathBoundBodyState,
@@ -455,7 +455,7 @@ impl VehiclePathBoundController {
 	}
 }
 
-#[cfg(feature = "backend")]
+#[cfg(feature = "server")]
 impl PhysicsController for VehiclePathBoundController{
 	fn serializable(&self, _: &RigidBodySet, paths: &PathSet) -> BodyStateSerialize {
 		let path: &Path = paths.get_with_ref(&self.state.path_ref).expect("Unable to get path with path body state");

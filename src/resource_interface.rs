@@ -5,7 +5,7 @@ use std::io::Error as IoError;
 use serde_json;
 
 use crate::prelude::*;
-#[cfg(feature = "frontend")]
+#[cfg(feature = "client")]
 use crate::client::hardware_controller::Calibration;
 
 // STATICS
@@ -56,7 +56,7 @@ pub fn load_static_vehicle(name: &str) -> Result<VehicleStatic, Box<dyn Error>> 
 	Ok(vehicle)
 }
 
-#[cfg(feature = "backend")]
+#[cfg(feature = "server")]
 pub fn find_chunk(chunk_ref: &ChunkRef, map_name: &str) -> Result<String, Box<dyn Error>> {
 	// Tries everything to find path to chunk dir
 	// 1. Test if it exists as a normal chunk
@@ -71,7 +71,7 @@ pub fn find_chunk(chunk_ref: &ChunkRef, map_name: &str) -> Result<String, Box<dy
 	Err(Box::new(GenericError::new(format!("Could not find regular or generic chunk for: {:?}", chunk_ref))))
 }
 
-#[cfg(feature = "backend")]
+#[cfg(feature = "server")]
 pub fn does_generic_chunk_exist(map_name: &str) -> Option<String> {
 	// Tests if map has generic chunk, if so returns path to it
 	let path = ChunkRef{position: IntP2(0, 0)}.resource_path(map_name, true);
@@ -83,7 +83,7 @@ pub fn does_generic_chunk_exist(map_name: &str) -> Option<String> {
 	}
 }
 
-#[cfg(feature = "backend")]
+#[cfg(feature = "server")]
 pub fn does_non_generic_chunk_exist(chunk_ref: &ChunkRef, map_name: &str) -> Option<String> {
 	// Explicitly uses path for non-generic chunk, even if `chunk_ref.generic` is `true`
 	let path = chunk_ref.resource_path(map_name, false);
@@ -95,14 +95,14 @@ pub fn does_non_generic_chunk_exist(chunk_ref: &ChunkRef, map_name: &str) -> Opt
 	}
 }
 
-#[cfg(feature = "backend")]
+#[cfg(feature = "server")]
 pub fn load_chunk_texture(chunk_ref: &ChunkRef, map_name: &str) -> Result<Vec<u8>, Box<dyn Error>> {
 	let path: String = find_chunk(chunk_ref, map_name)?;
 	let data: Vec<u8> = fs::read(path + "texture.png")?;
 	Ok(data)
 }
 
-#[cfg(feature = "backend")]
+#[cfg(feature = "server")]
 pub fn load_chunk_data(chunk_ref: &ChunkRef, map_name: &str) -> Result<Chunk, Box<dyn Error>> {
 	let path: String = find_chunk(chunk_ref, map_name)?;
 	let raw_string: String = load_file_with_better_error(&(path + "data.json"))?;
@@ -136,7 +136,7 @@ pub fn load_world(name: &str) -> Result<WorldSave, Box<dyn Error>> {
 	Ok(world)
 }
 
-#[cfg(feature = "frontend")]
+#[cfg(feature = "client")]
 pub fn load_hardware_calibration() -> Result<Calibration, Box<dyn Error>> {
 	let raw_string: String = load_file_with_better_error(CALIBRATION_FILE)?;
 	let cal: Calibration = serde_json::from_str(&raw_string)?;
@@ -155,7 +155,7 @@ pub fn save_map(map: &Map) -> Result<(), Box<dyn Error>> {
 	Ok(())
 }
 
-#[cfg(feature = "backend")]
+#[cfg(feature = "server")]
 pub fn save_chunk_data(chunk: &Chunk, map_name: &str) -> Result<(), Box<dyn Error>> {
 	if does_generic_chunk_exist(map_name).is_some() {
 		return Err(Box::new(GenericError::new("Attempt to save chunk to map which has a generic chunk".to_owned())));

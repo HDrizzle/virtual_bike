@@ -1,21 +1,17 @@
 {
-    "name": "real_terrain",
-    "gen": {
-        "seed": 1,
-        "max_slope": 10,
-        "rand_multiplier": 0,
-        "first_sum_multiplier": 0,
-        "second_sum_multiplier": 0,
-        "elev_abs_limit": 20
-    },
-    "path_set": {
-        "paths": {},
-        "query_grid_scale": 0
-    },
-    "chunk_size": 1000,
-    "chunk_grid_size": 5,
-    "landmarks": {},
-    "background_color": [0, 128, 0],
-    "auto_gen_chunks": false,
-    "real_world_location": [9.666532, 46.585244]
+	"name": "real_terrain",
+	"gen": {
+		"RealTerrainGen": {
+			"location": [9.666532, 46.585244]
+		}
+	},
+	"path_set": {
+		"paths": {},
+		"query_grid_scale": 0
+	},
+	"chunk_size": 1000,
+	"chunk_grid_size": 5,
+	"landmarks": {},
+	"background_color": [0, 128, 0],
+	"auto_gen_chunks": false
 }

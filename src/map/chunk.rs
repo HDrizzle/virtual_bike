@@ -2,15 +2,15 @@
 
 use std::{rc::Rc, error::Error, collections::HashMap};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
-#[cfg(feature = "frontend")]
+#[cfg(feature = "client")]
 use bevy::prelude::*;
 // Rapier 3D physics
-#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
+#[cfg(any(feature = "server", feature = "debug_render_physics"))]
 use rapier3d::prelude::*;
 
 use crate::{prelude::*, resource_interface};
 
-#[cfg(feature = "backend")]
+#[cfg(feature = "server")]
 use super::gis;
 
 // Structs
@@ -21,7 +21,7 @@ pub struct RegularElevationMesh {// This stores the map topography data in a gri
 }
 
 impl RegularElevationMesh {
-	#[cfg(feature = "backend")]
+	/*#[cfg(feature = "server")]
 	pub fn new(size: UInt, grid_size: UInt, gen: &MapGenerator, position: &ChunkRef, map_name: &str) -> Self {
 		// TODO: Use gen::Gen instead
 		// grid_size is spaces inside grid, so coord matrix will be (grid_size + 1)^2
@@ -88,7 +88,7 @@ impl RegularElevationMesh {
 		}
 		// Done
 		gen.create_mesh(size, grid_size, adj_chunks)
-	}
+	}*/
 	pub fn build_trimesh(&self, offset: &V3) -> BasicTriMesh {
 		// Build vertices, returns (Flattened vec of vertices, Vec of 3-arrays of indices for vertices in the vertices vec which make up each triangle)
 		let mut vertices = Vec::<P3>::new();
@@ -161,7 +161,7 @@ impl RegularElevationMesh {
 			indices
 		}
 	}
-	#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
+	#[cfg(any(feature = "server", feature = "debug_render_physics"))]
 	pub fn rapier_collider(&self, offset: &V3) -> Collider {
 		// https://docs.rs/rapier3d/0.17.2/rapier3d/geometry/struct.ColliderBuilder.html#method.trimesh
 		let mesh = self.build_trimesh(offset);
@@ -182,33 +182,9 @@ impl RegularElevationMesh {
 		}
 		out
 	}
-	#[cfg(feature = "frontend")]
+	#[cfg(feature = "client")]
 	pub fn bevy_mesh(&self, size: u64, offset: &V3) -> Mesh {// With help from: https://stackoverflow.com/questions/66677098/how-can-i-manually-create-meshes-in-bevy-with-vertices
 		// If BasicTriMesh::build_bevy_mesh() works, this whole thing can be deleted
-		/*let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
-		let tri_mesh = self.build_trimesh(offset);
-
-		// Positions of the vertices
-		// See https://bevy-cheatbook.github.io/features/coords.html
-		let mut vertex_arrays = Vec::<[f32; 3]>::new();
-		for v in &tri_mesh.vertices {
-			vertex_arrays.push([v[0], v[1], v[2]]);
-		}
-		mesh.insert_attribute(
-			Mesh::ATTRIBUTE_POSITION,
-			vertex_arrays,
-		);
-
-		// In this example, normals and UVs don't matter,
-		// so we just use the same value for all of them
-		mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0., 1., 0.]; tri_mesh.vertices.len()]);
-		//mesh.compute_flat_normals();// https://docs.rs/bevy/latest/bevy/render/mesh/struct.Mesh.html#method.compute_flat_normals
-		//mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, vec![[0., 0.]; 3]);
-		mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, self.build_uv_coords(size, &tri_mesh.vertices, offset));
-
-		// A triangle using vertices 0, 2, and 1.
-		// Note: order matters. [0, 1, 2] will be flipped upside down, and you won't see it from behind!
-		mesh.set_indices(Some(Indices::U32(self.flatten_and_reverse_indices(&tri_mesh.indices))));*/
 		let tri_mesh = self.build_trimesh(offset);
 		let mut mesh = tri_mesh.build_bevy_mesh();
 		mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, self.build_uv_coords(size, &tri_mesh.vertices, offset));
@@ -219,7 +195,7 @@ impl RegularElevationMesh {
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Eq, Hash)]
-#[cfg_attr(feature = "frontend", derive(Component))]
+#[cfg_attr(feature = "client", derive(Component))]
 pub struct ChunkRef {// A deterministic reference to a chunk in the world
 	pub position: IntP2
 }
@@ -266,24 +242,51 @@ impl ChunkRef {
 		}
 		out
 	}
-	#[cfg(feature = "backend")]
+	#[cfg(feature = "server")]
 	pub fn exists(&self, map_name: &str) -> bool {
 		resource_interface::find_chunk(&self, map_name).is_ok()
 	}
-	#[cfg(feature = "backend")]
+	#[cfg(feature = "server")]
 	pub fn resource_path(&self, map_name: &str, generic: bool) -> String {
 		match generic {
 			true  => format!("{}{}/generic_chunk/", resource_interface::MAPS_DIR.to_owned(), map_name.to_owned()),
 			false => format!("{}{}/chunks/{}/",     resource_interface::MAPS_DIR.to_owned(), map_name.to_owned(), self.resource_dir_name())
 		}
 	}
-}
-/*
-impl fmt::Debug for ChunkRef {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "ChunkRef{{{}, {}}}", self.position[0], self.position[1])
+	#[cfg(feature = "server")]
+	pub fn get_adjacent_chunk_meshes(&self, chunk_size: UInt, map_name: &str) -> [Option<Rc<RegularElevationMesh>>; 4] {
+		println!("Checking for chunks adjacent to: {:?}", self.position);
+		let mut adj_meshes: [Option<Rc<RegularElevationMesh>>; 4] = [None, None, None, None];// Has to be expanded like this otherwise Copy will need to be implemented
+		for (i_raw, offset) in EightWayDir::iter().enumerate() {
+			let i = i_raw / 2;
+			if !offset.is_straight() {
+				continue;
+			}
+			//dbg!(i);
+			// Create chunk ref
+			let chunk_ref = ChunkRef{position: self.position + offset.unit_displacement().mult(chunk_size as Int)};
+			// Check if it exists
+			if chunk_ref.exists(map_name) {
+				//dbg!(chunk_ref.clone());
+				adj_meshes[i] = Some(Rc::new(resource_interface::load_chunk_data(&chunk_ref, map_name).unwrap().elevation));
+			}
+		}
+		// Advanced debug
+		for i in 0..adj_meshes.len() {
+			match &adj_meshes[i] {
+				Some(_) => println!("Mesh at index: {}", i),
+				None => {}
+			}
+		}
+		// Done
+		adj_meshes
 	}
-}*/
+	pub fn origin() -> Self {
+		Self {
+			position: IntP2(0, 0)
+		}
+	}
+}
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Chunk {
@@ -296,27 +299,32 @@ pub struct Chunk {
 	pub grid_size: UInt,// Number of spaces inside grid, for example if this is 4 then the elevation grid coordinates should be 5x5, because fenc-post problem
 	pub background_color: [u8; 3],
 	#[serde(skip)]
-	#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
+	#[cfg(any(feature = "server", feature = "debug_render_physics"))]
 	collider_handle: Option<ColliderHandle>,
 	#[serde(skip)]
-	#[cfg(feature = "frontend")]
+	#[cfg(feature = "client")]
 	pub asset_id_opt: Option<AssetId<Mesh>>// Can be used for `remove()`: https://docs.rs/bevy/0.11.0/bevy/asset/struct.Assets.html#method.remove
 }
 
 impl Chunk {
-	#[cfg(feature = "backend")]
+	#[cfg(feature = "server")]
 	pub fn load(ref_: &ChunkRef, map_name: &str) -> Result<Self, Box<dyn Error>> {
 		resource_interface::load_chunk_data(ref_, map_name)
 	}
-	#[cfg(feature = "backend")]
-	pub fn new(position: V3, size: u64, grid_size: u64, gen: &Gen, background_color: [u8; 3], map_name: &str, map_real_world_location: Option<[Float; 2]>) -> Self {
+	#[cfg(feature = "server")]
+	pub fn new(position: V3, size: u64, grid_size: u64, gen: &MapGenerator, background_color: [u8; 3], map_name: &str) -> Self {
 		let ref_ = ChunkRef::from_chunk_offset_position(position);
-		let elevation = match map_real_world_location {
+		let elevation = /*match map_real_world_location {
 			Some(map_location) => {
 				gis::create_mesh_from_real_world(size, grid_size, &ref_, map_location)
 			},
 			None => RegularElevationMesh::new(size, grid_size, gen, &ref_, map_name)
-		};
+		}*/gen.create_mesh(MeshCreationArgs {
+			chunk_ref: &ref_,
+			size,
+			grid_size,
+			adj_meshes: ref_.get_adjacent_chunk_meshes(size, map_name)
+		});
 		let out = Self {
 			position: position.clone(),
 			ref_: ref_.clone(),
@@ -326,7 +334,7 @@ impl Chunk {
 			grid_size,
 			background_color,
 			collider_handle: None,
-			#[cfg(feature = "frontend")] asset_id_opt: None
+			#[cfg(feature = "client")] asset_id_opt: None
 		};
 		// Save chunk
 		//println!("Creating and saving chunk at {}", out.ref_.resource_dir_name());
@@ -334,7 +342,7 @@ impl Chunk {
 		// Done
 		out
 	}
-	#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
+	#[cfg(any(feature = "server", feature = "debug_render_physics"))]
 	pub fn init_rapier(&mut self, rapier_data: &mut RapierBodyCreationDeletionContext, parent_body_handle: RigidBodyHandle) {
 		// Make sure this can only be called once
 		if let Some(_) = self.collider_handle {
@@ -344,12 +352,12 @@ impl Chunk {
 		//collider.set_position(Iso{rotation: UnitQuaternion::identity(), translation: matrix_to_opoint(self.position).into()});
 		self.collider_handle = Some(rapier_data.colliders.insert_with_parent(collider, parent_body_handle, &mut rapier_data.bodies));
 	}
-	#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
+	#[cfg(any(feature = "server", feature = "debug_render_physics"))]
 	pub fn remove_from_rapier(&mut self, rapier_data: &mut RapierBodyCreationDeletionContext) {
 		rapier_data.colliders.remove(self.collider_handle.expect("Removing collider from rapier, but self.collider_handle is None"), &mut rapier_data.islands, &mut rapier_data.bodies, false);
 		self.collider_handle = None;
 	}
-	#[cfg(feature = "frontend")]
+	#[cfg(feature = "client")]
 	pub fn bevy_pbr_bundle(&mut self, commands: &mut Commands, meshes:  &mut ResMut<Assets<Mesh>>, materials: &mut ResMut<Assets<StandardMaterial>>, asset_server: &AssetServer) {// See https://stackoverflow.com/questions/66677098/how-can-i-manually-create-meshes-in-bevy-with-vertices
 		// TODO: paths
 		// With help from https://github.com/bevyengine/bevy/blob/main/examples/3d/texture.rs
@@ -402,7 +410,7 @@ impl Chunk {
 		let dy: Float = self_pos[1] - v[1];
 		(dx.powi(2) + dy.powi(2)).sqrt()
 	}
-	#[cfg(feature = "backend")]
+	#[cfg(feature = "server")]
 	pub fn send(&self, map_name: &str) -> Self {// Makes sure that texture data is loaded
 		let mut out = self.clone();
 		// Load texture

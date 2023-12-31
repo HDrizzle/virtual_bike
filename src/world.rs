@@ -2,22 +2,22 @@
 
 use std::{thread, error::Error, sync::mpsc, rc::Rc, collections::HashMap, time::{Duration, Instant}, net::IpAddr};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
-#[cfg(feature = "frontend")]
+#[cfg(feature = "client")]
 #[cfg(feature = "debug_render_physics")]
 use bevy_rapier3d::plugin::RapierContext;
-#[cfg(feature = "frontend")]
+#[cfg(feature = "client")]
 use crate::client::cache;
-#[cfg(feature = "frontend")]
+#[cfg(feature = "client")]
 use bevy::ecs::system::Resource;
 
 // Rapier 3D physics
-#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
+#[cfg(any(feature = "server", feature = "debug_render_physics"))]
 use rapier3d::prelude::*;
 
 use crate::prelude::*;
-#[cfg(feature = "backend")]
+#[cfg(feature = "server")]
 use crate::resource_interface::*;
-/*#[cfg(feature = "frontend")]
+/*#[cfg(feature = "client")]
 #[cfg(feature = "debug_render_physics")]
 use crate::client::play::VehicleBodyHandles;*/
 
@@ -25,7 +25,7 @@ use nalgebra::vector;
 
 // Structs
 #[derive(Serialize, Deserialize, Clone)]
-#[cfg_attr(feature = "frontend", derive(Resource))]
+#[cfg_attr(feature = "client", derive(Resource))]
 pub struct StaticData {
 	pub map: Map,
 	pub static_vehicles: HashMap<String, VehicleStatic>,// Vehicle type: VehicleStatic
@@ -34,7 +34,7 @@ pub struct StaticData {
 }
 
 impl StaticData {
-	#[cfg(feature = "frontend")]
+	#[cfg(feature = "client")]
 	#[cfg(feature = "debug_render_physics")]
 	pub fn init_bevy_rapier_context(&mut self, context: &mut RapierContext) {
 		// Debug feature
@@ -42,7 +42,7 @@ impl StaticData {
 		// Map
 		self.map.init_rapier(&mut context.bodies);
 	}
-	#[cfg(feature = "frontend")]
+	#[cfg(feature = "client")]
 	pub fn vehicle_models_to_load(&self, server_addr: IpAddr) -> Vec<String> {
 		let mut out: Vec<String> = Vec::<String>::new();
 		for (_, v) in self.static_vehicles.iter() {
@@ -72,7 +72,7 @@ impl StaticData {
 }
 
 // Copied from https://rapier.rs/docs/user_guides/rust/serialization
-#[cfg(feature = "backend")]
+#[cfg(feature = "server")]
 pub struct PhysicsState {
 	pub pipeline: PhysicsPipeline,
 	pub islands: IslandManager,
@@ -90,7 +90,7 @@ pub struct PhysicsState {
 	pub event_handler: (),
 }
 
-#[cfg(feature = "backend")]
+#[cfg(feature = "server")]
 impl PhysicsState {
 	pub fn new(gravity: Float) -> Self {
 		Self {
@@ -134,7 +134,7 @@ impl PhysicsState {
 		self.colliders.insert_with_parent(collider, body_handle, &mut self.bodies)
 	}
 	#[cfg(feature = "debug_render_physics")]
-	#[cfg(feature = "backend")]
+	#[cfg(feature = "server")]
 	pub fn send(&self, vehicles: &HashMap<String, Vehicle>) -> PhysicsStateSend {// TODO: only send the states of vehicles, wheel mounts and wheels
 		let (mut bodies_v, mut colliders_v, mut impulse_joints_v): (Vec<RigidBodyHandle>, Vec<ColliderHandle>, Vec<ImpulseJointHandle>) = (Vec::new(), Vec::new(), Vec::new());
 		PhysicsStateSend {
@@ -175,7 +175,7 @@ pub struct PhysicsStateSend {// Only what is needed to init the client's rapier 
 
 #[cfg(feature = "debug_render_physics")]
 impl PhysicsStateSend {
-	#[cfg(feature = "frontend")]
+	#[cfg(feature = "client")]
 	pub fn init_bevy_rapier_context(&self, context: &mut RapierContext) {
 		context.islands = self.islands.clone();
 		context.bodies = self.bodies.clone();
@@ -192,7 +192,7 @@ impl PhysicsStateSend {
 	}
 }
 
-#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
+#[cfg(any(feature = "server", feature = "debug_render_physics"))]
 pub type BodyStates = HashMap<RigidBodyHandle, BodyStateSerialize>;
 
 pub mod async_messages {// These are sent between the thread running World::main_loop() and the master thread
@@ -222,7 +222,7 @@ pub struct WorldSave {
 }
 
 #[derive(Serialize, Deserialize)]
-#[cfg_attr(feature = "frontend", derive(Resource, Default))]
+#[cfg_attr(feature = "client", derive(Resource, Default))]
 pub struct WorldSend {// Sent to the client
 	pub vehicles: HashMap<String, VehicleSend>,
 	pub age: f64,
@@ -232,7 +232,7 @@ pub struct WorldSend {// Sent to the client
 	pub body_states: BodyStates
 }
 
-#[cfg(feature = "frontend")]
+#[cfg(feature = "client")]
 impl WorldSend {
 	#[cfg(feature = "debug_render_physics")]
 	pub fn update_bevy_rapier_context(&self, context: &mut RapierContext, map_body_handle_opt: Option<RigidBodyHandle>) {
@@ -247,7 +247,7 @@ impl WorldSend {
 	}
 }
 
-#[cfg(feature = "backend")]
+#[cfg(feature = "server")]
 pub struct World {// Main game simulation
 	pub map: Map,
 	pub vehicles: HashMap<String, Vehicle>,// {username: vehicle}
@@ -257,7 +257,7 @@ pub struct World {// Main game simulation
 	physics_state: PhysicsState
 }
 
-#[cfg(feature = "backend")]
+#[cfg(feature = "server")]
 impl World {
 	pub fn load(name: &str) -> Result<Self, Box<dyn Error>> {
 		// name: name of world file

@@ -35,11 +35,11 @@ Created by Hadrian Ward, 2023-6-8
 */
 #![allow(warnings)]// TODO: remove when I have a lot of free-time
 use std::{fmt, env, ops, error::Error, collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, time::{SystemTime, UNIX_EPOCH}};
-#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
+#[cfg(any(feature = "server", feature = "debug_render_physics"))]
 use rapier3d::{dynamics::{RigidBodySet, IslandManager}, geometry::ColliderSet};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 use nalgebra::{Point3, Point2, Vector3, Vector2, point, Matrix, Const, ArrayStorage, OPoint, Translation, Isometry3, UnitQuaternion};
-#[cfg(feature = "frontend")]
+#[cfg(feature = "client")]
 use bevy::{prelude::Transform, ecs::system::Resource, render::{mesh::{Mesh, Indices}, render_resource::PrimitiveTopology}};
 #[cfg(feature = "debug_render_physics")]
 use bevy_rapier3d::plugin::RapierContext;
@@ -50,10 +50,10 @@ use rand::Rng;
 mod world;
 mod map;
 mod vehicle;
-#[cfg(feature = "backend")]
+#[cfg(feature = "server")]
 mod physics;
 pub mod resource_interface;
-#[cfg(feature = "frontend")]
+#[cfg(feature = "client")]
 pub mod client;
 pub mod renet_server;
 
@@ -91,13 +91,13 @@ mod prelude {
 		resource_interface,
 		BasicTriMesh
 	};
-	#[cfg(feature = "backend")] pub use crate::{
+	#[cfg(feature = "server")] pub use crate::{
 		physics::{PhysicsController, PhysicsUpdateArgs, BodyAveragableState, defaut_extra_forces_calculator},
 		vehicle::Vehicle,
 		world::{World, PhysicsState},
-		map::map_generator::MapGenerator
+		map::map_generator::{MapGenerator, MeshCreationArgs}
 	};
-	#[cfg(any(feature = "backend", feature = "debug_render_physics"))] pub use crate::RapierBodyCreationDeletionContext;
+	#[cfg(any(feature = "server", feature = "debug_render_physics"))] pub use crate::RapierBodyCreationDeletionContext;
 	// Utility functions because nalgebra is friggin complicated
 	pub fn add_isometries(iso1: &Iso, iso2: &Iso) -> Iso {
 		// Adds two isometries together
@@ -128,11 +128,11 @@ mod prelude {
 		point![p[0], 0.0, p[1]]
 	}
 	// Convert between nalgebra and bevy
-	#[cfg(feature = "frontend")]
+	#[cfg(feature = "client")]
 	pub fn nalgebra_quat_to_bevy_quat(quat: &UnitQuaternion<Float>) -> bevy::math::Quat {
 		bevy::math::Quat::from_xyzw(quat.i, quat.j, quat.k, quat.w)
 	}
-	#[cfg(feature = "frontend")]
+	#[cfg(feature = "client")]
 	pub fn nalgebra_vec3_to_bevy_vec3(v: &V3) -> bevy::math::Vec3 {
 		bevy::math::Vec3 {
 			x: v.x,
@@ -140,7 +140,7 @@ mod prelude {
 			z: v.z
 		}
 	}
-	#[cfg(feature = "frontend")]
+	#[cfg(feature = "client")]
 	pub fn nalgebra_iso_to_bevy_transform(iso: Iso) -> Transform {
 		Transform {
 			translation: nalgebra_vec3_to_bevy_vec3(&iso.translation.vector),
@@ -254,7 +254,7 @@ impl InputData {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-#[cfg_attr(feature = "frontend", derive(Resource))]
+#[cfg_attr(feature = "client", derive(Resource))]
 pub struct ClientAuth {
 	name: String,
 	psswd: String
@@ -371,7 +371,7 @@ pub struct BasicTriMesh {
 }
 
 impl BasicTriMesh {
-	#[cfg(feature = "frontend")]
+	#[cfg(feature = "client")]
 	pub fn build_bevy_mesh(&self) -> Mesh {
 		// Check if valid
 		self.is_valid().unwrap();
@@ -421,14 +421,14 @@ impl Default for BasicTriMesh {
 	}
 }
 
-#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
+#[cfg(any(feature = "server", feature = "debug_render_physics"))]
 pub struct RapierBodyCreationDeletionContext<'a> {
 	pub bodies: &'a mut RigidBodySet,
 	pub colliders: &'a mut ColliderSet,
 	pub islands: &'a mut IslandManager
 }
 
-#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
+#[cfg(any(feature = "server", feature = "debug_render_physics"))]
 impl<'a> RapierBodyCreationDeletionContext<'a> {// From ChatGPT
     #[cfg(feature = "debug_render_physics")]
     pub fn from_bevy_rapier_context(ctx: &'a mut RapierContext) -> Self {
@@ -443,7 +443,7 @@ impl<'a> RapierBodyCreationDeletionContext<'a> {// From ChatGPT
 //#[derive(Serialize, Deserialize)]
 //pub struct UserDataBodyHandles(HashMap<u128, RigidBodyHandle>);
 
-#[cfg(feature = "backend")]
+#[cfg(feature = "server")]
 pub fn ui_main() {
 	// Parse arguments
 	let args: Vec<String> = env::args().collect();

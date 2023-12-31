@@ -8,7 +8,7 @@ Technically there are two tangent points for each knot point on a spline, but th
 use std::{collections::HashMap, sync::Arc, f32::consts::PI};
 use nalgebra::UnitQuaternion;
 use serde::{Serialize, Deserialize};
-#[cfg(feature = "frontend")]
+#[cfg(feature = "client")]
 use bevy::prelude::*;
 
 use crate::prelude::*;
@@ -271,7 +271,7 @@ impl Path {
 			self.sample(pos).rotation.euler_angles().0// https://docs.rs/nalgebra/latest/nalgebra/geometry/type.UnitQuaternion.html#method.euler_angles
 		}.sin()*/0.0
 	}
-	#[cfg(feature = "frontend")]
+	#[cfg(feature = "client")]
 	pub fn bevy_mesh(&self, texture_len_width_ratio: Float, start: &PathPosition) -> (Mesh, Option<PathPosition>) {
 		/* Crates a mesh with UV mapping. The UV coords are intended for an image with Y starting from the top going down and with the "path travel direction" being vertical.
 		`texture_len_width_ratio` is the ratio of the height / width of the texture image being used.
@@ -386,7 +386,7 @@ impl Path {
 		mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv_coords);
 		(mesh, next_pos)
 	}
-	#[cfg(feature = "frontend")]
+	#[cfg(feature = "client")]
 	pub fn init_bevy(&self, commands: &mut Commands, meshes:  &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>, asset_server: &AssetServer) {
 		// Loop through entire path until done
 		let mut curr_pos = PathPosition::default();

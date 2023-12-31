@@ -97,7 +97,7 @@ pub fn create_mesh_from_real_world(
 	size: UInt,// Chunk size
 	grid_size: UInt,// Chunk grid size
 	chunk_ref: &ChunkRef,
-	map_location: [Float; 2]
+	map_location: &[Float; 2]
 ) -> RegularElevationMesh {
 	// TODO: test that edges of different chunks have same angular coords
 	// Uses this api: https://github.com/Jorl17/open-elevation/blob/master/docs/api.md

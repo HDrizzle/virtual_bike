@@ -31,7 +31,7 @@ pub enum Response {// All possible responses
 	Err(String)
 }
 
-#[cfg(feature = "backend")]
+#[cfg(feature = "server")]
 struct NetworkRuntimeManager {
 	pub server: RenetServer,
 	pub addr: SocketAddr,
@@ -39,7 +39,7 @@ struct NetworkRuntimeManager {
 	pub static_data: StaticData
 }
 
-#[cfg(feature = "backend")]
+#[cfg(feature = "server")]
 impl NetworkRuntimeManager {
 	pub fn main_loop(&mut self, rx: mpsc::Receiver<async_messages::FromWorld>, tx: mpsc::Sender<async_messages::ToWorld>) {
 		// Main loop
@@ -142,13 +142,13 @@ impl NetworkRuntimeManager {
 	}
 }
 
-#[cfg(feature = "backend")]
+#[cfg(feature = "server")]
 pub struct WorldServer {
 	world: World,
 	net_manager_opt: Option<NetworkRuntimeManager>
 }
 
-#[cfg(feature = "backend")]
+#[cfg(feature = "server")]
 impl WorldServer {
 	pub fn init(world_name: &str, localhost: bool) -> Self {
 		// Load world

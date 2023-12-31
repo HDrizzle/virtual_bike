@@ -1,10 +1,10 @@
 // Map main module file
 
-use std::collections::HashMap;
+use std::{collections::HashMap, mem};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
-#[cfg(feature = "frontend")]
+#[cfg(feature = "client")]
 use bevy::prelude::*;
-#[cfg(feature = "frontend")]
+#[cfg(feature = "client")]
 #[cfg(feature = "debug_render_physics")]
 use bevy_rapier3d::plugin::RapierContext;
 
@@ -14,21 +14,27 @@ use crate::world::PhysicsStateSend;
 
 pub mod chunk;
 pub mod path;
-#[cfg(feature = "backend")]
+#[cfg(feature = "server")]
 pub mod gis;
-#[cfg(feature = "backend")]
+#[cfg(feature = "server")]
 pub mod map_generator;
 
 // Rapier 3D physics
-#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
+#[cfg(any(feature = "server", feature = "debug_render_physics"))]
 use rapier3d::prelude::*;
 
 // Structs
+// Dummy struct to take the same amount of memory as `MapGenerator`, so that when the client decodes it, it will still work
+/*pub struct ClientDummy {
+	_padding: [u8; mem::size_of::<MapGenerator>()]
+}*/
+
 #[derive(Serialize, Deserialize, Clone)]
 #[cfg_attr(feature = "frontend", derive(Resource))]
 pub struct Map {
 	pub name: String,
-	pub gen: dyn MapGenerator,
+	#[cfg(feature = "server")] pub gen: MapGenerator,
+	//#[cfg(not(feature = "server"))] pub gen: ClientDummy,
 	#[serde(skip)]
 	pub loaded_chunks: Vec<Chunk>,
 	pub path_set: PathSet,
@@ -38,14 +44,15 @@ pub struct Map {
 	pub background_color: [u8; 3],
 	pub auto_gen_chunks: bool,
 	#[serde(skip)]
-	#[cfg(any(feature = "backend", feature = "debug_render_physics"))] pub body_handle_opt: Option<RigidBodyHandle>
+	#[cfg(any(feature = "server", feature = "debug_render_physics"))] pub body_handle_opt: Option<RigidBodyHandle>
 }
 
 impl Map {
-	pub fn new(name: &str, chunk_size: UInt, chunk_grid_size: UInt, gen: dyn MapGenerator, background_color: [u8; 3]) -> Self {
+	#[cfg(feature = "server")]
+	pub fn new(name: &str, chunk_size: UInt, chunk_grid_size: UInt, gen: MapGenerator, background_color: [u8; 3]) -> Self {
 		Self {
 			name: name.to_owned(),
-			gen,
+			#[cfg(feature = "server")] gen,
 			loaded_chunks: Vec::<Chunk>::new(),
 			path_set: PathSet::default(),
 			chunk_size,
@@ -53,17 +60,17 @@ impl Map {
 			landmarks: HashMap::<String, V2>::new(),
 			background_color,
 			auto_gen_chunks: true,
-			#[cfg(any(feature = "backend", feature = "debug_render_physics"))] body_handle_opt: None
+			#[cfg(any(feature = "server", feature = "debug_render_physics"))] body_handle_opt: None
 		}
 	}
-	#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
+	#[cfg(any(feature = "server", feature = "debug_render_physics"))]
 	pub fn init_rapier(&mut self, bodies: &mut RigidBodySet) {
 		// Create immovable body
 		let body = RigidBodyBuilder::kinematic_position_based().position(Iso::identity()).build();
 		let body_handle = bodies.insert(body);
 		self.body_handle_opt = Some(body_handle);
 	}
-	#[cfg(feature = "backend")]
+	#[cfg(feature = "server")]
 	pub fn send(&self, #[cfg(feature = "debug_render_physics")] physics: &mut PhysicsStateSend) -> Self {
 		// Unloads all chunks from the physics state which will also be sent to the client
 		let mut out = self.clone();
@@ -72,7 +79,7 @@ impl Map {
 		// Done
 		out
 	}
-    #[cfg(feature = "frontend")]
+    #[cfg(feature = "client")]
 	pub fn unload_chunk_client(&mut self, ref_: &ChunkRef, #[cfg(feature = "debug_render_physics")] mut context: &mut RapierContext, meshes: &mut ResMut<Assets<Mesh>>, materials: &mut ResMut<Assets<StandardMaterial>>) {
 		match self.get_chunk_id(ref_) {
 			Some(i) => {
@@ -80,7 +87,7 @@ impl Map {
 				// Remove Bevy mesh
 				meshes.remove(chunk.asset_id_opt.expect("Client-side chunk unloading expects chunks to have Some(HandleId)"));
 				// Generic unload
-				#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
+				#[cfg(any(feature = "server", feature = "debug_render_physics"))]
 				{
 					#[cfg(feature = "debug_render_physics")]
 					self.unload_chunk(
@@ -93,7 +100,7 @@ impl Map {
 						None
 					);
 				}
-				#[cfg(not(any(feature = "backend", feature = "debug_render_physics")))]
+				#[cfg(not(any(feature = "server", feature = "debug_render_physics")))]
 				self.unload_chunk(i);
 			},
 			None => {}
@@ -103,18 +110,18 @@ impl Map {
 	pub fn unload_chunk(
 		&mut self,
 		i: usize,
-		#[cfg(any(feature = "backend", feature = "debug_render_physics"))] rapier_data_opt: Option<&mut RapierBodyCreationDeletionContext>
+		#[cfg(any(feature = "server", feature = "debug_render_physics"))] rapier_data_opt: Option<&mut RapierBodyCreationDeletionContext>
 	) {
 		let chunk = &mut self.loaded_chunks[i];
 		// Can't simply delete chunk, 1st must remove it from the physics engine
-		#[cfg(any(feature = "backend", feature = "debug_render_physics"))] match rapier_data_opt {
+		#[cfg(any(feature = "server", feature = "debug_render_physics"))] match rapier_data_opt {
 			Some(mut rapier_data) => chunk.remove_from_rapier(&mut rapier_data),
 			None => {}
 		}
 		// Now we can delete it
 		self.loaded_chunks.remove(i);
 	}
-	#[cfg(feature = "backend")]
+	#[cfg(feature = "server")]
 	pub fn unload_chunks(&mut self, chunks_needed: &Vec<ChunkRef>, rapier_data: &mut RapierBodyCreationDeletionContext) {
 		// Unloads all chunks except the ones in `chunks_needed`
         let mut chunks_to_unload = Vec::<usize>::new();
@@ -128,7 +135,7 @@ impl Map {
             self.unload_chunk(*i, Some(rapier_data));
         }
 	}
-	#[cfg(feature = "backend")]
+	#[cfg(feature = "server")]
 	pub fn load_or_create_chunk(&self, ref_: &ChunkRef) -> Option<Chunk> {
 		return if ref_.exists(&self.name) {// Chunk already exists on the disk, load it
 			//println!("Loading chunk {:?}", &ref_);
@@ -138,7 +145,7 @@ impl Map {
 			if !self.auto_gen_chunks {
 				return None
 			}
-			Some(Chunk::new(ref_.into_chunk_offset_position(0.0), self.chunk_size, self.chunk_grid_size, &self.gen, self.background_color, &self.name, self.real_world_location))
+			Some(Chunk::new(ref_.into_chunk_offset_position(0.0), self.chunk_size, self.chunk_grid_size, &self.gen, self.background_color, &self.name))
 		};
 	}
 	pub fn is_chunk_loaded(&self, ref_: &ChunkRef) -> bool {
@@ -149,14 +156,14 @@ impl Map {
 		}
 		false
 	}
-    #[cfg(feature = "frontend")]
+    #[cfg(feature = "client")]
 	pub fn insert_chunk_client(&mut self, mut chunk: Chunk, #[cfg(feature = "debug_render_physics")] rapier_data: &mut RapierBodyCreationDeletionContext, commands: &mut Commands, meshes:  &mut ResMut<Assets<Mesh>>, materials: &mut ResMut<Assets<StandardMaterial>>, asset_server: &AssetServer) {
 		// Add to bevy rendering world
 		if !self.is_chunk_loaded(&chunk.ref_) {
 			chunk.bevy_pbr_bundle(commands, meshes, materials, asset_server);
 		}
 		// Generic insert
-		#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
+		#[cfg(any(feature = "server", feature = "debug_render_physics"))]
 		let loaded: bool = {
 			#[cfg(feature = "debug_render_physics")]
 			{self.insert_chunk(
@@ -169,16 +176,16 @@ impl Map {
 				None
 			)}
 		};
-		#[cfg(not(any(feature = "backend", feature = "debug_render_physics")))]
+		#[cfg(not(any(feature = "server", feature = "debug_render_physics")))]
 		let loaded = self.insert_chunk(chunk);
 		assert!(loaded, "self.insert_chunk says the chunk was not loaded, however a previous check says the chunk didn't already exist. This should not be possible.");
 	}
-	pub fn insert_chunk(&mut self, mut chunk: Chunk, #[cfg(any(feature = "backend", feature = "debug_render_physics"))] rapier_data_opt: Option<&mut RapierBodyCreationDeletionContext>) -> bool {
+	pub fn insert_chunk(&mut self, mut chunk: Chunk, #[cfg(any(feature = "server", feature = "debug_render_physics"))] rapier_data_opt: Option<&mut RapierBodyCreationDeletionContext>) -> bool {
 		// IMPORTANT: THIS SHOULD BE THE ONLY PLACE WHERE self.loaded_chunks.push() IS CALLED
 		if self.is_chunk_loaded(&chunk.ref_) {
 			return false;//panic!("Attempt to insert already loaded chunk");
 		}
-		#[cfg(any(feature = "backend", feature = "debug_render_physics"))]
+		#[cfg(any(feature = "server", feature = "debug_render_physics"))]
 		match rapier_data_opt {
 			Some(rapier_data) => {
 				let body_handle = self.body_handle_opt.expect("Map body handle is None when trying to insert chunk, help: maybe init_rapier() hasn\'t been called yet");
@@ -186,7 +193,7 @@ impl Map {
 			},
 			None => {}
 		}
-		/*#[cfg(feature = "frontend")]
+		/*#[cfg(feature = "client")]
 		assert!(chunk.asset_id_opt.is_some(), "Attempt in client to map.loaded_chunks.push() chunk with no asset id");*/
 		self.loaded_chunks.push(chunk);
 		true
@@ -199,7 +206,7 @@ impl Map {
 		}
 		None
 	}
-	#[cfg(feature = "frontend")]
+	#[cfg(feature = "client")]
 	pub fn init_bevy(&mut self, commands: &mut Commands, meshes:  &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>, asset_server: &AssetServer) {
 		#[cfg(feature = "path_rendering")]
 		for (_, path) in &mut self.path_set.paths.iter_mut() {
