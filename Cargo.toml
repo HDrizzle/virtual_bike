@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["server", "client", "client_default_signin", "path_rendering", "debug_vehicle_input"]#, "debug_camera_control", "debug_render_physics", "experimental_terrain_gen"]
+default = ["server", "client", "client_default_signin", "path_rendering", "debug_vehicle_input", "debug_render_physics"]#, "debug_camera_control", "experimental_terrain_gen"]
 
 server = ["reqwest", "rapier3d", "easy-gltf"]
 
@@ -41,8 +41,6 @@ approx = "0.5.1"# Approximate float comparisons, for tests
 local-ip-address = "0.5.6"
 dialoguer = "0.11.0"
 rand = "0.8.5"
-
-#ahash = "0.7.7"# This seems to have a bug, so using older version
 
 # Server-only
 reqwest = {version = "0.11.22", optional = true, features = ["blocking", "json"]}

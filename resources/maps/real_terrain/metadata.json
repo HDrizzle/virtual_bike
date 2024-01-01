@@ -2,16 +2,19 @@
 	"name": "real_terrain",
 	"gen": {
 		"RealTerrainGen": {
-			"location": [9.666532, 46.585244]
+			"location": {
+				"lat": 46.598477,
+				"lon": 9.670922
+			}
 		}
 	},
 	"path_set": {
 		"paths": {},
 		"query_grid_scale": 0
 	},
-	"chunk_size": 1000,
-	"chunk_grid_size": 5,
+	"chunk_size": 100,
+	"chunk_grid_size": 9,
 	"landmarks": {},
 	"background_color": [0, 128, 0],
-	"auto_gen_chunks": false
+	"auto_gen_chunks": true
 }

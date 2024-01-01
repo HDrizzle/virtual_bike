@@ -10,9 +10,6 @@ use rapier3d::prelude::*;
 
 use crate::{prelude::*, resource_interface};
 
-#[cfg(feature = "server")]
-use super::gis;
-
 // Structs
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct RegularElevationMesh {// This stores the map topography data in a grid of Z (verticle) values
@@ -255,7 +252,7 @@ impl ChunkRef {
 	}
 	#[cfg(feature = "server")]
 	pub fn get_adjacent_chunk_meshes(&self, chunk_size: UInt, map_name: &str) -> [Option<Rc<RegularElevationMesh>>; 4] {
-		println!("Checking for chunks adjacent to: {:?}", self.position);
+		//println!("Checking for chunks adjacent to: {:?}", self.position);
 		let mut adj_meshes: [Option<Rc<RegularElevationMesh>>; 4] = [None, None, None, None];// Has to be expanded like this otherwise Copy will need to be implemented
 		for (i_raw, offset) in EightWayDir::iter().enumerate() {
 			let i = i_raw / 2;
@@ -272,12 +269,12 @@ impl ChunkRef {
 			}
 		}
 		// Advanced debug
-		for i in 0..adj_meshes.len() {
+		/*for i in 0..adj_meshes.len() {
 			match &adj_meshes[i] {
 				Some(_) => println!("Mesh at index: {}", i),
 				None => {}
 			}
-		}
+		}*/
 		// Done
 		adj_meshes
 	}

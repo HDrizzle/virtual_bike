@@ -95,7 +95,7 @@ mod prelude {
 		physics::{PhysicsController, PhysicsUpdateArgs, BodyAveragableState, defaut_extra_forces_calculator},
 		vehicle::Vehicle,
 		world::{World, PhysicsState},
-		map::map_generator::{MapGenerator, MeshCreationArgs}
+		map::map_generation::{MapGenerator, MeshCreationArgs, gis::WorldLocation}
 	};
 	#[cfg(any(feature = "server", feature = "debug_render_physics"))] pub use crate::RapierBodyCreationDeletionContext;
 	// Utility functions because nalgebra is friggin complicated

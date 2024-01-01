@@ -3,7 +3,8 @@
 use std::{rc::Rc, collections::HashMap};
 use serde::{Serialize, Deserialize};
 use crate::prelude::*;
-use super::gis;
+
+pub mod gis;
 
 // Enum
 #[derive(Serialize, Deserialize, Clone)]
@@ -181,12 +182,12 @@ impl Default for Random {
 // Real-world terrain generator
 #[derive(Serialize, Deserialize, Clone)]
 pub struct RealTerrain {
-	pub location: [Float; 2]
+	pub location: WorldLocation
 }
 
 impl RealTerrain {
 	pub fn create_mesh(&self, args: MeshCreationArgs) -> RegularElevationMesh where Self: Sized {
-		gis::create_mesh_from_real_world(args.size, args.grid_size, args.chunk_ref, &self.location)
+		gis::create_mesh_from_real_world::<gis::ApiClient>(args.size, args.grid_size, args.chunk_ref, &self.location)
 	}
 }
 

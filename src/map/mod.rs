@@ -15,9 +15,7 @@ use crate::world::PhysicsStateSend;
 pub mod chunk;
 pub mod path;
 #[cfg(feature = "server")]
-pub mod gis;
-#[cfg(feature = "server")]
-pub mod map_generator;
+pub mod map_generation;
 
 // Rapier 3D physics
 #[cfg(any(feature = "server", feature = "debug_render_physics"))]
