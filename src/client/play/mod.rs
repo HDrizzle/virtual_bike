@@ -15,6 +15,7 @@ use bevy::{
 use bevy_renet::renet::{RenetClient, DefaultChannel, transport::NetcodeClientTransport};
 #[cfg(feature = "debug_render_physics")]
 use bevy_rapier3d::plugin::RapierContext;
+use nalgebra::{UnitQuaternion, Translation, Isometry};
 #[cfg(feature = "debug_render_physics")]
 use rapier3d::dynamics::RigidBodyHandle;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
@@ -34,10 +35,6 @@ mod gui;
 use gui::GuiPlugin;
 
 // Custom resources
-/*#[derive(Resource)]
-#[cfg(feature = "debug_render_physics")]
-pub struct VehicleBodyHandles(pub HashMap<String, RigidBodyHandle>);*/
-
 #[derive(Resource)]
 #[cfg(feature = "debug_render_physics")]
 struct MapBodyHandle(pub RigidBodyHandle);
@@ -47,6 +44,71 @@ pub struct ServerAddr(pub IpAddr);
 
 #[derive(Resource, Default, Debug)]
 struct StaticVehicleAssetHandles(pub HashMap<String, Handle<Scene>>);// Vehicle type, scene handle
+
+#[derive(Resource)]
+enum CameraController {
+	Spectator {
+		pos: Iso
+	},
+	Vehicle {
+		username: String,
+		rel_pos: Iso
+	}
+}
+
+impl CameraController {
+	pub fn toggle(&mut self, vehicles: &HashMap<String, VehicleSend>, username: String) {
+		*self = match self {
+			Self::Spectator{pos} => {
+				Self::Vehicle{username, rel_pos: Self::default_pos_wrt_vehicle()}
+			},
+			Self::Vehicle{username, rel_pos} => {
+				Self::Spectator{pos: self.get_pos(vehicles)}
+			}
+		};
+	}
+	pub fn update(&mut self, dt: Float, vehicles: &HashMap<String, VehicleSend>, trans_input: V3, rot_input: V2) {
+		match self {
+			Self::Spectator{pos} => {
+				let lin_speed: Float = 50.0;// M/s
+				let ang_speed: Float = 1.0;// Rad/s
+				// Scale translation by speed and dt
+				let trans_input_scaled = trans_input * lin_speed * dt;
+				// Find yaw angle
+				//let yaw = pos.rotation.euler_angles().2;// https://docs.rs/nalgebra/latest/nalgebra/geometry/type.UnitQuaternion.html#method.euler_angles
+				// Rotate translation vector by yaw angle about vertical (Y) axis
+				let trans_input_rotated = /*UnitQuaternion::from_axis_angle(&V3::y_axis(), yaw)*/pos.rotation.transform_vector(&trans_input_scaled);
+				pos.translation = Translation{vector: pos.translation.vector + trans_input_rotated};
+				// Delta-yaw, TODO: pitch
+				let delta_yaw = rot_input.x * ang_speed * dt;
+				pos.rotation = UnitQuaternion::from_axis_angle(&V3::y_axis(), delta_yaw) * pos.rotation;
+			},
+			Self::Vehicle{username, rel_pos} => {
+				// TODO
+			}
+		}
+	}
+	pub fn get_pos(&self, vehicles: &HashMap<String, VehicleSend>) -> Iso {
+		match self {
+			Self::Spectator{pos} => pos.clone(),
+			Self::Vehicle{username, rel_pos} => match vehicles.get(&*username) {
+				Some(v) => add_isometries(&v.body_state.position, &rel_pos),
+				None => {
+					warn!("Unable to get vehicle with username \"{}\" to calculate camera position", &*username);
+					Isometry::identity()
+				}
+			}
+		}
+	}
+	pub fn default_pos_wrt_vehicle() -> Iso {
+		// Create rotation quat
+		let rot = UnitQuaternion::from_axis_angle(&V3::x_axis(), -0.2);
+		// 2nd POV
+		let rel_translation = rot.transform_vector(&V3::new(0.0, 0.0, 30.0));
+		let rel_rotation = rot;
+		Iso{translation: nalgebra::Translation{vector: rel_translation}, rotation: rel_rotation}
+	}
+}
 
 /*#[derive(Resource, Default)]
 struct VehicleBodyStates(pub HashMap<String, BodyStateSerialize>);
@@ -66,6 +128,7 @@ pub struct InitInfo {// Provided by the sign-in window, DOES NOT CHANGE
 
 impl InitInfo {
 	pub fn setup_app(init_info: InitInfo, app: &mut App) {
+		app.insert_resource(CameraController::Vehicle{username: init_info.network.auth.name.clone(), rel_pos: CameraController::default_pos_wrt_vehicle()});
 		app.insert_resource(init_info.static_data);
 		app.insert_resource(init_info.network.renet_transport);
 		app.insert_resource(init_info.network.renet_client);
@@ -250,7 +313,6 @@ fn update_system(
 	mut camera_query: Query<(&mut CameraComponent, &mut Transform, &Projection)>,
 	#[cfg(feature = "debug_render_physics")] map_body_handle: Res<MapBodyHandle>,
 	mut requested_chunks: ResMut<RequestedChunks>,
-	mut render_distance: ResMut<RenderDistance>,
 	auth: Res<ClientAuth>,
 	server_addr: Res<ServerAddr>,
 	mut world_state_res: ResMut<WorldSend>
@@ -295,13 +357,12 @@ fn update_system(
 		#[cfg(feature = "debug_render_physics")]
 		world_state.update_bevy_rapier_context(&mut rapier_context, Some(map_body_handle.0));
 		// Update camera position
-		let main_vehicle = world_state.vehicles.get(&auth.name).expect(&format!("Unable to get vehicle for signed-in username: \"{}\"", &auth.name));
+		/*let main_vehicle = world_state.vehicles.get(&auth.name).expect(&format!("Unable to get vehicle for signed-in username: \"{}\"", &auth.name));
 		render_distance.set_position(p3_to_p2(matrix_to_opoint(main_vehicle.body_state.position.translation.vector.clone())));
 		for (_, mut transform, _) in camera_query.iter_mut() {
 			// Comment this out and add manual_camera_control() for debugging
-			#[cfg(not(feature = "debug_camera_control"))]
 			main_vehicle.update_bevy_camera_transform(&mut transform);
-		}
+		}*/
 		#[cfg(feature = "debug_render_physics")]
 		rapier_context.propagate_modified_body_positions_to_colliders();// Just what I needed https://docs.rs/bevy_rapier3d/latest/bevy_rapier3d/plugin/struct.RapierContext.html#method.propagate_modified_body_positions_to_colliders
 		// Save world state
@@ -309,58 +370,78 @@ fn update_system(
 	}
 }
 
-#[cfg(feature = "debug_camera_control")]
-fn manual_camera_control(
+fn camera_update_system(
+	mut key_events: EventReader<KeyboardInput>,
 	keys: Res<Input<KeyCode>>,
-	mut camera_query: Query<(&mut CameraComponent, &mut Transform, &Projection)>
+	mut camera_controller: ResMut<CameraController>,
+	mut camera_query: Query<(&mut CameraComponent, &mut Transform, &Projection)>,
+	world_state: Res<WorldSend>,
+	mut render_distance: ResMut<RenderDistance>,
+	auth: Res<ClientAuth>
 ) {
 	for (_, mut transform, projection) in camera_query.iter_mut() {
 		// Detect motion
 		// Translation
-		let mut velocity = Vec3::ZERO;
+		let mut translation = V3::zeros();
 		// Z
 		if keys.pressed(KeyCode::T) {
-			velocity.z += 1.0;
+			translation.z -= 1.0;
 		}
 		if keys.pressed(KeyCode::G) {
-			velocity.z -= 1.0;
+			translation.z += 1.0;
 		}
 		// X
 		if keys.pressed(KeyCode::F) {
-			velocity.x += 1.0;
+			translation.x -= 1.0;
 		}
 		if keys.pressed(KeyCode::H) {
-			velocity.x -= 1.0;
+			translation.x += 1.0;
 		}
 		// Y
 		if keys.pressed(KeyCode::Space) {
-			velocity.y += 1.0;
+			translation.y += 1.0;
 		}
 		if keys.pressed(KeyCode::ShiftLeft) {
-			velocity.y -= 1.0;
+			translation.y -= 1.0;
 		}
-		let mut vel_trans = Transform::from_translation(velocity);
-		vel_trans.rotate_y(transform.rotation.to_euler(EulerRot::YXZ).0);// TODO: fix
-		transform.translation += vel_trans.translation * 0.5;// Very sloppy, TODO: fix
 		// Rotation
-		let mut horiz_rot = 0.0;
+		let mut rotation = V2::zeros();// yaw, pitch
 		if keys.pressed(KeyCode::Left) {
-			horiz_rot += 1.0;
+			rotation.x += 1.0;
 		}
 		if keys.pressed(KeyCode::Right) {
-			horiz_rot -= 1.0;
+			rotation.x -= 1.0;
 		}
-		let mut vert_rot = 0.0;
 		if keys.pressed(KeyCode::Up) {
-			vert_rot += 1.0;
+			rotation.y += 1.0;
 		}
 		if keys.pressed(KeyCode::Down) {
-			vert_rot -= 1.0;
+			rotation.y -= 1.0;
 		}
-		let vel_quat_horiz = Quat::from_rotation_y(horiz_rot / 60.0);
-		transform.rotation = transform.rotation * vel_quat_horiz;
-		let vel_quat_vert = Quat::from_rotation_x(vert_rot / 60.0);
-		transform.rotation = transform.rotation * vel_quat_vert;
+		// Update camera controller
+		// Key events
+		for ev in key_events.read() {
+			match ev.state {
+				ButtonState::Pressed => {
+					match ev.key_code {
+						Some(key_code) => match key_code {
+							KeyCode::C => camera_controller.toggle(&world_state.vehicles, auth.name.clone()),
+							_ => {}
+						}
+						None => {}
+					}
+				}
+				ButtonState::Released => {
+					// Unused
+				}
+			}
+		}
+		camera_controller.update(1.0/60.0, &world_state.vehicles, translation, rotation);
+		// Update camera
+		let nalgebra_iso = camera_controller.get_pos(&world_state.vehicles);
+		*transform = nalgebra_iso_to_bevy_transform(nalgebra_iso.clone());
+		// Update render distance
+		render_distance.set_position(p3_to_p2(matrix_to_opoint(nalgebra_iso.translation.vector.clone())));
 	}
 }
 
@@ -393,8 +474,6 @@ impl Plugin for MainClientPlugin {
 		app.add_systems(Update, misc_key_event_system);
 		#[cfg(feature = "debug_vehicle_input")]
 		app.add_systems(Update, vehicle_input_key_event_system);
-		#[cfg(feature = "debug_camera_control")]
-		app.add_systems(Update, manual_camera_control);
 		app.add_systems(Update, update_system);
 		// bevy_rapier3d
 		#[cfg(feature = "debug_render_physics")]
@@ -408,6 +487,7 @@ impl Plugin for MainClientPlugin {
 		app.insert_resource(ClearColor(Color::rgb(0.7, 0.7, 0.7)));// https://bevy-cheatbook.github.io/window/clear-color.html
 		app.add_systems(Startup, render_test);
 		app.add_systems(Update, vehicle_render_system.after(update_system));// Vehicle rendering AFTER recieving latest world state
+		app.add_systems(Update, camera_update_system.after(update_system));
 	}
 }
 

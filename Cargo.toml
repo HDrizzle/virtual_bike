@@ -6,14 +6,13 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["server", "client", "client_default_signin", "path_rendering", "debug_vehicle_input", "debug_render_physics"]#, "debug_camera_control", "experimental_terrain_gen"]
+default = ["server", "client", "client_default_signin", "path_rendering", "debug_vehicle_input", "debug_render_physics"]#, "experimental_terrain_gen"]
 
 server = ["reqwest", "rapier3d", "easy-gltf"]
 
 client = ["serialport", "bevy", "bevy-inspector-egui", "bevy_renet", "image", "eframe"]
 
 debug_render_physics = ["rapier3d", "bevy_rapier3d", "bevy-inspector-egui-rapier"]
-debug_camera_control = []
 experimental_terrain_gen = []
 debug_vehicle_input = []
 GIS_longitude_scaling = []
