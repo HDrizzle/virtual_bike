@@ -15,7 +15,6 @@ client = ["serialport", "bevy", "bevy-inspector-egui", "bevy_renet", "image", "e
 debug_render_physics = ["rapier3d", "bevy_rapier3d", "bevy-inspector-egui-rapier"]
 experimental_terrain_gen = []
 debug_vehicle_input = []
-GIS_longitude_scaling = []
 client_default_signin = []
 egui_signin = []
 path_rendering = []

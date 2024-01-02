@@ -7,8 +7,8 @@ const EPSILON: Float = 1.0e-4;// Arbitrary
 pub mod gen {
 	use crate::map::map_generation;
 	use super::*;
-	fn test_points() -> HashMap<IntP2, Float> {
-		let mut points = HashMap::<IntP2, Float>::new();
+	fn test_points() -> HashMap<IntV2, Float> {
+		let mut points = HashMap::<IntV2, Float>::new();
 		/* Sample data
 		6 | 0
 		  | v-this is (0, 0)
@@ -19,23 +19,23 @@ pub mod gen {
 		1 | 3           7
 		*/
 		// y = -2
-		points.insert(IntP2(-1, -2), 1.0);
-		points.insert(IntP2(0, -2), 3.0);
-		points.insert(IntP2(3, -2), 7.0);
+		points.insert(IntV2(-1, -2), 1.0);
+		points.insert(IntV2(0, -2), 3.0);
+		points.insert(IntV2(3, -2), 7.0);
 		// y = -1
-		points.insert(IntP2(-1, -1), 0.0);
-		points.insert(IntP2(0, -1), 1.0);
-		points.insert(IntP2(1, -1), 1.0);
-		points.insert(IntP2(2, -1), 1.0);
+		points.insert(IntV2(-1, -1), 0.0);
+		points.insert(IntV2(0, -1), 1.0);
+		points.insert(IntV2(1, -1), 1.0);
+		points.insert(IntV2(2, -1), 1.0);
 		// y = 0
-		points.insert(IntP2(-1, 0), 0.0);
-		points.insert(IntP2(0, 0), 0.0);
-		points.insert(IntP2(1, 0), 1.0);
-		points.insert(IntP2(2, 0), 8.0);
-		points.insert(IntP2(3, 0), 5.0);
+		points.insert(IntV2(-1, 0), 0.0);
+		points.insert(IntV2(0, 0), 0.0);
+		points.insert(IntV2(1, 0), 1.0);
+		points.insert(IntV2(2, 0), 8.0);
+		points.insert(IntV2(3, 0), 5.0);
 		// y = 1
-		points.insert(IntP2(-1, 1), 6.0);
-		points.insert(IntP2(0, 1), 0.0);
+		points.insert(IntV2(-1, 1), 6.0);
+		points.insert(IntV2(0, 1), 0.0);
 		// Done
 		points
 	}
@@ -43,29 +43,29 @@ pub mod gen {
 	#[test]
 	fn avg_adj_value() {
 		let points = test_points();
-		assert_eq!(map_generation::avg_adj_elev(IntP2(3, 0), &points), Some(4.5));
-		assert_eq!(map_generation::avg_adj_elev(IntP2(1, 1), &points), Some(9.0 / 4.0));
-		assert_eq!(map_generation::avg_adj_elev(IntP2(2, 1), &points), Some(14.0 / 3.0));
-		assert_eq!(map_generation::avg_adj_elev(IntP2(-2, 0), &points), Some(2.0));
-		assert_eq!(map_generation::avg_adj_elev(IntP2(1, -2), &points), Some(6.0 / 4.0));
-		assert_eq!(map_generation::avg_adj_elev(IntP2(2, 2), &points), None);
+		assert_eq!(map_generation::avg_adj_elev(IntV2(3, 0), &points), Some(4.5));
+		assert_eq!(map_generation::avg_adj_elev(IntV2(1, 1), &points), Some(9.0 / 4.0));
+		assert_eq!(map_generation::avg_adj_elev(IntV2(2, 1), &points), Some(14.0 / 3.0));
+		assert_eq!(map_generation::avg_adj_elev(IntV2(-2, 0), &points), Some(2.0));
+		assert_eq!(map_generation::avg_adj_elev(IntV2(1, -2), &points), Some(6.0 / 4.0));
+		assert_eq!(map_generation::avg_adj_elev(IntV2(2, 2), &points), None);
 	}
 	#[test]
 	fn adj_slope() {
 		let points = test_points();
-		assert_eq!(map_generation::slope_towards_point(IntP2(2, 1), EightWayDir::S, 1.0, &points), Some(7.0));
-		assert_eq!(map_generation::slope_towards_point(IntP2(2, 1), EightWayDir::W, 1.0, &points), None);
-		assert_eq!(map_generation::slope_towards_point(IntP2(1, 1), EightWayDir::S, 1.0, &points), Some(0.0));
-		assert_eq!(map_generation::slope_towards_point(IntP2(1, 1), EightWayDir::W, 1.0, &points), Some(-6.0));
-		assert_eq!(map_generation::slope_towards_point(IntP2(2, -2), EightWayDir::NE, 1.0, &points), None);
+		assert_eq!(map_generation::slope_towards_point(IntV2(2, 1), EightWayDir::S, 1.0, &points), Some(7.0));
+		assert_eq!(map_generation::slope_towards_point(IntV2(2, 1), EightWayDir::W, 1.0, &points), None);
+		assert_eq!(map_generation::slope_towards_point(IntV2(1, 1), EightWayDir::S, 1.0, &points), Some(0.0));
+		assert_eq!(map_generation::slope_towards_point(IntV2(1, 1), EightWayDir::W, 1.0, &points), Some(-6.0));
+		assert_eq!(map_generation::slope_towards_point(IntV2(2, -2), EightWayDir::NE, 1.0, &points), None);
 	}
 	#[test]
 	fn avg_adj_slope() {
 		let points = test_points();
-		assert_eq!(map_generation::avg_slope_towards_point(IntP2(2, 1), 1.0, &points), Some(3.5));
-		assert_eq!(map_generation::avg_slope_towards_point(IntP2(1, 1), 1.0, &points), Some(-2.0));
-		assert_eq!(map_generation::avg_slope_towards_point(IntP2(3, 1), 1.0, &points), Some(7.0 * (2.0 as Float).sqrt()));
-		assert_eq!(map_generation::avg_slope_towards_point(IntP2(2, -2), 1.0, &points), Some((-7.0 + (2.0 as Float).sqrt()) / 2.0));
+		assert_eq!(map_generation::avg_slope_towards_point(IntV2(2, 1), 1.0, &points), Some(3.5));
+		assert_eq!(map_generation::avg_slope_towards_point(IntV2(1, 1), 1.0, &points), Some(-2.0));
+		assert_eq!(map_generation::avg_slope_towards_point(IntV2(3, 1), 1.0, &points), Some(7.0 * (2.0 as Float).sqrt()));
+		assert_eq!(map_generation::avg_slope_towards_point(IntV2(2, -2), 1.0, &points), Some((-7.0 + (2.0 as Float).sqrt()) / 2.0));
 	}
 	#[test]
 	fn points_from_adj_meshes_basic_two_sides_1x1() {
@@ -172,12 +172,12 @@ pub mod gen {
 		// All points will be along X-Axis
 		// Initial state
 		let gen = map_generation::default();
-		let mut points = HashMap::<IntP2, Float>::new();
-		points.insert(IntP2(-2, 0), 0.0);
-		points.insert(IntP2(-1, 0), 0.0);
+		let mut points = HashMap::<IntV2, Float>::new();
+		points.insert(IntV2(-2, 0), 0.0);
+		points.insert(IntV2(-1, 0), 0.0);
 		// Generate more points
 		for x in 0..200 {
-			let query = IntP2(x, 0);
+			let query = IntV2(x, 0);
 			match gen.generate_point(query, 1.0, &points) {
 				Some(elev) => {
 					points.insert(query, elev);
@@ -193,7 +193,6 @@ pub mod gen {
 
 #[cfg(feature = "server")]
 pub mod gis {
-	// For crate::map::real_world_gen
 	use super::*;
 	use crate::map::map_generation::gis::*;
 	#[test]
@@ -211,9 +210,20 @@ pub mod gis {
 	fn chunk_edge_alignment() {
 		let map_anchor = WorldLocation{lat: 60.0, lon: -69.0};
 		assert_eq!(
-			chunk_local_location(&map_anchor, &ChunkRef{position: IntP2(0, 0)}, IntP2(1000, 1000)),
-			chunk_local_location(&map_anchor, &ChunkRef{position: IntP2(1000, 1000)}, IntP2(0, 0))
+			chunk_local_location(&map_anchor, &ChunkRef{position: IntV2(0, 0)}, IntV2(1000, 1000)),
+			chunk_local_location(&map_anchor, &ChunkRef{position: IntV2(1000, 1000)}, IntV2(0, 0))
 		)
+	}
+	#[test]
+	fn longitude_scaling() {
+		assert_eq!(
+			chunk_local_location(&WorldLocation{lat: 0.0, lon: 0.0}, &ChunkRef::origin(), IntV2(1000, 1000)),
+			((meters_to_degrees(1000), meters_to_degrees(1000)), 1.0)
+		);
+		assert_eq!(
+			chunk_local_location(&WorldLocation{lat: 60.0, lon: 10.0}, &ChunkRef::origin(), IntV2(1000, 1000)),
+			((10.0 + meters_to_degrees(500), 60.0 + meters_to_degrees(1000)), 0.49999997)
+		);
 	}
 }
 

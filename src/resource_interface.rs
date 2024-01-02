@@ -74,7 +74,7 @@ pub fn find_chunk(chunk_ref: &ChunkRef, map_name: &str) -> Result<String, Box<dy
 #[cfg(feature = "server")]
 pub fn does_generic_chunk_exist(map_name: &str) -> Option<String> {
 	// Tests if map has generic chunk, if so returns path to it
-	let path = ChunkRef{position: IntP2(0, 0)}.resource_path(map_name, true);
+	let path = ChunkRef{position: IntV2(0, 0)}.resource_path(map_name, true);
 	if fs::read_dir(path.clone()).is_ok() {
 		Some(path)
 	}

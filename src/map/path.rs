@@ -428,7 +428,7 @@ pub struct PathSet {
 	pub paths: HashMap<PathRef, Path>,
 	query_grid_scale: UInt,// 0 means no query grid
 	#[serde(skip)]
-	query_grid: HashMap<IntP2, Vec<PathRef>>
+	query_grid: HashMap<IntV2, Vec<PathRef>>
 }
 
 impl PathSet {

@@ -64,16 +64,16 @@ impl Random {
 		// For testing only
 		/*for y in -1..1 {
 			for x in 0..grid_size + 1 {
-				all_known_points.insert(IntP2(x as Int, y), y as Float);
+				all_known_points.insert(IntV2(x as Int, y), y as Float);
 			}
 		}*/
 		//dbg!(&all_known_points);
 		// Generate rows, TODO: start generating from adjacent chunk if there is one
 		for y in 0..args.grid_size + 1 {
 			let mut row: Vec<Float> = Vec::<Float>::new();
-			let mut row_points = HashMap::<IntP2, Float>::new();// Only add this to `all_known_points` after row is complete to prevent feedback
+			let mut row_points = HashMap::<IntV2, Float>::new();// Only add this to `all_known_points` after row is complete to prevent feedback
 			for x in 0..args.grid_size + 1 {
-				let curr_point = IntP2(x as Int, y as Int);
+				let curr_point = IntV2(x as Int, y as Int);
 				let elev: Float = match all_known_points.get(&curr_point) {
 					Some(elev) => *elev,// Pre-existing elevation data, must be from edge of adjacent chunk
 					None => {// No pre-existing elevation
@@ -99,7 +99,7 @@ impl Random {
 			grid
 		}
 	}
-	pub fn generate_point(&self, query: IntP2, precision: Float, points: &HashMap<IntP2, Float>) -> Option<Float> {// TODO: test
+	pub fn generate_point(&self, query: IntV2, precision: Float, points: &HashMap<IntV2, Float>) -> Option<Float> {// TODO: test
 		match avg_slope_towards_point(query, precision, &points) {// TODO: should check for adjacent elevation first
 			None => {// No adjacent slopes
 				None
@@ -131,7 +131,7 @@ impl Random {
 			}
 		}
 	}
-	pub fn generate_point_experimental(&self, query: IntP2, precision: Float, points: &HashMap<IntP2, Float>) -> Option<Float> {// TODO: test
+	pub fn generate_point_experimental(&self, query: IntV2, precision: Float, points: &HashMap<IntV2, Float>) -> Option<Float> {// TODO: test
 		let dir = EightWayDir::S;
 		match slope_towards_point(query, dir.clone(), precision, &points) {// TODO: should check for adjacent elevation first
 			None => {// No adjacent slopes
@@ -195,13 +195,13 @@ impl RealTerrain {
 pub fn get_edge_points_from_adj_meshes(
 	grid_size: UInt,
 	adj_meshes: &[Option<Rc<RegularElevationMesh>>; 4]
-) -> HashMap::<IntP2, Float> {
+) -> HashMap::<IntV2, Float> {
 	// There are two units being used here: base units and grid index units. base unit * precision = grid unit
 	// This is the length of the actual grid matrix
 	let grid_matrix_size_i = (grid_size+1) as Int;
 	// grid_size is spaces inside grid, so coord matrix will be (grid_size + 1)^2
 	// Start `all_known_points`, IMPORTANT: USES GRID INDEX UNITS, NOT GRID PRECISION UNITS
-	let mut all_known_points = HashMap::<IntP2, Float>::new();
+	let mut all_known_points = HashMap::<IntV2, Float>::new();
 	// Get vec of given edge points, TODO: it doesn't work, help
 	for (mesh_i, mesh_opt) in adj_meshes.iter().enumerate() {
 		//let i_float = (i as Float) * precision;
@@ -209,9 +209,9 @@ pub fn get_edge_points_from_adj_meshes(
 			Some(mesh) => {// points along the side of a single chunk
 				//dbg!(chunk.ref_.clone());
 				// Get offsets
-				let unit_offset: IntP2 = EightWayDir::from_num(mesh_i * 2).unwrap().unit_displacement();
+				let unit_offset: IntV2 = EightWayDir::from_num(mesh_i * 2).unwrap().unit_displacement();
 				//dbg!(unit_offset);
-				let offset: IntP2 = unit_offset.mult(grid_matrix_size_i - 1);// grid matrix edges will meet, so some values will be redundant
+				let offset: IntV2 = unit_offset.mult(grid_matrix_size_i - 1);// grid matrix edges will meet, so some values will be redundant
 				// Get grid coordinate which will be constant and its value, 0=X, 1=Y
 				let (const_coord, const_val): (Int, Int) = match mesh_i {
 					0 => (0, 0),
@@ -224,9 +224,9 @@ pub fn get_edge_points_from_adj_meshes(
 				//dbg!(const_val);
 				// Iterate along side of adjacent chunk
 				for i in 0..grid_matrix_size_i {
-					let pos_wrt_adj: IntP2 = match const_coord {
-						0 => IntP2(const_val,              i),
-						1 => IntP2(i             , const_val),
+					let pos_wrt_adj: IntV2 = match const_coord {
+						0 => IntV2(const_val,              i),
+						1 => IntV2(i             , const_val),
 						invalid => panic!("Const coord can only be 0 or 1, instead it is {}", invalid)
 					};
 					//dbg!(pos_wrt_adj);
@@ -243,7 +243,7 @@ pub fn get_edge_points_from_adj_meshes(
 	}
 	all_known_points
 }
-pub fn avg_slope_towards_point(query: IntP2, precision: Float, points: &HashMap<IntP2, Float>) -> Option<Float> {
+pub fn avg_slope_towards_point(query: IntV2, precision: Float, points: &HashMap<IntV2, Float>) -> Option<Float> {
 	let mut sum = 0.0;
 	let mut count = 0;
 	for dir in EightWayDir::iter() {
@@ -261,7 +261,7 @@ pub fn avg_slope_towards_point(query: IntP2, precision: Float, points: &HashMap<
 	}
 }
 
-pub fn slope_towards_point(query: IntP2, direction: EightWayDir, precision: Float, points: &HashMap<IntP2, Float>) -> Option<Float> {
+pub fn slope_towards_point(query: IntV2, direction: EightWayDir, precision: Float, points: &HashMap<IntV2, Float>) -> Option<Float> {
 	/*
 	gets slope towards a given point in a given direction
 	\   v   /
@@ -290,7 +290,7 @@ pub fn slope_towards_point(query: IntP2, direction: EightWayDir, precision: Floa
 	}
 }
 
-pub fn avg_adj_elev(query: IntP2, points: &HashMap<IntP2, Float>) -> Option<Float> {
+pub fn avg_adj_elev(query: IntV2, points: &HashMap<IntV2, Float>) -> Option<Float> {
 	// Gets average elevation of points adjacent to `query`
 	let mut elevs = Vec::<Float>::new();
 	for dir in EightWayDir::iter() {

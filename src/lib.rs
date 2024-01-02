@@ -34,7 +34,7 @@ Created by Hadrian Ward, 2023-6-8
 2023-12-9: I decided to not use rapier in the client except when `debug_render_physics` is enabled
 */
 #![allow(warnings)]// TODO: remove when I have a lot of free-time
-use std::{fmt, env, ops, error::Error, collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, time::{SystemTime, UNIX_EPOCH}};
+use std::{fmt, env, ops, error::Error, collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, time::{SystemTime, UNIX_EPOCH}, f32::consts::PI};
 #[cfg(any(feature = "server", feature = "debug_render_physics"))]
 use rapier3d::{dynamics::{RigidBodySet, IslandManager}, geometry::ColliderSet};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
@@ -87,9 +87,11 @@ mod prelude {
 		ClientAuth,
 		ClientUpdate,
 		EightWayDir,
-		IntP2,
+		IntV2,
 		resource_interface,
-		BasicTriMesh
+		BasicTriMesh,
+		SimpleIso,
+		SimpleRotation
 	};
 	#[cfg(feature = "server")] pub use crate::{
 		physics::{PhysicsController, PhysicsUpdateArgs, BodyAveragableState, defaut_extra_forces_calculator},
@@ -304,16 +306,16 @@ impl EightWayDir {
             Self::SE => 7,
         }
 	}
-	pub fn unit_displacement(&self) -> IntP2 {
+	pub fn unit_displacement(&self) -> IntV2 {
         match self {
-            Self::E  => IntP2( 1,  0),
-            Self::NE => IntP2( 1,  1),
-            Self::N  => IntP2( 0,  1),
-            Self::NW => IntP2(-1,  1),
-            Self::W  => IntP2(-1,  0),
-            Self::SW => IntP2(-1, -1),
-            Self::S  => IntP2( 0, -1),
-            Self::SE => IntP2( 1, -1),
+            Self::E  => IntV2( 1,  0),
+            Self::NE => IntV2( 1,  1),
+            Self::N  => IntV2( 0,  1),
+            Self::NW => IntV2(-1,  1),
+            Self::W  => IntV2(-1,  0),
+            Self::SW => IntV2(-1, -1),
+            Self::S  => IntV2( 0, -1),
+            Self::SE => IntV2( 1, -1),
         }
     }
 	pub fn is_straight(&self) -> bool {
@@ -341,26 +343,26 @@ impl Iterator for EightWayDirIter {
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug, Eq, Hash)]
-pub struct IntP2(pub Int, pub Int);
+pub struct IntV2(pub Int, pub Int);
 
-impl IntP2 {
+impl IntV2 {
 	pub fn mult(&self, other: Int) -> Self {
 		Self(self.0 * other, self.1 * other)
 	}
 }
 
-impl ops::Add<IntP2> for IntP2 {
-	type Output = IntP2;
+impl ops::Add<IntV2> for IntV2 {
+	type Output = IntV2;
 
 	fn add(self, other: Self) -> Self {
 		Self(self.0 + other.0, self.1 + other.1)
 	}
 }
 
-impl ops::Sub<IntP2> for IntP2 {
-	type Output = IntP2;
+impl ops::Sub<IntV2> for IntV2 {
+	type Output = IntV2;
 
-	fn sub(self, other: IntP2) -> Self {
+	fn sub(self, other: IntV2) -> Self {
 		Self(self.0 - other.0, self.1 - other.1)
 	}
 }
@@ -438,6 +440,47 @@ impl<'a> RapierBodyCreationDeletionContext<'a> {// From ChatGPT
             islands: &mut ctx.islands,
         }
     }
+}
+
+#[derive(Clone)]
+pub struct SimpleIso {// Isometry with just
+	translation: V3,
+	rotation: SimpleRotation
+}
+
+impl SimpleIso {
+	pub fn to_iso(&self) -> Iso {
+		Iso {
+			translation: Translation{vector: self.translation},
+			rotation: self.rotation.to_quat()
+		}
+	}
+	pub fn from_iso(iso: Iso) -> Self {
+		Self {
+			translation: iso.translation.vector,
+			rotation: SimpleRotation::from_quat(iso.rotation)
+		}
+	}
+}
+
+#[derive(Clone)]
+pub struct SimpleRotation {
+	pub yaw: Float,
+	pub pitch: Float
+}
+
+impl SimpleRotation {
+	pub fn to_quat(&self) -> UnitQuaternion<Float> {
+		UnitQuaternion::from_axis_angle(&V3::y_axis(), self.yaw) * UnitQuaternion::from_axis_angle(&V3::x_axis(), self.pitch)
+	}
+	pub fn from_quat(quat: UnitQuaternion<Float>) -> Self {
+		// TODO: fix
+		let (_roll, pitch, yaw) = quat.euler_angles();// https://docs.rs/nalgebra/latest/nalgebra/geometry/type.UnitQuaternion.html#method.euler_angles
+		Self {
+			yaw,
+			pitch: pitch - PI / 2.0
+		}
+	}
 }
 
 //#[derive(Serialize, Deserialize)]

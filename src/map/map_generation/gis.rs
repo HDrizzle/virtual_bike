@@ -258,7 +258,7 @@ pub fn create_mesh_from_real_world<T: ElevationGetter>(
 		//let y_angle = angles[1] + (meters_to_degrees(y as Int) * precision);//meters_to_degrees(chunk_ref.position.1 + ((y as Float * precision) as Int));//
 		for x in 0..grid_matrix_size {
 			//let x_angle = angles[0] + (meters_to_degrees(x as Int) * precision) / x_scale;//meters_to_degrees(chunk_ref.position.0 + ((x as Float * precision) as Int));
-			let ((x_angle, y_angle), scale) = chunk_local_location(&map_location, chunk_ref, IntP2(((x as Float * precision) as Int), ((y as Float * precision) as Int)));
+			let ((x_angle, y_angle), scale) = chunk_local_location(&map_location, chunk_ref, IntV2(((x as Float * precision) as Int), ((y as Float * precision) as Int)));
 			req.locations.push(WorldLocation{lat: y_angle, lon: x_angle});
 		}
 	}
@@ -272,17 +272,14 @@ pub fn create_mesh_from_real_world<T: ElevationGetter>(
 pub fn chunk_local_location(
 	map_location: &WorldLocation,
 	chunk_ref: &ChunkRef,
-	local_offset: IntP2
+	local_offset: IntV2
 ) -> ((Float, Float), Float) {
 	// ((X angle, Y angle), X scale)
 	// Net offset from map anchor
 	let net_offset = local_offset + chunk_ref.position;
 	let chunk_y_angle = map_location.lat + meters_to_degrees(net_offset.1);
 	// Crude way to scale X/longitude according to Y/latitude
-	#[cfg(feature = "GIS_longitude_scaling")]
-	let x_scale = (/*chunk_y_angle*/map_location[1] * TC).cos();
-	#[cfg(not(feature = "GIS_longitude_scaling"))]
-	let x_scale = 1.0;
+	let x_scale = (/*chunk_y_angle*/map_location.lat * TC).cos();
 	let chunk_x_angle = map_location.lon + (meters_to_degrees(net_offset.0) * x_scale);
 	((chunk_x_angle, chunk_y_angle), x_scale)
 }

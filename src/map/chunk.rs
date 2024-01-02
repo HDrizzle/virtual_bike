@@ -194,7 +194,7 @@ impl RegularElevationMesh {
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Eq, Hash)]
 #[cfg_attr(feature = "client", derive(Component))]
 pub struct ChunkRef {// A deterministic reference to a chunk in the world
-	pub position: IntP2
+	pub position: IntV2
 }
 
 impl ChunkRef {
@@ -205,12 +205,12 @@ impl ChunkRef {
 		let x = (p[0] / chunk_size_f).floor() as Int * chunk_size_int;
 		let y = (p[2] / chunk_size_f).floor() as Int * chunk_size_int;
 		Self {
-			position: IntP2(x, y)
+			position: IntV2(x, y)
 		}
 	}
 	pub fn from_chunk_offset_position(pos: V3) -> Self {
 		Self {
-			position: IntP2(pos[0] as Int, pos[2] as Int)
+			position: IntV2(pos[0] as Int, pos[2] as Int)
 		}
 	}
 	pub fn resource_dir_name(&self) -> String {
@@ -223,7 +223,7 @@ impl ChunkRef {
 		}
 		let x = to_string_err(parts[0].parse::<Int>())?;
 		let y = to_string_err(parts[1].parse::<Int>())?;
-		Ok(Self{position: IntP2(x, y)})
+		Ok(Self{position: IntV2(x, y)})
 	}
 	pub fn into_chunk_offset_position(&self, elev_offset: Float) -> V3 {
 		V3::new(self.position.0 as Float, elev_offset, self.position.1 as Float)
@@ -280,7 +280,7 @@ impl ChunkRef {
 	}
 	pub fn origin() -> Self {
 		Self {
-			position: IntP2(0, 0)
+			position: IntV2(0, 0)
 		}
 	}
 }

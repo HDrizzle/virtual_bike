@@ -48,7 +48,7 @@ struct StaticVehicleAssetHandles(pub HashMap<String, Handle<Scene>>);// Vehicle 
 #[derive(Resource)]
 enum CameraController {
 	Spectator {
-		pos: Iso
+		pos: SimpleIso
 	},
 	Vehicle {
 		username: String,
@@ -63,7 +63,7 @@ impl CameraController {
 				Self::Vehicle{username, rel_pos: Self::default_pos_wrt_vehicle()}
 			},
 			Self::Vehicle{username, rel_pos} => {
-				Self::Spectator{pos: self.get_pos(vehicles)}
+				Self::Spectator{pos: SimpleIso::from_iso(self.get_pos(vehicles))}
 			}
 		};
 	}
@@ -75,13 +75,15 @@ impl CameraController {
 				// Scale translation by speed and dt
 				let trans_input_scaled = trans_input * lin_speed * dt;
 				// Find yaw angle
-				//let yaw = pos.rotation.euler_angles().2;// https://docs.rs/nalgebra/latest/nalgebra/geometry/type.UnitQuaternion.html#method.euler_angles
 				// Rotate translation vector by yaw angle about vertical (Y) axis
-				let trans_input_rotated = /*UnitQuaternion::from_axis_angle(&V3::y_axis(), yaw)*/pos.rotation.transform_vector(&trans_input_scaled);
-				pos.translation = Translation{vector: pos.translation.vector + trans_input_rotated};
-				// Delta-yaw, TODO: pitch
+				let trans_input_rotated = UnitQuaternion::from_axis_angle(&V3::y_axis(), pos.rotation.yaw).transform_vector(&trans_input_scaled);
+				pos.translation = pos.translation + trans_input_rotated;
+				// Delta-yaw
 				let delta_yaw = rot_input.x * ang_speed * dt;
-				pos.rotation = UnitQuaternion::from_axis_angle(&V3::y_axis(), delta_yaw) * pos.rotation;
+				pos.rotation.yaw += delta_yaw;
+				// Delta-pitch
+				let delta_pitch = rot_input.y * ang_speed * dt;
+				pos.rotation.pitch += delta_pitch;
 			},
 			Self::Vehicle{username, rel_pos} => {
 				// TODO
@@ -90,7 +92,7 @@ impl CameraController {
 	}
 	pub fn get_pos(&self, vehicles: &HashMap<String, VehicleSend>) -> Iso {
 		match self {
-			Self::Spectator{pos} => pos.clone(),
+			Self::Spectator{pos} => pos.to_iso(),
 			Self::Vehicle{username, rel_pos} => match vehicles.get(&*username) {
 				Some(v) => add_isometries(&v.body_state.position, &rel_pos),
 				None => {
