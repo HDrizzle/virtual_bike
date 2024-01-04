@@ -27,7 +27,7 @@ pub struct RenderDistance {
 impl RenderDistance {
 	pub fn load_unload_chunks(
 		&self,
-		map: &mut Map,
+		map: &mut GenericMap,
 		#[cfg(feature = "debug_render_physics")] context: &mut RapierContext,
 		meshes: &mut ResMut<Assets<Mesh>>,
 		materials: &mut ResMut<Assets<StandardMaterial>>
@@ -155,8 +155,8 @@ pub struct ChunkManagerPlugin;
 
 impl Plugin for ChunkManagerPlugin {
 	fn build(&self, app: &mut App) {
-		app.insert_resource(RenderDistance{load: 1000.0, unload: 3000.0, pos: P2::new(0.0, 0.0)});// TODO: fix hardcoded values
-		app.insert_resource(RequestedChunks::new(5.0));
+		app.insert_resource(RenderDistance{load: 300.0, unload: 3000.0, pos: P2::new(0.0, 0.0)});// TODO: fix hardcoded values
+		app.insert_resource(RequestedChunks::new(2.0));
 		app.add_systems(Update, update_chunks_system);
 	}
 }

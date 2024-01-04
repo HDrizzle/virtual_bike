@@ -79,7 +79,7 @@ mod prelude {
 	// Misc
 	pub use crate::{
 		world::{StaticData, WorldSave, WorldSend},
-		map::{Map, path::{Path, PathSet, PathBoundBodyState, PathPosition, BCurve, BCurveSample, BCURVE_LENGTH_ESTIMATION_SEGMENTS}, chunk::{Chunk, ChunkRef, RegularElevationMesh}},
+		map::{GenericMap, path::{Path, PathSet, PathBoundBodyState, PathPosition, BCurve, BCurveSample, BCURVE_LENGTH_ESTIMATION_SEGMENTS}, chunk::{Chunk, ChunkRef, RegularElevationMesh}},
 		vehicle::{VehicleStatic, VehicleSave, VehicleSend, Wheel, WheelStatic, BodyStateSerialize, BodyForces},
 		renet_server::{Request, Response},
 		GenericError,
@@ -91,13 +91,14 @@ mod prelude {
 		resource_interface,
 		BasicTriMesh,
 		SimpleIso,
-		SimpleRotation
+		SimpleRotation,
+		struct_subset
 	};
 	#[cfg(feature = "server")] pub use crate::{
 		physics::{PhysicsController, PhysicsUpdateArgs, BodyAveragableState, defaut_extra_forces_calculator},
 		vehicle::Vehicle,
 		world::{World, PhysicsState},
-		map::map_generation::{MapGenerator, MeshCreationArgs, gis::WorldLocation}
+		map::{ServerMap, map_generation::{MapGenerator, MeshCreationArgs, gis::WorldLocation}}
 	};
 	#[cfg(any(feature = "server", feature = "debug_render_physics"))] pub use crate::RapierBodyCreationDeletionContext;
 	// Utility functions because nalgebra is friggin complicated
@@ -122,6 +123,9 @@ mod prelude {
 	// Convert between 2D and 3D, important to note that the Y-value in 2D corresponds to the Z-value in 3D
 	pub fn v3_to_v2(v: V3) -> V2 {
 		V2::new(v[0], v[2])
+	}
+	pub fn v2_to_v3(v: V2) -> V3 {
+		V3::new(v[0], 0.0, v[1])
 	}
 	pub fn p3_to_p2(p: P3) -> P2 {
 		point![p[0], p[2]]
@@ -349,6 +353,9 @@ impl IntV2 {
 	pub fn mult(&self, other: Int) -> Self {
 		Self(self.0 * other, self.1 * other)
 	}
+	pub fn to_v2(&self) -> V2 {
+		V2::new(self.0 as Float, self.1 as Float)
+	}
 }
 
 impl ops::Add<IntV2> for IntV2 {
@@ -483,8 +490,15 @@ impl SimpleRotation {
 	}
 }
 
-//#[derive(Serialize, Deserialize)]
-//pub struct UserDataBodyHandles(HashMap<u128, RigidBodyHandle>);
+#[macro_export]
+macro_rules! struct_subset {
+	($struct_name:ident, $new_struct_name:ident, $($field:ident),+) => {
+		#[derive(Serialize, Deserialize, Clone)]
+		pub struct $new_struct_name {
+			pub $($field: String),+
+		}
+	};
+}
 
 #[cfg(feature = "server")]
 pub fn ui_main() {
@@ -508,7 +522,7 @@ pub fn ui_main() {
 				let chunk_grid_size = prompt("Number of points along each side of chunk (chunk size)").parse::<UInt>().unwrap();
 				let gen = MapGenerator::default();
 				// name: &str, chunk_size: UInt, chunk_grid_size: UInt, gen: gen::Gen, background_color: [u8; 3]
-				resource_interface::save_map(&Map::new(&name, chunk_size, chunk_grid_size, gen, [0, 128, 0])).unwrap();
+				resource_interface::save_map(&ServerMap::new(&name, chunk_size, chunk_grid_size, gen, [0, 128, 0])).unwrap();
 			},
 			"-new-user" => {
 				if args.len() < 4 {

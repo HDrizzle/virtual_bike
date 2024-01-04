@@ -27,7 +27,7 @@ use nalgebra::vector;
 #[derive(Serialize, Deserialize, Clone)]
 #[cfg_attr(feature = "client", derive(Resource))]
 pub struct StaticData {
-	pub map: Map,
+	pub map: GenericMap,
 	pub static_vehicles: HashMap<String, VehicleStatic>,// Vehicle type: VehicleStatic
 	#[cfg(feature = "debug_render_physics")]
 	pub partial_physics: PhysicsStateSend
@@ -249,7 +249,7 @@ impl WorldSend {
 
 #[cfg(feature = "server")]
 pub struct World {// Main game simulation
-	pub map: Map,
+	pub map: ServerMap,
 	pub vehicles: HashMap<String, Vehicle>,// {username: vehicle}
 	pub age: Duration,
 	pub playing: bool,
@@ -262,14 +262,14 @@ impl World {
 	pub fn load(name: &str) -> Result<Self, Box<dyn Error>> {
 		// name: name of world file
 		let save = load_world(name)?;
-		let map: Map = load_map_metadata(&save.map).expect(&format!("Could not load map for world \"{name}\""));
+		let map: ServerMap = load_map_metadata(&save.map).expect(&format!("Could not load map for world \"{name}\""));
 		// Create blank physics state
 		let mut physics_state: PhysicsState = PhysicsState::new(save.gravity);
 		// Load vehicles
 		let mut vehicles: HashMap<String, Vehicle> = HashMap::new();
 		for (user, v_save) in save.vehicles.iter() {
 			let v_static: VehicleStatic = load_static_vehicle(&v_save.type_)?;
-			vehicles.insert(user.clone(), Vehicle::build(v_save, Rc::new(v_static), &mut physics_state.bodies, &mut physics_state.colliders, &mut physics_state.impulse_joints, &map.path_set)?);
+			vehicles.insert(user.clone(), Vehicle::build(v_save, Rc::new(v_static), &mut physics_state.bodies, &mut physics_state.colliders, &mut physics_state.impulse_joints, &map.generic.path_set)?);
 		}
 		// Create world
 		let mut out = Self {
@@ -281,7 +281,7 @@ impl World {
 			physics_state
 		};
 		// Init map
-		out.map.init_rapier(&mut out.physics_state.bodies);
+		out.map.generic.init_rapier(&mut out.physics_state.bodies);
 		// Load all necessary chunks
 		out.load_unload_chunks();
 		// debug
@@ -363,13 +363,14 @@ impl World {
 			if self.playing {
 				// All vehicle physics controllers
 				for (_, v) in self.vehicles.iter_mut() {
-					v.update_physics(dt_f64 as Float, 1.225, &mut self.physics_state, &self.map.path_set, self.gravity);
+					v.update_physics(dt_f64 as Float, 1.225, &mut self.physics_state, &self.map.generic.path_set, self.gravity);
 				}
 				// Rapier
 				self.physics_state.step();
 			}
 			// 4: Chunks
 			self.load_unload_chunks();
+			self.map.check_chunk_creation(&mut self.physics_state.build_body_creation_deletion_context());
 			// Placeholder to prevent the computer from freezing
 			thread::sleep(Duration::from_millis(5));
 		}
@@ -379,13 +380,13 @@ impl World {
 		// except this only loads chunks adjacent to the ones which vehicles are on
 		let chunks_needed: Vec<ChunkRef> = self.chunks_needed();
 		// 1: Unload
-		self.map.unload_chunks(&chunks_needed, &mut self.physics_state.build_body_creation_deletion_context());
+		self.map.generic.unload_chunks(&chunks_needed, &mut self.physics_state.build_body_creation_deletion_context());
 		// 2: Load
 		for chunk_ref in chunks_needed {
-			if !self.map.is_chunk_loaded(&chunk_ref) {
+			if !self.map.generic.is_chunk_loaded(&chunk_ref) {
 				//println!("Loading/Creating chunk {:?}", &chunk_ref);
 				match self.map.load_or_create_chunk(&chunk_ref) {// Will be None if the chunk doesn't exist and the map auto chunk gen is disabled
-					Some(chunk) => {self.map.insert_chunk(chunk, Some(&mut self.physics_state.build_body_creation_deletion_context()));},
+					Some(chunk) => {self.map.generic.insert_chunk(chunk, Some(&mut self.physics_state.build_body_creation_deletion_context()));},
 					None => {}
 				}
 			}
@@ -395,13 +396,13 @@ impl World {
 		// Get list of occupied chunks
 		let mut needed_chunks = Vec::<ChunkRef>::new();
 		for (_, v) in self.vehicles.iter() {
-			let v_body_state = v.create_serialize_state(&self.physics_state.bodies, &self.map.path_set);
-			needed_chunks.push(ChunkRef::from_world_point(matrix_to_opoint(v_body_state.position.translation.vector), self.map.chunk_size));
+			let v_body_state = v.create_serialize_state(&self.physics_state.bodies, &self.map.generic.path_set);
+			needed_chunks.push(ChunkRef::from_world_point(matrix_to_opoint(v_body_state.position.translation.vector), self.map.generic.chunk_size));
 		}
 		// Get adjacent chunks
 		let mut additional_chunks = Vec::<ChunkRef>::new();
 		for chunk_ref in &needed_chunks {
-			additional_chunks.append(&mut chunk_ref.adjacent_chunks(self.map.chunk_size, false));
+			additional_chunks.append(&mut chunk_ref.adjacent_chunks(self.map.generic.chunk_size, false));
 		}
 		needed_chunks.append(&mut additional_chunks);
 		remove_dups(&mut needed_chunks);
@@ -411,10 +412,10 @@ impl World {
 		// save vehicles
 		let mut save_vehicles = HashMap::new();
 		for (user, vehicle) in self.vehicles.iter() {
-			save_vehicles.insert(user.to_owned(), vehicle.save(&self.physics_state.bodies, &self.map.path_set));
+			save_vehicles.insert(user.to_owned(), vehicle.save(&self.physics_state.bodies, &self.map.generic.path_set));
 		}
 		WorldSave {
-			map: self.map.name.clone(),
+			map: self.map.generic.name.clone(),
 			vehicles: save_vehicles,
 			age: self.age.as_secs_f64(),
 			playing: self.playing,
@@ -425,7 +426,7 @@ impl World {
 		// save vehicles
 		let mut send_vehicles = HashMap::new();
 		for (user, vehicle) in self.vehicles.iter() {
-			send_vehicles.insert(user.to_owned(), vehicle.send(&self.physics_state.bodies, &self.map.path_set));
+			send_vehicles.insert(user.to_owned(), vehicle.send(&self.physics_state.bodies, &self.map.generic.path_set));
 		}
 		WorldSend {
 			vehicles: send_vehicles,

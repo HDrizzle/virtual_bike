@@ -1,6 +1,6 @@
 // Map main module file
 
-use std::{collections::HashMap, mem};
+use std::{collections::HashMap, mem, thread, sync::{mpsc, Arc, Mutex}};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 #[cfg(feature = "client")]
 use bevy::prelude::*;
@@ -27,30 +27,33 @@ use rapier3d::prelude::*;
 	_padding: [u8; mem::size_of::<MapGenerator>()]
 }*/
 
+// Using my new fancy macro (WOW) to create MapSend
+/*#[cfg_attr(feature = "frontend", derive(Resource))]
+struct_subset!(Map, MapSend, name, loaded_chunks, path_set, chunk_size, chunkgrid_size, landmarks, background_color, auto_gen_chunks, body_handle_opt);// Simple for now*/
+
 #[derive(Serialize, Deserialize, Clone)]
 #[cfg_attr(feature = "frontend", derive(Resource))]
-pub struct Map {
+pub struct GenericMap {// Serialize, Deserialize, Clone, used by client AND server
 	pub name: String,
-	#[cfg(feature = "server")] pub gen: MapGenerator,
 	//#[cfg(not(feature = "server"))] pub gen: ClientDummy,
 	#[serde(skip)]
 	pub loaded_chunks: Vec<Chunk>,
 	pub path_set: PathSet,
-	pub chunk_size: UInt,// length of the side of each chunk
+	pub chunk_size: UInt,// length of the side of each chunk, world units (meters)
 	pub chunk_grid_size: UInt,// Number of points along the side of each chunk
 	pub landmarks: HashMap<String, V2>,
 	pub background_color: [u8; 3],
 	pub auto_gen_chunks: bool,
 	#[serde(skip)]
-	#[cfg(any(feature = "server", feature = "debug_render_physics"))] pub body_handle_opt: Option<RigidBodyHandle>
+	#[cfg(any(feature = "server", feature = "debug_render_physics"))]
+	pub body_handle_opt: Option<RigidBodyHandle>
 }
 
-impl Map {
+impl GenericMap {
 	#[cfg(feature = "server")]
-	pub fn new(name: &str, chunk_size: UInt, chunk_grid_size: UInt, gen: MapGenerator, background_color: [u8; 3]) -> Self {
+	pub fn new(name: &str, chunk_size: UInt, chunk_grid_size: UInt, background_color: [u8; 3]) -> Self {
 		Self {
 			name: name.to_owned(),
-			#[cfg(feature = "server")] gen,
 			loaded_chunks: Vec::<Chunk>::new(),
 			path_set: PathSet::default(),
 			chunk_size,
@@ -58,7 +61,10 @@ impl Map {
 			landmarks: HashMap::<String, V2>::new(),
 			background_color,
 			auto_gen_chunks: true,
-			#[cfg(any(feature = "server", feature = "debug_render_physics"))] body_handle_opt: None
+			#[cfg(any(feature = "server", feature = "debug_render_physics"))]
+			body_handle_opt: None,
+			/*#[cfg(feature = "server")]
+			active_chunk_creators: Vec::new()*/
 		}
 	}
 	#[cfg(any(feature = "server", feature = "debug_render_physics"))]
@@ -67,15 +73,6 @@ impl Map {
 		let body = RigidBodyBuilder::kinematic_position_based().position(Iso::identity()).build();
 		let body_handle = bodies.insert(body);
 		self.body_handle_opt = Some(body_handle);
-	}
-	#[cfg(feature = "server")]
-	pub fn send(&self, #[cfg(feature = "debug_render_physics")] physics: &mut PhysicsStateSend) -> Self {
-		// Unloads all chunks from the physics state which will also be sent to the client
-		let mut out = self.clone();
-		#[cfg(feature = "debug_render_physics")]
-		out.unload_chunks(&Vec::<ChunkRef>::new(), &mut physics.build_body_creation_deletion_context());
-		// Done
-		out
 	}
     #[cfg(feature = "client")]
 	pub fn unload_chunk_client(&mut self, ref_: &ChunkRef, #[cfg(feature = "debug_render_physics")] mut context: &mut RapierContext, meshes: &mut ResMut<Assets<Mesh>>, materials: &mut ResMut<Assets<StandardMaterial>>) {
@@ -132,19 +129,6 @@ impl Map {
 			//println!("Unloading chunk {:?}", &ref_);
             self.unload_chunk(*i, Some(rapier_data));
         }
-	}
-	#[cfg(feature = "server")]
-	pub fn load_or_create_chunk(&self, ref_: &ChunkRef) -> Option<Chunk> {
-		return if ref_.exists(&self.name) {// Chunk already exists on the disk, load it
-			//println!("Loading chunk {:?}", &ref_);
-			Some(Chunk::load(ref_, &self.name).unwrap())
-		}
-		else {// Chunk does not exist, create it
-			if !self.auto_gen_chunks {
-				return None
-			}
-			Some(Chunk::new(ref_.into_chunk_offset_position(0.0), self.chunk_size, self.chunk_grid_size, &self.gen, self.background_color, &self.name))
-		};
 	}
 	pub fn is_chunk_loaded(&self, ref_: &ChunkRef) -> bool {
 		for chunk in &self.loaded_chunks {
@@ -209,6 +193,117 @@ impl Map {
 		#[cfg(feature = "path_rendering")]
 		for (_, path) in &mut self.path_set.paths.iter_mut() {
 			path.init_bevy(commands, meshes, materials, asset_server);
+		}
+	}
+}
+
+#[cfg(feature = "server")]
+#[derive(Serialize, Deserialize)]
+pub struct ServerMap {
+	pub generic: GenericMap,
+	gen: MapGenerator,
+	#[serde(skip)]
+	active_chunk_creators: Vec<AsyncChunkCreator>
+}
+
+impl ServerMap {
+	#[cfg(feature = "server")]
+	pub fn new(name: &str, chunk_size: UInt, chunk_grid_size: UInt, gen: MapGenerator, background_color: [u8; 3]) -> Self {
+		Self {
+			generic: GenericMap::new(
+				name,
+				chunk_size,
+				chunk_grid_size,
+				background_color
+			),
+			gen,
+			active_chunk_creators: Vec::new()
+		}
+	}
+	pub fn send(&self, #[cfg(feature = "debug_render_physics")] physics: &mut PhysicsStateSend) -> GenericMap {
+		// Unloads all chunks from the physics state which will also be sent to the client
+		let mut out = self.generic.clone();
+		#[cfg(feature = "debug_render_physics")]
+		out.unload_chunks(&Vec::<ChunkRef>::new(), &mut physics.build_body_creation_deletion_context());
+		// Done
+		out
+	}
+	pub fn load_or_create_chunk(&mut self, ref_: &ChunkRef) -> Option<Chunk> {
+		return if ref_.exists(&self.generic.name) {// Chunk already exists on the disk, load it
+			//println!("Loading chunk {:?}", &ref_);
+			Some(Chunk::load(ref_, &self.generic.name).unwrap())
+		}
+		else {// Chunk does not exist, create it
+			if self.generic.auto_gen_chunks {
+				self.active_chunk_creators.push(AsyncChunkCreator::start(ref_.clone(), self.generic.chunk_size, self.generic.chunk_grid_size, self.gen.clone(), self.generic.background_color, self.generic.name.clone()));
+			}
+			None
+		};
+	}
+	pub fn check_chunk_creation(&mut self, rapier_data: &mut RapierBodyCreationDeletionContext) -> Result<(), String> {
+		for chunk_creator in &mut self.active_chunk_creators {
+			let opt = chunk_creator.check();
+			match opt {
+				Some(result) => match result {
+					Ok(chunk) => {self.generic.insert_chunk(chunk, Some(rapier_data));},
+					Err(e) => {return Err(e);}
+				},
+				None => {}
+			}
+		}
+		Ok(())
+	}
+}
+
+#[cfg(feature = "server")]
+struct AsyncChunkCreator {
+	thread_handle_opt: Option<thread::JoinHandle<()>>,
+	chunk_ref: ChunkRef,
+	result: Arc<Mutex<Option<Result<Chunk, String>>>>
+}
+
+impl AsyncChunkCreator {
+	pub fn start(chunk_ref: ChunkRef, size: u64, grid_size: u64, gen: MapGenerator, background_color: [u8; 3], map_name: String) -> Self {
+		let result: Arc<Mutex<Option<Result<Chunk, String>>>> = Arc::new(Mutex::new(None));
+		let result_clone = result.clone();
+		let chunk_ref_clone = chunk_ref.clone();
+		let thread_handle = thread::spawn(
+			move || Self::main_loop(result_clone, chunk_ref_clone, size, grid_size, gen, background_color, map_name)
+		);
+		Self {
+			thread_handle_opt: Some(thread_handle),
+			chunk_ref,
+			result
+		}
+	}
+	fn main_loop(result_mutex: Arc<Mutex<Option<Result<Chunk, String>>>>, chunk_ref: ChunkRef, size: u64, grid_size: u64, gen: MapGenerator, background_color: [u8; 3], map_name: String) {
+		let result = Chunk::new(chunk_ref, size, grid_size, &gen, background_color, &map_name);
+		*result_mutex.lock().unwrap() = Some(result);
+	}
+	pub fn check(&mut self) -> Option<Result<Chunk, String>> {
+		if self.is_done() {// If there is a thread handle, the thread hasn't been joined yet
+			let mut result_ref = self.result.lock().unwrap();
+			let chunk_res_opt: Option<Result<Chunk, String>> = mem::replace(&mut *result_ref, None);
+			match &chunk_res_opt {// If thread set the arc mutex to Som(_), then it is done, join it
+				Some(_) => {
+					let thread_handle_opt_owned = mem::replace(&mut self.thread_handle_opt, None);
+					match thread_handle_opt_owned {
+						Some(thread_handle_owned) => {thread_handle_owned.join().unwrap()},
+						None => panic!("Impossible situation")
+					}
+				},
+				None => {}
+			}
+			chunk_res_opt
+		}
+		else {
+			None
+		}
+	}
+	pub fn is_done(&self) -> bool {
+		match &self.thread_handle_opt {
+			Some(_) => false,
+			None => true
 		}
 	}
 }

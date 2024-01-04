@@ -1,5 +1,16 @@
 {
-	"name": "switzerland",
+	"generic": {
+		"name": "switzerland",
+		"path_set": {
+			"paths": {},
+			"query_grid_scale": 0
+		},
+		"chunk_size": 100,
+		"chunk_grid_size": 9,
+		"landmarks": {},
+		"background_color": [0, 128, 0],
+		"auto_gen_chunks": true
+	},
 	"gen": {
 		"RealTerrainGen": {
 			"location": {
@@ -7,14 +18,5 @@
 				"lon": 9.670922
 			}
 		}
-	},
-	"path_set": {
-		"paths": {},
-		"query_grid_scale": 0
-	},
-	"chunk_size": 100,
-	"chunk_grid_size": 9,
-	"landmarks": {},
-	"background_color": [0, 128, 0],
-	"auto_gen_chunks": true
+	}
 }

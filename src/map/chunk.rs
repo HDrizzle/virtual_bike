@@ -278,6 +278,9 @@ impl ChunkRef {
 		// Done
 		adj_meshes
 	}
+	pub fn to_v2(&self) -> V2 {
+		self.position.to_v2()
+	}
 	pub fn origin() -> Self {
 		Self {
 			position: IntV2(0, 0)
@@ -287,7 +290,6 @@ impl ChunkRef {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Chunk {
-	pub position: V3,// Y-Value will be elevation offset
 	pub ref_: ChunkRef,
 	pub elevation: RegularElevationMesh,
 	#[serde(skip)]// Texture image data is in a seperate file (.png)
@@ -309,21 +311,14 @@ impl Chunk {
 		resource_interface::load_chunk_data(ref_, map_name)
 	}
 	#[cfg(feature = "server")]
-	pub fn new(position: V3, size: u64, grid_size: u64, gen: &MapGenerator, background_color: [u8; 3], map_name: &str) -> Self {
-		let ref_ = ChunkRef::from_chunk_offset_position(position);
-		let elevation = /*match map_real_world_location {
-			Some(map_location) => {
-				gis::create_mesh_from_real_world(size, grid_size, &ref_, map_location)
-			},
-			None => RegularElevationMesh::new(size, grid_size, gen, &ref_, map_name)
-		}*/gen.create_mesh(MeshCreationArgs {
+	pub fn new(ref_: ChunkRef, size: u64, grid_size: u64, gen: &MapGenerator, background_color: [u8; 3], map_name: &str) -> Result<Self, String> {
+		let elevation = gen.create_mesh(MeshCreationArgs {
 			chunk_ref: &ref_,
 			size,
 			grid_size,
 			adj_meshes: ref_.get_adjacent_chunk_meshes(size, map_name)
 		});
 		let out = Self {
-			position: position.clone(),
 			ref_: ref_.clone(),
 			elevation,
 			texture_data: None,
@@ -337,7 +332,7 @@ impl Chunk {
 		//println!("Creating and saving chunk at {}", out.ref_.resource_dir_name());
 		resource_interface::save_chunk_data(&out, map_name).unwrap();
 		// Done
-		out
+		Ok(out)
 	}
 	#[cfg(any(feature = "server", feature = "debug_render_physics"))]
 	pub fn init_rapier(&mut self, rapier_data: &mut RapierBodyCreationDeletionContext, parent_body_handle: RigidBodyHandle) {
@@ -345,7 +340,7 @@ impl Chunk {
 		if let Some(_) = self.collider_handle {
 			panic!("init_rapier() called when self.collider_handle is not None, meaning it has been called more than once");
 		}
-		let collider = self.elevation.rapier_collider(&self.position);
+		let collider = self.elevation.rapier_collider(&v2_to_v3(self.ref_.to_v2()));
 		//collider.set_position(Iso{rotation: UnitQuaternion::identity(), translation: matrix_to_opoint(self.position).into()});
 		self.collider_handle = Some(rapier_data.colliders.insert_with_parent(collider, parent_body_handle, &mut rapier_data.bodies));
 	}
@@ -366,7 +361,7 @@ impl Chunk {
 			unlit: true,
 			..default()
 		});
-		let mesh = self.elevation.bevy_mesh(self.grid_size, &self.position);
+		let mesh = self.elevation.bevy_mesh(self.grid_size, &v2_to_v3(self.ref_.to_v2()));
 		// Add mesh to meshes and get handle
 		let mesh_handle: Handle<Mesh> = meshes.add(mesh);
 		self.asset_id_opt = Some(mesh_handle.id());
@@ -382,7 +377,7 @@ impl Chunk {
 	}
 	pub fn distance_to_point(&self, point: &P2) -> Float {
 		let v = point.coords;
-		let self_pos = v3_to_v2(self.position);
+		let self_pos = self.ref_.to_v2();
 		/*let mut within_coords: [bool; 2] = [false; 2];
 		let mut perpindicular_dists: [Float; 2] = [0.0; 2];
 		for coord_index in 0..2 {
@@ -418,6 +413,5 @@ impl Chunk {
 	pub fn set_position(&mut self, chunk_ref: &ChunkRef) {
 		// Sets chunk's position if it has been loaded as a generic chunk because if so it will likely be incorrect
 		self.ref_ = chunk_ref.clone();
-		self.position = chunk_ref.into_chunk_offset_position(self.position[1]);
 	}
 }
