@@ -1,6 +1,6 @@
 {
 	"generic": {
-		"name": "switzerland",
+		"name": "camden",
 		"path_set": {
 			"paths": {},
 			"query_grid_scale": 0
@@ -14,8 +14,8 @@
 	"gen": {
 		"RealTerrainGen": {
 			"location": {
-				"lat": 46.598477,
-				"lon": 9.670922
+				"lat": 44.211455,
+				"lon": -69.065745
 			}
 		}
 	},

@@ -76,6 +76,7 @@ mod prelude {
 	pub type P3 = Point3<Float>;
 	pub type V3 = Vector3<Float>;
 	pub type Iso = Isometry3<Float>;
+	pub const EPSILON: Float = 1.0e-6;// Arbitrary
 	// Misc
 	pub use crate::{
 		world::{StaticData, WorldSave, WorldSend},
@@ -98,7 +99,7 @@ mod prelude {
 		physics::{PhysicsController, PhysicsUpdateArgs, BodyAveragableState, defaut_extra_forces_calculator},
 		vehicle::Vehicle,
 		world::{World, PhysicsState},
-		map::{ServerMap, map_generation::{MapGenerator, MeshCreationArgs, gis::WorldLocation}}
+		map::{ServerMap, SaveMap, map_generation::{MapGenerator, MeshCreationArgs, gis::WorldLocation}, chunk::ChunkCreationArgs}
 	};
 	#[cfg(any(feature = "server", feature = "debug_render_physics"))] pub use crate::RapierBodyCreationDeletionContext;
 	// Utility functions because nalgebra is friggin complicated
@@ -449,7 +450,7 @@ impl<'a> RapierBodyCreationDeletionContext<'a> {// From ChatGPT
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct SimpleIso {// Isometry with just
 	translation: V3,
 	rotation: SimpleRotation
@@ -470,7 +471,7 @@ impl SimpleIso {
 	}
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct SimpleRotation {
 	pub yaw: Float,
 	pub pitch: Float
@@ -481,11 +482,24 @@ impl SimpleRotation {
 		UnitQuaternion::from_axis_angle(&V3::y_axis(), self.yaw) * UnitQuaternion::from_axis_angle(&V3::x_axis(), self.pitch)
 	}
 	pub fn from_quat(quat: UnitQuaternion<Float>) -> Self {
+		// Pitch
+		let y = quat.transform_vector(&V3::new(1.0, 0.0, 0.0)).y;
+		let pitch = if y - 1.0 < EPSILON {
+			PI/2.0
+		}
+		else {
+			if y + 1.0 < EPSILON {
+				-PI/2.0
+			}
+			else {
+				y.asin()
+			}
+		};
 		// TODO: fix
-		let (_roll, pitch, yaw) = quat.euler_angles();// https://docs.rs/nalgebra/latest/nalgebra/geometry/type.UnitQuaternion.html#method.euler_angles
+		let (_roll, _pitch, yaw) = quat.euler_angles();// https://docs.rs/nalgebra/latest/nalgebra/geometry/type.UnitQuaternion.html#method.euler_angles
 		Self {
 			yaw,
-			pitch: pitch - PI / 2.0
+			pitch
 		}
 	}
 }
@@ -505,7 +519,7 @@ pub fn ui_main() {
 	// Parse arguments
 	let args: Vec<String> = env::args().collect();
 	if args.len() < 2 {// Just the program name, default to running the server GUI
-		panic!("Not enough arguments, see source code");
+		panic!("Not enough arguments, see crate::ui_maine()");
 	}
 	else {
 		match &args[1][..] {
@@ -522,7 +536,7 @@ pub fn ui_main() {
 				let chunk_grid_size = prompt("Number of points along each side of chunk (chunk size)").parse::<UInt>().unwrap();
 				let gen = MapGenerator::default();
 				// name: &str, chunk_size: UInt, chunk_grid_size: UInt, gen: gen::Gen, background_color: [u8; 3]
-				resource_interface::save_map(&ServerMap::new(&name, chunk_size, chunk_grid_size, gen, [0, 128, 0])).unwrap();
+				resource_interface::save_map(&ServerMap::new(&name, chunk_size, chunk_grid_size, gen, [0, 128, 0]).save()).unwrap();
 			},
 			"-new-user" => {
 				if args.len() < 4 {

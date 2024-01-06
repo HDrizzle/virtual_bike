@@ -370,7 +370,7 @@ impl World {
 			}
 			// 4: Chunks
 			self.load_unload_chunks();
-			self.map.check_chunk_creation(&mut self.physics_state.build_body_creation_deletion_context());
+			self.map.check_chunk_creator(&mut self.physics_state.build_body_creation_deletion_context());
 			// Placeholder to prevent the computer from freezing
 			thread::sleep(Duration::from_millis(5));
 		}

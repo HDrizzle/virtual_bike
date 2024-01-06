@@ -288,6 +288,17 @@ impl ChunkRef {
 	}
 }
 
+#[cfg(feature = "server")]
+#[derive(Clone)]
+pub struct ChunkCreationArgs {
+	pub ref_: ChunkRef,
+	pub size: u64,
+	pub grid_size: u64,
+	pub gen: MapGenerator,
+	pub background_color: [u8; 3], 
+	pub map_name: String
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Chunk {
 	pub ref_: ChunkRef,
@@ -311,26 +322,26 @@ impl Chunk {
 		resource_interface::load_chunk_data(ref_, map_name)
 	}
 	#[cfg(feature = "server")]
-	pub fn new(ref_: ChunkRef, size: u64, grid_size: u64, gen: &MapGenerator, background_color: [u8; 3], map_name: &str) -> Result<Self, String> {
-		let elevation = gen.create_mesh(MeshCreationArgs {
-			chunk_ref: &ref_,
-			size,
-			grid_size,
-			adj_meshes: ref_.get_adjacent_chunk_meshes(size, map_name)
+	pub fn new(args: ChunkCreationArgs) -> Result<Self, String> {
+		let elevation = args.gen.create_mesh(MeshCreationArgs {
+			chunk_ref: &args.ref_,
+			size: args.size,
+			grid_size: args.grid_size,
+			adj_meshes: args.ref_.get_adjacent_chunk_meshes(args.size, &args.map_name)
 		});
 		let out = Self {
-			ref_: ref_.clone(),
+			ref_: args.ref_.clone(),
 			elevation,
 			texture_data: None,
-			size,
-			grid_size,
-			background_color,
+			size: args.size,
+			grid_size: args.grid_size,
+			background_color: args.background_color,
 			collider_handle: None,
 			#[cfg(feature = "client")] asset_id_opt: None
 		};
 		// Save chunk
 		//println!("Creating and saving chunk at {}", out.ref_.resource_dir_name());
-		resource_interface::save_chunk_data(&out, map_name).unwrap();
+		resource_interface::save_chunk_data(&out, &args.map_name).unwrap();
 		// Done
 		Ok(out)
 	}

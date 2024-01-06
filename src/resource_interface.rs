@@ -116,7 +116,8 @@ pub fn load_chunk_data(chunk_ref: &ChunkRef, map_name: &str) -> Result<Chunk, Bo
 #[cfg(feature = "server")]
 pub fn load_map_metadata(name: &str) -> Result<ServerMap, Box<dyn Error>> {
 	let raw_string: String = load_file_with_better_error(&(MAPS_DIR.to_owned() + name + "/metadata.json"))?;
-	let map: ServerMap = serde_json::from_str(&raw_string)?;
+	let save_map: SaveMap = serde_json::from_str(&raw_string)?;
+	let map = ServerMap::from_save(save_map);
 	Ok(map)
 }
 
@@ -151,7 +152,7 @@ pub fn load_port() -> Result<u16, Box<dyn Error>> {
 
 // Save
 #[cfg(feature = "server")]
-pub fn save_map(map: &ServerMap) -> Result<(), Box<dyn Error>> {
+pub fn save_map(map: &SaveMap) -> Result<(), Box<dyn Error>> {
 	let raw_string = serde_json::to_string(map)?;
 	fs::write(&(MAPS_DIR.to_owned() + &map.generic.name + ".json"), &raw_string)?;
 	Ok(())

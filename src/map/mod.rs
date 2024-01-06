@@ -1,6 +1,6 @@
 // Map main module file
 
-use std::{collections::HashMap, mem, thread, sync::{mpsc, Arc, Mutex}};
+use std::{collections::HashMap, mem, thread, sync::{mpsc, Arc, Mutex}, time::Instant};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 #[cfg(feature = "client")]
 use bevy::prelude::*;
@@ -62,7 +62,7 @@ impl GenericMap {
 			background_color,
 			auto_gen_chunks: true,
 			#[cfg(any(feature = "server", feature = "debug_render_physics"))]
-			body_handle_opt: None,
+			body_handle_opt: None
 			/*#[cfg(feature = "server")]
 			active_chunk_creators: Vec::new()*/
 		}
@@ -199,15 +199,27 @@ impl GenericMap {
 
 #[cfg(feature = "server")]
 #[derive(Serialize, Deserialize)]
+pub struct SaveMap {
+	pub generic: GenericMap,
+	pub gen: MapGenerator,
+	pub chunk_creation_rate_limit: Float
+}
+
+#[cfg(feature = "server")]
 pub struct ServerMap {
 	pub generic: GenericMap,
 	gen: MapGenerator,
-	#[serde(skip)]
-	active_chunk_creators: Vec<AsyncChunkCreator>
+	chunk_creator: ChunkCreationManager
 }
 
 impl ServerMap {
-	#[cfg(feature = "server")]
+	pub fn from_save(save: SaveMap) -> Self {
+		Self {
+			generic: save.generic,
+			gen: save.gen,
+			chunk_creator: ChunkCreationManager::new(save.chunk_creation_rate_limit)
+		}
+	}
 	pub fn new(name: &str, chunk_size: UInt, chunk_grid_size: UInt, gen: MapGenerator, background_color: [u8; 3]) -> Self {
 		Self {
 			generic: GenericMap::new(
@@ -217,7 +229,7 @@ impl ServerMap {
 				background_color
 			),
 			gen,
-			active_chunk_creators: Vec::new()
+			chunk_creator: ChunkCreationManager::new(4.0)// TODO: fix arbitrary value
 		}
 	}
 	pub fn send(&self, #[cfg(feature = "debug_render_physics")] physics: &mut PhysicsStateSend) -> GenericMap {
@@ -235,49 +247,100 @@ impl ServerMap {
 		}
 		else {// Chunk does not exist, create it
 			if self.generic.auto_gen_chunks {
-				self.active_chunk_creators.push(AsyncChunkCreator::start(ref_.clone(), self.generic.chunk_size, self.generic.chunk_grid_size, self.gen.clone(), self.generic.background_color, self.generic.name.clone()));
+				self.chunk_creator.start(ChunkCreationArgs {
+					ref_: ref_.clone(),
+					size: self.generic.chunk_size,
+					grid_size: self.generic.chunk_grid_size,
+					gen: self.gen.clone(),
+					background_color: self.generic.background_color,
+					map_name: self.generic.name.clone(),
+				});
 			}
 			None
 		};
 	}
-	pub fn check_chunk_creation(&mut self, rapier_data: &mut RapierBodyCreationDeletionContext) -> Result<(), String> {
+	pub fn check_chunk_creator(&mut self, rapier_data: &mut RapierBodyCreationDeletionContext) -> Vec<Result<(), String>> {
+		let results = self.chunk_creator.check_chunk_creators();
+		let mut out = Vec::<Result<(), String>>::new();
+		for res in results {
+			match res {
+				Ok(chunk) => {self.generic.insert_chunk(chunk, Some(rapier_data));},
+				Err(e) => out.push(Err(e))
+			}
+		}
+		// Done
+		out
+	}
+	pub fn save(&self) -> SaveMap {
+		SaveMap {
+			generic: self.generic.clone(),
+			gen: self.gen.clone(),
+			chunk_creation_rate_limit: self.chunk_creator.rate_limit
+		}
+	}
+}
+
+#[cfg(feature = "server")]
+struct ChunkCreationManager {
+	active_chunk_creators: Vec<AsyncChunkCreator>,
+	ref_request_count: HashMap<ChunkRef, u32>,
+	rate_limit: Float,
+	most_recent_creation: Arc<Mutex<Instant>>
+}
+
+impl ChunkCreationManager {
+	pub fn new(rate_limit: Float) -> Self {
+		Self {
+			active_chunk_creators: Vec::new(),
+			ref_request_count: HashMap::new(),
+			rate_limit,// Arbitrary, TODO: get
+			most_recent_creation: Arc::new(Mutex::new(Instant::now()))
+		}
+	}
+	pub fn start(&mut self, chunk_creation_args: ChunkCreationArgs) {
+		let most_recent_creation_clone = self.most_recent_creation.clone();
+		self.active_chunk_creators.push(AsyncChunkCreator::start(chunk_creation_args, most_recent_creation_clone));// TODO: rate limiting, priority, and such things
+	}
+	pub fn check_chunk_creators(&mut self) -> Vec<Result<Chunk, String>> {
+		let mut out = Vec::<Result<Chunk, String>>::new();
 		for chunk_creator in &mut self.active_chunk_creators {
 			let opt = chunk_creator.check();
 			match opt {
-				Some(result) => match result {
-					Ok(chunk) => {self.generic.insert_chunk(chunk, Some(rapier_data));},
-					Err(e) => {return Err(e);}
-				},
+				Some(result) => out.push(result),
 				None => {}
 			}
 		}
-		Ok(())
+		// Done
+		out
 	}
 }
 
 #[cfg(feature = "server")]
 struct AsyncChunkCreator {
+	start_time: Instant,
 	thread_handle_opt: Option<thread::JoinHandle<()>>,
 	chunk_ref: ChunkRef,
 	result: Arc<Mutex<Option<Result<Chunk, String>>>>
 }
 
 impl AsyncChunkCreator {
-	pub fn start(chunk_ref: ChunkRef, size: u64, grid_size: u64, gen: MapGenerator, background_color: [u8; 3], map_name: String) -> Self {
+	pub fn start(chunk_creation_args: ChunkCreationArgs, most_recent_creation: Arc<Mutex<Instant>>) -> Self {
 		let result: Arc<Mutex<Option<Result<Chunk, String>>>> = Arc::new(Mutex::new(None));
 		let result_clone = result.clone();
-		let chunk_ref_clone = chunk_ref.clone();
+		let chunk_ref = chunk_creation_args.ref_.clone();
 		let thread_handle = thread::spawn(
-			move || Self::main_loop(result_clone, chunk_ref_clone, size, grid_size, gen, background_color, map_name)
+			move || Self::main_loop(result_clone, most_recent_creation, chunk_creation_args)
 		);
 		Self {
+			start_time: Instant::now(),
 			thread_handle_opt: Some(thread_handle),
 			chunk_ref,
 			result
 		}
 	}
-	fn main_loop(result_mutex: Arc<Mutex<Option<Result<Chunk, String>>>>, chunk_ref: ChunkRef, size: u64, grid_size: u64, gen: MapGenerator, background_color: [u8; 3], map_name: String) {
-		let result = Chunk::new(chunk_ref, size, grid_size, &gen, background_color, &map_name);
+	fn main_loop(result_mutex: Arc<Mutex<Option<Result<Chunk, String>>>>, most_recent_creation: Arc<Mutex<Instant>>, chunk_creation_args: ChunkCreationArgs) {
+		// TODO: delay
+		let result = Chunk::new(chunk_creation_args);
 		*result_mutex.lock().unwrap() = Some(result);
 	}
 	pub fn check(&mut self) -> Option<Result<Chunk, String>> {
