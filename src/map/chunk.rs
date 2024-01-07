@@ -1,6 +1,6 @@
 // Created 2023-9-29
 
-use std::{rc::Rc, error::Error, collections::HashMap};
+use std::{rc::Rc, error::Error, collections::HashMap, sync::{Arc, Mutex}};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 #[cfg(feature = "client")]
 use bevy::prelude::*;
@@ -251,7 +251,8 @@ impl ChunkRef {
 		}
 	}
 	#[cfg(feature = "server")]
-	pub fn get_adjacent_chunk_meshes(&self, chunk_size: UInt, map_name: &str) -> [Option<Rc<RegularElevationMesh>>; 4] {
+	pub fn get_adjacent_chunk_meshes(&self, chunk_size: UInt, map_name: &str, filesystem_lock: Arc<Mutex<()>>) -> [Option<Rc<RegularElevationMesh>>; 4] {
+		let _lock = filesystem_lock.lock().unwrap();
 		//println!("Checking for chunks adjacent to: {:?}", self.position);
 		let mut adj_meshes: [Option<Rc<RegularElevationMesh>>; 4] = [None, None, None, None];// Has to be expanded like this otherwise Copy will need to be implemented
 		for (i_raw, offset) in EightWayDir::iter().enumerate() {
@@ -322,12 +323,12 @@ impl Chunk {
 		resource_interface::load_chunk_data(ref_, map_name)
 	}
 	#[cfg(feature = "server")]
-	pub fn new(args: ChunkCreationArgs) -> Result<Self, String> {
+	pub fn new(args: ChunkCreationArgs, filesystem_lock: Arc<Mutex<()>>) -> ChunkCreationResult {
 		let elevation = args.gen.create_mesh(MeshCreationArgs {
 			chunk_ref: &args.ref_,
 			size: args.size,
 			grid_size: args.grid_size,
-			adj_meshes: args.ref_.get_adjacent_chunk_meshes(args.size, &args.map_name)
+			adj_meshes: args.ref_.get_adjacent_chunk_meshes(args.size, &args.map_name, filesystem_lock.clone())
 		});
 		let out = Self {
 			ref_: args.ref_.clone(),
@@ -340,10 +341,13 @@ impl Chunk {
 			#[cfg(feature = "client")] asset_id_opt: None
 		};
 		// Save chunk
-		//println!("Creating and saving chunk at {}", out.ref_.resource_dir_name());
-		resource_interface::save_chunk_data(&out, &args.map_name).unwrap();
+		{
+			//println!("Creating and saving chunk at {}", out.ref_.resource_dir_name());
+			let _lock = filesystem_lock.lock().unwrap();
+			resource_interface::save_chunk_data(&out, &args.map_name).unwrap();
+		}
 		// Done
-		Ok(out)
+		ChunkCreationResult::Ok(out)
 	}
 	#[cfg(any(feature = "server", feature = "debug_render_physics"))]
 	pub fn init_rapier(&mut self, rapier_data: &mut RapierBodyCreationDeletionContext, parent_body_handle: RigidBodyHandle) {
@@ -424,5 +428,20 @@ impl Chunk {
 	pub fn set_position(&mut self, chunk_ref: &ChunkRef) {
 		// Sets chunk's position if it has been loaded as a generic chunk because if so it will likely be incorrect
 		self.ref_ = chunk_ref.clone();
+	}
+}
+
+#[cfg(feature = "server")]
+pub enum ChunkCreationResult {
+	Ok(Chunk),
+	Err(String, ChunkRef)
+}
+
+impl ChunkCreationResult {
+	pub fn chunk_ref(&self) -> &ChunkRef {
+		match self {
+			Self::Ok(chunk) => &chunk.ref_,
+			Self::Err(_, chunk_ref) => &chunk_ref
+		}
 	}
 }

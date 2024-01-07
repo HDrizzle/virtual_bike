@@ -104,7 +104,7 @@
 		"chunk_grid_size": 10,
 		"landmarks": {},
 		"background_color": [0, 128, 0],
-		"auto_gen_chunks": false
+		"auto_gen_chunks": true
 	},
 	"gen": {
 		"RandomGen": {
@@ -116,5 +116,5 @@
 			"elev_abs_limit": 20
 		}
 	},
-	"chunk_creation_rate_limit": 4
+	"chunk_creation_rate_limit": 20
 }

@@ -15,8 +15,8 @@
 						"latest_point": 0,
                     	"t": 0.0
 					},
-                    "velocity": 10,
-                    "forward": true
+                    "velocity": 15,
+                    "forward": false
                 }
 			}
 		},

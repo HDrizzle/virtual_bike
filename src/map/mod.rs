@@ -1,6 +1,6 @@
 // Map main module file
 
-use std::{collections::HashMap, mem, thread, sync::{mpsc, Arc, Mutex}, time::Instant};
+use std::{collections::HashMap, mem, thread, sync::{mpsc, Arc, Mutex}, time::{Instant, Duration}};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 #[cfg(feature = "client")]
 use bevy::prelude::*;
@@ -264,8 +264,8 @@ impl ServerMap {
 		let mut out = Vec::<Result<(), String>>::new();
 		for res in results {
 			match res {
-				Ok(chunk) => {self.generic.insert_chunk(chunk, Some(rapier_data));},
-				Err(e) => out.push(Err(e))
+				ChunkCreationResult::Ok(chunk) => {self.generic.insert_chunk(chunk, Some(rapier_data));},
+				ChunkCreationResult::Err(e, chunk_ref) => out.push(Err(format!("Error creating chunk at {}", chunk_ref.resource_dir_name())))
 			}
 		}
 		// Done
@@ -283,35 +283,56 @@ impl ServerMap {
 #[cfg(feature = "server")]
 struct ChunkCreationManager {
 	active_chunk_creators: Vec<AsyncChunkCreator>,
-	ref_request_count: HashMap<ChunkRef, u32>,
 	rate_limit: Float,
-	most_recent_creation: Arc<Mutex<Instant>>
+	most_recent_creation: Arc<Mutex<Instant>>,
+	priority: Arc<Mutex<Vec<ChunkRef>>>,// 0 is highest
+	filesystem_lock: Arc<Mutex<()>>// To prevent concurrent writing and reading which messes with stuff and also I'm paranoid
 }
 
 impl ChunkCreationManager {
 	pub fn new(rate_limit: Float) -> Self {
 		Self {
 			active_chunk_creators: Vec::new(),
-			ref_request_count: HashMap::new(),
 			rate_limit,// Arbitrary, TODO: get
-			most_recent_creation: Arc::new(Mutex::new(Instant::now()))
+			most_recent_creation: Arc::new(Mutex::new(Instant::now())),
+			priority: Arc::new(Mutex::new(Vec::new())),
+			filesystem_lock: Arc::new(Mutex::new(()))
 		}
 	}
 	pub fn start(&mut self, chunk_creation_args: ChunkCreationArgs) {
+		// Check if chunk ref is already in priority vec
+		{
+			let mut priority_access = self.priority.lock().unwrap();
+			if priority_access.contains(&chunk_creation_args.ref_) {
+				return;
+			}
+			priority_access.push(chunk_creation_args.ref_.clone());
+		}
+		// Clone Arcs and start chunk creator
 		let most_recent_creation_clone = self.most_recent_creation.clone();
-		self.active_chunk_creators.push(AsyncChunkCreator::start(chunk_creation_args, most_recent_creation_clone));// TODO: rate limiting, priority, and such things
+		let priority_clone = self.priority.clone();
+		self.active_chunk_creators.push(AsyncChunkCreator::start(chunk_creation_args, most_recent_creation_clone, priority_clone, self.rate_limit, self.filesystem_lock.clone()));// TODO: rate limiting, priority, and such things
 	}
-	pub fn check_chunk_creators(&mut self) -> Vec<Result<Chunk, String>> {
-		let mut out = Vec::<Result<Chunk, String>>::new();
+	pub fn check_chunk_creators(&mut self) -> Vec<ChunkCreationResult> {
+		let mut out = Vec::<ChunkCreationResult>::new();
 		for chunk_creator in &mut self.active_chunk_creators {
 			let opt = chunk_creator.check();
 			match opt {
-				Some(result) => out.push(result),
+				Some(result) => {
+					out.push(result);
+				},
 				None => {}
 			}
 		}
 		// Done
 		out
+	}
+	pub fn remove_chunk_ref_from_priority(priority: &mut Vec<ChunkRef>, chunk_ref: &ChunkRef) {
+		let i_opt = priority.iter().position(|r| r == chunk_ref);
+		match i_opt {
+			Some(i) => {priority.remove(i);},
+			None => panic!("Attempt to remove chunk ref {:?} for priority vec when it isn't already there", &chunk_ref)
+		}
 	}
 }
 
@@ -320,17 +341,17 @@ struct AsyncChunkCreator {
 	start_time: Instant,
 	thread_handle_opt: Option<thread::JoinHandle<()>>,
 	chunk_ref: ChunkRef,
-	result: Arc<Mutex<Option<Result<Chunk, String>>>>
+	result: Arc<Mutex<Option<ChunkCreationResult>>>
 }
 
 impl AsyncChunkCreator {
-	pub fn start(chunk_creation_args: ChunkCreationArgs, most_recent_creation: Arc<Mutex<Instant>>) -> Self {
-		let result: Arc<Mutex<Option<Result<Chunk, String>>>> = Arc::new(Mutex::new(None));
+	pub fn start(chunk_creation_args: ChunkCreationArgs, most_recent_creation: Arc<Mutex<Instant>>, priority: Arc<Mutex<Vec<ChunkRef>>>, rate_limit: Float, filesystem_lock: Arc<Mutex<()>>) -> Self {
+		let result: Arc<Mutex<Option<ChunkCreationResult>>> = Arc::new(Mutex::new(None));
 		let result_clone = result.clone();
 		let chunk_ref = chunk_creation_args.ref_.clone();
-		let thread_handle = thread::spawn(
-			move || Self::main_loop(result_clone, most_recent_creation, chunk_creation_args)
-		);
+		let thread_handle = thread::Builder::new().name(format!("create-chunk-{}", chunk_ref.resource_dir_name())).spawn(
+			move || Self::main_loop(priority, rate_limit, result_clone, most_recent_creation, chunk_creation_args, filesystem_lock)
+		).unwrap();
 		Self {
 			start_time: Instant::now(),
 			thread_handle_opt: Some(thread_handle),
@@ -338,15 +359,31 @@ impl AsyncChunkCreator {
 			result
 		}
 	}
-	fn main_loop(result_mutex: Arc<Mutex<Option<Result<Chunk, String>>>>, most_recent_creation: Arc<Mutex<Instant>>, chunk_creation_args: ChunkCreationArgs) {
-		// TODO: delay
-		let result = Chunk::new(chunk_creation_args);
+	fn main_loop(priority: Arc<Mutex<Vec<ChunkRef>>>, rate_limit: Float, result_mutex: Arc<Mutex<Option<ChunkCreationResult>>>, most_recent_creation: Arc<Mutex<Instant>>, chunk_creation_args: ChunkCreationArgs, filesystem_lock: Arc<Mutex<()>>) {
+		// Delay until this is at index 0 of the priority vec
+		loop {
+			let break_after_sleep = priority.lock().unwrap()[0] == chunk_creation_args.ref_;
+			let rate_limit_dur = Duration::from_secs_f32(1.0 / rate_limit);
+			let dur_since_last_creation = Instant::now().duration_since(*most_recent_creation.lock().unwrap());
+			if rate_limit_dur > dur_since_last_creation {
+				thread::sleep(rate_limit_dur - dur_since_last_creation);
+			}
+			if break_after_sleep {
+				break;
+			}
+		}
+		// Create chunk
+		*most_recent_creation.lock().unwrap() = Instant::now();
+		let result = Chunk::new(chunk_creation_args, filesystem_lock);
+		// Remove from priority when done, even if failed
+		ChunkCreationManager::remove_chunk_ref_from_priority(&mut priority.lock().unwrap(), result.chunk_ref());
+		// Set result
 		*result_mutex.lock().unwrap() = Some(result);
 	}
-	pub fn check(&mut self) -> Option<Result<Chunk, String>> {
-		if self.is_done() {// If there is a thread handle, the thread hasn't been joined yet
+	pub fn check(&mut self) -> Option<ChunkCreationResult> {
+		if !self.is_done() {// If there is a thread handle, the thread hasn't been joined yet
 			let mut result_ref = self.result.lock().unwrap();
-			let chunk_res_opt: Option<Result<Chunk, String>> = mem::replace(&mut *result_ref, None);
+			let chunk_res_opt: Option<ChunkCreationResult> = mem::replace(&mut *result_ref, None);
 			match &chunk_res_opt {// If thread set the arc mutex to Som(_), then it is done, join it
 				Some(_) => {
 					let thread_handle_opt_owned = mem::replace(&mut self.thread_handle_opt, None);
