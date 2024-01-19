@@ -202,7 +202,8 @@ impl GenericMap {
 pub struct SaveMap {
 	pub generic: GenericMap,
 	pub gen: MapGenerator,
-	pub chunk_creation_rate_limit: Float
+	pub chunk_creation_rate_limit: Float,
+	pub active_chunk_creators_limit: usize
 }
 
 #[cfg(feature = "server")]
@@ -217,7 +218,7 @@ impl ServerMap {
 		Self {
 			generic: save.generic,
 			gen: save.gen,
-			chunk_creator: ChunkCreationManager::new(save.chunk_creation_rate_limit)
+			chunk_creator: ChunkCreationManager::new(save.chunk_creation_rate_limit, save.active_chunk_creators_limit)
 		}
 	}
 	pub fn new(name: &str, chunk_size: UInt, chunk_grid_size: UInt, gen: MapGenerator, background_color: [u8; 3]) -> Self {
@@ -229,7 +230,7 @@ impl ServerMap {
 				background_color
 			),
 			gen,
-			chunk_creator: ChunkCreationManager::new(4.0)// TODO: fix arbitrary value
+			chunk_creator: ChunkCreationManager::new(4.0, 20)// TODO: fix arbitrary value
 		}
 	}
 	pub fn send(&self, #[cfg(feature = "debug_render_physics")] physics: &mut PhysicsStateSend) -> GenericMap {
@@ -260,7 +261,7 @@ impl ServerMap {
 		};
 	}
 	pub fn check_chunk_creator(&mut self, rapier_data: &mut RapierBodyCreationDeletionContext) -> Vec<Result<(), String>> {
-		let results = self.chunk_creator.check_chunk_creators();
+		let results = self.chunk_creator.update();
 		let mut out = Vec::<Result<(), String>>::new();
 		for res in results {
 			match res {
@@ -275,6 +276,7 @@ impl ServerMap {
 		SaveMap {
 			generic: self.generic.clone(),
 			gen: self.gen.clone(),
+			active_chunk_creators_limit: self.chunk_creator.active_chunk_creators_limit,
 			chunk_creation_rate_limit: self.chunk_creator.rate_limit
 		}
 	}
@@ -283,6 +285,8 @@ impl ServerMap {
 #[cfg(feature = "server")]
 struct ChunkCreationManager {
 	active_chunk_creators: Vec<AsyncChunkCreator>,
+	chunk_creation_queue: Vec<ChunkCreationArgs>,
+	active_chunk_creators_limit: usize,
 	rate_limit: Float,
 	most_recent_creation: Arc<Mutex<Instant>>,
 	priority: Arc<Mutex<Vec<ChunkRef>>>,// 0 is highest
@@ -290,10 +294,12 @@ struct ChunkCreationManager {
 }
 
 impl ChunkCreationManager {
-	pub fn new(rate_limit: Float) -> Self {
+	pub fn new(rate_limit: Float, active_chunk_creators_limit: usize) -> Self {
 		Self {
 			active_chunk_creators: Vec::new(),
-			rate_limit,// Arbitrary, TODO: get
+			chunk_creation_queue: Vec::new(),// For chunks to be created after the `active_chunk_creators` length goes below `active_chunk_creators_limit`
+			active_chunk_creators_limit,// Maximum length of `active_chunk_creators`
+			rate_limit,
 			most_recent_creation: Arc::new(Mutex::new(Instant::now())),
 			priority: Arc::new(Mutex::new(Vec::new())),
 			filesystem_lock: Arc::new(Mutex::new(()))
@@ -308,30 +314,52 @@ impl ChunkCreationManager {
 			}
 			priority_access.push(chunk_creation_args.ref_.clone());
 		}
+		if self.active_chunk_creators_limit - self.active_chunk_creators.len() > 0 {
+			self.spawn_chunk_creator(chunk_creation_args);
+		}
+		else {
+			self.chunk_creation_queue.push(chunk_creation_args);
+		}
+	}
+	fn spawn_chunk_creator(&mut self, chunk_creation_args: ChunkCreationArgs) {
 		// Clone Arcs and start chunk creator
 		let most_recent_creation_clone = self.most_recent_creation.clone();
 		let priority_clone = self.priority.clone();
 		self.active_chunk_creators.push(AsyncChunkCreator::start(chunk_creation_args, most_recent_creation_clone, priority_clone, self.rate_limit, self.filesystem_lock.clone()));// TODO: rate limiting, priority, and such things
 	}
-	pub fn check_chunk_creators(&mut self) -> Vec<ChunkCreationResult> {
+	pub fn update(&mut self) -> Vec<ChunkCreationResult> {
+		// Check chunk creators
+		let mut indices_to_delete = Vec::<usize>::new();
 		let mut out = Vec::<ChunkCreationResult>::new();
-		for chunk_creator in &mut self.active_chunk_creators {
+		for (i, mut chunk_creator) in &mut self.active_chunk_creators.iter_mut().enumerate() {
 			let opt = chunk_creator.check();
 			match opt {
 				Some(result) => {
 					out.push(result);
+					indices_to_delete.push(i);
 				},
 				None => {}
 			}
+		}
+		// Iterate over indices to delete
+		for i_to_delete in indices_to_delete.iter().rev() {
+			assert!(self.active_chunk_creators[*i_to_delete].is_done(), "Chunk creator to delete is not done");
+			self.active_chunk_creators.remove(*i_to_delete);
+		}
+		// Spawn new chunk creators if `self.active_chunk_creators_limit` allows it
+		for _ in 0..((self.active_chunk_creators_limit - self.active_chunk_creators.len()).min(self.chunk_creation_queue.len())) {
+			let new_chunk_args = self.chunk_creation_queue.remove(0);// If this panics then I have messed up the math in the for-loop
+			self.spawn_chunk_creator(new_chunk_args);
 		}
 		// Done
 		out
 	}
 	pub fn remove_chunk_ref_from_priority(priority: &mut Vec<ChunkRef>, chunk_ref: &ChunkRef) {
+		// Check priority queue vec
 		let i_opt = priority.iter().position(|r| r == chunk_ref);
 		match i_opt {
 			Some(i) => {priority.remove(i);},
-			None => panic!("Attempt to remove chunk ref {:?} for priority vec when it isn't already there", &chunk_ref)
+			None => panic!("Couldn't find chunk ref {:?} to remove in priority vec", &chunk_ref)
 		}
 	}
 }

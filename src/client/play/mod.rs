@@ -70,7 +70,7 @@ impl CameraController {
 	pub fn update(&mut self, dt: Float, vehicles: &HashMap<String, VehicleSend>, trans_input: V3, rot_input: V2) {
 		match self {
 			Self::Spectator{pos} => {
-				let lin_speed: Float = 50.0;// M/s
+				let lin_speed: Float = 250.0;// M/s
 				let ang_speed: Float = 1.0;// Rad/s
 				// Scale translation by speed and dt
 				let trans_input_scaled = trans_input * lin_speed * dt;

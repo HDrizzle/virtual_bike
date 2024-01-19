@@ -5,19 +5,22 @@ use serde::{Serialize, Deserialize};
 use crate::prelude::*;
 
 pub mod gis;
+pub mod fractal;
 
 // Enum
 #[derive(Serialize, Deserialize, Clone)]
 pub enum MapGenerator {
 	RandomGen(Random),
-	RealTerrainGen(RealTerrain)
+	RealTerrainGen(RealTerrain),
+	FractalGen(fractal::FractalCreator)
 }
 
 impl MapGenerator {
 	pub fn create_mesh(&self, args: MeshCreationArgs) -> RegularElevationMesh {
 		match self {
 			Self::RandomGen(gen) => gen.create_mesh(args),
-			Self::RealTerrainGen(gen) => gen.create_mesh(args)
+			Self::RealTerrainGen(gen) => gen.create_mesh(args),
+			Self::FractalGen(gen) => gen.create_mesh(args)
 		}
 	}
 }
@@ -49,6 +52,16 @@ pub struct Random {// Based off of this 2D model I built: https://docs.google.co
 }
 
 impl Random {
+	pub fn flat() -> Self {
+		Self {
+			seed: 1,
+			max_slope: 0.0,
+			rand_multiplier: 0.0,
+			first_sum_multiplier: 0.0,
+			second_sum_multiplier: 0.0,
+			elev_abs_limit: 0.0
+		}
+	}
 	// TODO: implement perlin noise, good description at https://www.cs.umd.edu/class/spring2018/cmsc425/Lects/lect13-2d-perlin.pdf
 	pub fn create_mesh(&self, args: MeshCreationArgs) -> RegularElevationMesh {
 		// There are two units being used here: base units and grid index units. base unit * precision = grid unit

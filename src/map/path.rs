@@ -423,12 +423,29 @@ impl Path {
 	}
 }
 
+type RouteId = u64;
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Route {// List of intersections
+	name: String,
+	intersections: Vec<Intersection>
+}
+
+type IntersectionId = u64;
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Intersection {
+	path_points: Vec<(PathRef, PathPosition)>
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct PathSet {
 	pub paths: HashMap<PathRef, Path>,
 	query_grid_scale: UInt,// 0 means no query grid
 	#[serde(skip)]
-	query_grid: HashMap<IntV2, Vec<PathRef>>
+	query_grid: HashMap<IntV2, Vec<PathRef>>,
+	intersections: HashMap<IntersectionId, Intersection>,
+	routes: HashMap<RouteId, Route>
 }
 
 impl PathSet {
@@ -442,7 +459,9 @@ impl Default for PathSet {
 		Self {
 			paths: HashMap::new(),
 			query_grid_scale: 0,
-			query_grid: HashMap::new()
+			query_grid: HashMap::new(),
+			intersections: HashMap::new(),
+			routes: HashMap::new()
 		}
 	}
 }

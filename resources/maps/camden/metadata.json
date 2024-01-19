@@ -5,7 +5,7 @@
 			"paths": {},
 			"query_grid_scale": 0
 		},
-		"chunk_size": 100,
+		"chunk_size": 1000,
 		"chunk_grid_size": 9,
 		"landmarks": {},
 		"background_color": [0, 128, 0],
@@ -19,5 +19,5 @@
 			}
 		}
 	},
-	"chunk_creation_rate_limit": 4
+	"chunk_creation_rate_limit": 5
 }
