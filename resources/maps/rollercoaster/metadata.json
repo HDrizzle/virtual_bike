@@ -98,7 +98,9 @@
 					"loop_": true
 				}
 			},
-			"query_grid_scale": 0
+			"query_grid_scale": 0,
+			"intersections": {},
+			"routes": {}
 		},
 		"chunk_size": 100,
 		"chunk_grid_size": 10,
@@ -116,5 +118,6 @@
 			"elev_abs_limit": 20
 		}
 	},
-	"chunk_creation_rate_limit": 20
+	"chunk_creation_rate_limit": 20,
+	"active_chunk_creators_limit": 20
 }

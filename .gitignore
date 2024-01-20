@@ -22,3 +22,7 @@ client/assets/client_cache/
 
 # Apple thing
 .DS_Store
+*/.DS_Store
+*/*/.DS_Store
+*/*/*/.DS_Store
+*/*/*/*/.DS_Store

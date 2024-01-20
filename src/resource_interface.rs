@@ -85,7 +85,6 @@ pub fn does_generic_chunk_exist(map_name: &str) -> Option<String> {
 
 #[cfg(feature = "server")]
 pub fn does_non_generic_chunk_exist(chunk_ref: &ChunkRef, map_name: &str) -> Option<String> {
-	// Explicitly uses path for non-generic chunk, even if `chunk_ref.generic` is `true`
 	let path = chunk_ref.resource_path(map_name, false);
 	if fs::read_dir(path.clone()).is_ok() {
 		Some(path)

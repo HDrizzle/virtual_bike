@@ -52,6 +52,8 @@ mod map;
 mod vehicle;
 #[cfg(feature = "server")]
 mod physics;
+#[cfg(feature = "server")]
+pub mod validity;
 pub mod resource_interface;
 #[cfg(feature = "client")]
 pub mod client;
@@ -99,7 +101,8 @@ mod prelude {
 		physics::{PhysicsController, PhysicsUpdateArgs, BodyAveragableState, defaut_extra_forces_calculator},
 		vehicle::Vehicle,
 		world::{World, PhysicsState},
-		map::{ServerMap, SaveMap, map_generation::{MapGenerator, MeshCreationArgs, gis::WorldLocation}, chunk::{ChunkCreationArgs, ChunkCreationResult}}
+		map::{ServerMap, SaveMap, map_generation::{MapGenerator, MeshCreationArgs, gis::WorldLocation}, chunk::{ChunkCreationArgs, ChunkCreationResult}},
+		validity
 	};
 	#[cfg(any(feature = "server", feature = "debug_render_physics"))] pub use crate::RapierBodyCreationDeletionContext;
 	// Utility functions because nalgebra is friggin complicated
@@ -466,7 +469,7 @@ impl SimpleIso {
 	pub fn from_iso(iso: Iso) -> Self {
 		Self {
 			translation: iso.translation.vector,
-			rotation: SimpleRotation::from_quat(iso.rotation)
+			rotation: SimpleRotation::from_quat(&iso.rotation)
 		}
 	}
 }
@@ -481,10 +484,10 @@ impl SimpleRotation {
 	pub fn to_quat(&self) -> UnitQuaternion<Float> {
 		UnitQuaternion::from_axis_angle(&V3::y_axis(), self.yaw) * UnitQuaternion::from_axis_angle(&V3::x_axis(), self.pitch)
 	}
-	pub fn from_quat(quat: UnitQuaternion<Float>) -> Self {
+	pub fn from_quat(quat: &UnitQuaternion<Float>) -> Self {
 		// Pitch
 		let y = quat.transform_vector(&V3::new(0.0, 0.0, 1.0)).y;
-		let pitch = if y - 1.0 < EPSILON {
+		let pitch = if y - 1.0 < EPSILON {// TODO: fix
 			PI/2.0
 		}
 		else {
@@ -495,7 +498,6 @@ impl SimpleRotation {
 				y.asin()
 			}
 		} - PI/2.0;
-		// TODO: fix
 		let (_roll, _pitch, yaw) = quat.euler_angles();// https://docs.rs/nalgebra/latest/nalgebra/geometry/type.UnitQuaternion.html#method.euler_angles
 		Self {
 			yaw,
@@ -545,6 +547,9 @@ pub fn ui_main() {
 				resource_interface::users::new(&args[2], &args[3]).unwrap();
 				println!("Created user \"{}\" with password \"{}\"", &args[2], &args[3]);
 			},
+			"-validity-test" => {
+				validity::main_ui();
+			}
 			_ => panic!("Invalid arguments")
 		}
 	}

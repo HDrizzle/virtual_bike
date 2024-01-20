@@ -266,10 +266,7 @@ impl Path {
 		state.velocity = new_velocity;
 	}
 	pub fn sideways_gravity_force_component(&self, pos: &PathPosition, v_static: &VehicleStatic, gravity: Float) -> Float {
-		/*v_static.mass * gravity * -{
-			// Path angle
-			self.sample(pos).rotation.euler_angles().0// https://docs.rs/nalgebra/latest/nalgebra/geometry/type.UnitQuaternion.html#method.euler_angles
-		}.sin()*/0.0
+		v_static.mass * gravity * -SimpleRotation::from_quat(&self.sample(&pos).pos.rotation).pitch.sin()
 	}
 	#[cfg(feature = "client")]
 	pub fn bevy_mesh(&self, texture_len_width_ratio: Float, start: &PathPosition) -> (Mesh, Option<PathPosition>) {
@@ -428,7 +425,15 @@ type RouteId = u64;
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Route {// List of intersections
 	name: String,
-	intersections: Vec<Intersection>
+	intersections: Vec<Intersection>,
+	decisions: Vec<IntersectionDecision>,
+	start: PathBoundBodyState
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct IntersectionDecision {
+	pub exit: usize,// Index for intersection.path_points
+	pub forward: bool// Whether going forward on new path coming out of intersection
 }
 
 type IntersectionId = u64;
@@ -436,6 +441,18 @@ type IntersectionId = u64;
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Intersection {
 	path_points: Vec<(PathRef, PathPosition)>
+}
+
+impl Intersection {
+	pub fn default_decision(&self, paths: &PathSet, curr_path: PathRef) -> IntersectionDecision {
+		let mut out = IntersectionDecision {
+			exit: 0,
+			forward: true
+		};
+		// TODO
+		// Done
+		out
+	}
 }
 
 #[derive(Serialize, Deserialize, Clone)]
