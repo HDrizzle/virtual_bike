@@ -2,6 +2,7 @@
 
 use std::{collections::HashMap, mem, thread, sync::{mpsc, Arc, Mutex}, time::{Instant, Duration}};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
+use serde_json;
 #[cfg(feature = "client")]
 use bevy::prelude::*;
 #[cfg(feature = "client")]
@@ -11,6 +12,10 @@ use bevy_rapier3d::plugin::RapierContext;
 use crate::prelude::*;
 #[cfg(feature = "debug_render_physics")]
 use crate::world::PhysicsStateSend;
+#[cfg(feature = "server")]
+use validity::{ValidityTest, AutoFix, ValidityTestResult, ResourceDeserializationChecker};
+#[cfg(feature = "server")]
+use std::fs;
 
 pub mod chunk;
 pub mod path;
@@ -195,6 +200,31 @@ impl GenericMap {
 			path.init_bevy(commands, meshes, materials, asset_server);
 		}
 	}
+	#[cfg(feature = "server")]
+	pub fn validate_chunk(&self, path: &str) -> ValidityTestResult<SaveMapAutoFix> {
+		let deserialize_result = &ResourceDeserializationChecker::<Chunk>::new(path.to_owned()).check()[0];
+		match deserialize_result {
+			ValidityTestResult::Ok => {
+				let chunk: Chunk = serde_json::from_str(&fs::read_to_string(path).unwrap()).expect("Deserializa checker said file could be deserialized, but it can't");
+				// Check chunk size and grid size
+				if chunk.size != self.chunk_size || chunk.grid_size != self.chunk_grid_size {
+					ValidityTestResult::problem(
+						validity::ProblemType::Error,
+						format!("Chunk at \"{}\" has a size/grid size ({}, {}) that are inconsistent with the map's chunk size/chunk grid size ({}, {})", path, chunk.size, chunk.grid_size, self.chunk_size, self.chunk_grid_size),
+						None
+					)
+				}
+				else {
+					ValidityTestResult::Ok
+				}
+			},
+			ValidityTestResult::Problem{type_, message, auto_fix_opt} => ValidityTestResult::problem(
+				type_.clone(),
+				message.clone(),
+				None
+			)
+		}
+	}
 }
 
 #[cfg(feature = "server")]
@@ -204,6 +234,98 @@ pub struct SaveMap {
 	pub gen: MapGenerator,
 	pub chunk_creation_rate_limit: Float,
 	pub active_chunk_creators_limit: usize
+}
+
+impl validity::ValidityTest for SaveMap {
+	type AutoFixT = SaveMapAutoFix;
+	fn condition_description(&self) -> String {
+		"chunk and (optional) generic chunk files exist, chunks all have the same size/grid size, and their edges all line up".to_owned()
+	}
+	fn check(&self) -> Vec<ValidityTestResult<Self::AutoFixT>> {
+		// Stage 1: Existance of chunks folder and generic chunk is valid (if it exists)
+		let mut out = Vec::<ValidityTestResult<Self::AutoFixT>>::new();
+		let mut abort = false;
+		// Existance of chunks folder
+		let chunks_dir = format!("{}{}/chunks", resource_interface::MAPS_DIR, &self.generic.name);
+		if fs::read_dir(&chunks_dir).is_err() {
+			abort = true;
+			out.push(ValidityTestResult::Problem {
+				type_: validity::ProblemType::Error,
+				message: format!("Chunks directory (\"{}\") doesn't exist", chunks_dir),
+				auto_fix_opt: Some(
+					SaveMapAutoFix::new(
+						&self.generic.name,
+						SaveMapAutoFixEnum::CreateChunksFolder(validity::DirectoryExistanceAutoFix::new(chunks_dir))
+					)
+				)
+			});
+		}
+		// Generic chunk
+		let generic_chunk_dir = format!("{}{}/generic_chunk", resource_interface::MAPS_DIR, &self.generic.name);
+		if fs::read_dir(&generic_chunk_dir).is_ok() {
+			out.push(self.generic.validate_chunk(&(generic_chunk_dir + "/data.json")));
+		}
+		// All folders in chunks dir have valid names
+		// TODO
+		// Done
+		out
+	}
+}
+
+#[cfg(feature = "server")]
+#[derive(Clone)]
+pub struct SaveMapAutoFix {
+	map_name: String,
+	fix: SaveMapAutoFixEnum
+}
+
+impl SaveMapAutoFix {
+	pub fn new(map_name: &str, fix: SaveMapAutoFixEnum) -> Self {
+		Self {
+			map_name: map_name.to_owned(),
+			fix
+		}
+	}
+}
+
+impl validity::AutoFix for SaveMapAutoFix {
+	fn description(&self) -> String {
+		self.fix.description(&self.map_name)
+	}
+	fn fix(&self) -> Result<(), String> {
+		self.fix.fix(&self.map_name)
+	}
+}
+
+#[derive(Clone)]
+#[cfg(feature = "server")]
+enum SaveMapAutoFixEnum {
+	DeleteEmptyGenericChunkFolder,
+	DeleteEmptyChunkFolder(ChunkRef),
+	CreateChunksFolder(validity::DirectoryExistanceAutoFix),
+	AlignChunkEdges(ChunkRef, ChunkRef)
+}
+
+impl SaveMapAutoFixEnum {
+	fn description(&self, map_name: &str) -> String {
+		match self {
+			Self::DeleteEmptyGenericChunkFolder => "Delete empty generic chunk folder".to_owned(),
+			Self::DeleteEmptyChunkFolder(chunk_ref) => format!("Delete empty folder for chunk {:?}", chunk_ref),
+			Self::CreateChunksFolder(fix) => fix.description(),
+			Self::AlignChunkEdges(ref1, ref2) => format!("Modify chunks {:?} and {:?} so their edges line up", ref1, ref2)
+		}
+	}
+	fn fix(&self, map_name: &str) -> Result<(), String> {
+		match self {
+			Self::DeleteEmptyGenericChunkFolder => to_string_err(fs::remove_dir(ChunkRef{position: IntV2(0, 0)}.resource_dir(map_name, true))),
+			Self::DeleteEmptyChunkFolder(chunk_ref) => to_string_err(fs::remove_dir(chunk_ref.resource_dir(map_name, false))),
+			Self::CreateChunksFolder(fix) => fix.fix(),
+			Self::AlignChunkEdges(ref1, ref2) => {
+				// TODO
+				Ok(())
+			}
+		}
+	}
 }
 
 #[cfg(feature = "server")]
@@ -244,6 +366,7 @@ impl ServerMap {
 	pub fn load_or_create_chunk(&mut self, ref_: &ChunkRef) -> Option<Chunk> {
 		return if ref_.exists(&self.generic.name) {// Chunk already exists on the disk, load it
 			//println!("Loading chunk {:?}", &ref_);
+			let _filesystem_access = self.chunk_creator.filesystem_lock.lock().unwrap();
 			Some(Chunk::load(ref_, &self.generic.name).unwrap())
 		}
 		else {// Chunk does not exist, create it
@@ -290,7 +413,7 @@ struct ChunkCreationManager {
 	rate_limit: Float,
 	most_recent_creation: Arc<Mutex<Instant>>,
 	priority: Arc<Mutex<Vec<ChunkRef>>>,// 0 is highest
-	filesystem_lock: Arc<Mutex<()>>// To prevent concurrent writing and reading which messes with stuff and also I'm paranoid
+	pub filesystem_lock: Arc<Mutex<()>>// To prevent concurrent writing and reading which messes with stuff and also I'm paranoid
 }
 
 impl ChunkCreationManager {

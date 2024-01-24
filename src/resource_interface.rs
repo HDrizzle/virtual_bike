@@ -12,13 +12,13 @@ use crate::client::hardware_controller::Calibration;
 pub static RESOURCES_DIR: &str = "../resources";
 pub static VEHICLES_DIR: &str = "../resources/vehicles/";
 pub static MAPS_DIR: &str = "../resources/maps/";
-static WORLDS_DIR: &str = "../resources/worlds/";
-static PATHS_DIR: &str = "../resources/paths/";
-static MAP_GENERATORS_DIR: &str = "../resources/map_generators/";
-static USERS_FILE: &str = "../resources/server_credentials.json";
-static CLIENT_LOGIN_FILE: &str = "../resources/client_credentials.json";
-static CALIBRATION_FILE: &str = "../resources/calibration.json";
-static PORT_FILE: &str = "../resources/port.txt";
+pub static WORLDS_DIR: &str = "../resources/worlds/";
+pub static PATHS_DIR: &str = "../resources/paths/";
+pub static MAP_GENERATORS_DIR: &str = "../resources/map_generators/";
+pub static USERS_FILE: &str = "../resources/server_credentials.json";
+pub static CLIENT_LOGIN_FILE: &str = "../resources/client_credentials.json";
+pub static CALIBRATION_FILE: &str = "../resources/calibration.json";
+pub static PORT_FILE: &str = "../resources/port.txt";
 
 /*
 fn get_chunk_dir_path(chunk_ref: &ChunkRef, map_name: &str) -> String {
@@ -57,15 +57,16 @@ pub fn load_static_vehicle(name: &str) -> Result<VehicleStatic, Box<dyn Error>> 
 }
 
 #[cfg(feature = "server")]
-pub fn find_chunk(chunk_ref: &ChunkRef, map_name: &str) -> Result<String, Box<dyn Error>> {
+/// Finds path of given chunk ref, if successful returns: (Path, whether it is a generic chunk)
+pub fn find_chunk(chunk_ref: &ChunkRef, map_name: &str) -> Result<(String, bool), Box<dyn Error>> {
 	// Tries everything to find path to chunk dir
 	// 1. Test if it exists as a normal chunk
 	if let Some(path) = does_non_generic_chunk_exist(chunk_ref, map_name) {
-        return Ok(path);
+        return Ok((path, false));
     }
 	// 2. Is there a generic chunk to use instead?
 	if let Some(path) = does_generic_chunk_exist(map_name) {
-        return Ok(path);
+        return Ok((path, true));
     }
 	// The chunk does not exist
 	Err(Box::new(GenericError::new(format!("Could not find regular or generic chunk for: {:?}", chunk_ref))))
@@ -74,7 +75,7 @@ pub fn find_chunk(chunk_ref: &ChunkRef, map_name: &str) -> Result<String, Box<dy
 #[cfg(feature = "server")]
 pub fn does_generic_chunk_exist(map_name: &str) -> Option<String> {
 	// Tests if map has generic chunk, if so returns path to it
-	let path = ChunkRef{position: IntV2(0, 0)}.resource_path(map_name, true);
+	let path = ChunkRef{position: IntV2(0, 0)}.resource_dir(map_name, true);
 	if fs::read_dir(path.clone()).is_ok() {
 		Some(path)
 	}
@@ -85,7 +86,7 @@ pub fn does_generic_chunk_exist(map_name: &str) -> Option<String> {
 
 #[cfg(feature = "server")]
 pub fn does_non_generic_chunk_exist(chunk_ref: &ChunkRef, map_name: &str) -> Option<String> {
-	let path = chunk_ref.resource_path(map_name, false);
+	let path = chunk_ref.resource_dir(map_name, false);
 	if fs::read_dir(path.clone()).is_ok() {
 		Some(path)
 	}
@@ -96,14 +97,14 @@ pub fn does_non_generic_chunk_exist(chunk_ref: &ChunkRef, map_name: &str) -> Opt
 
 #[cfg(feature = "server")]
 pub fn load_chunk_texture(chunk_ref: &ChunkRef, map_name: &str) -> Result<Vec<u8>, Box<dyn Error>> {
-	let path: String = find_chunk(chunk_ref, map_name)?;
+	let path: String = find_chunk(chunk_ref, map_name)?.0;
 	let data: Vec<u8> = fs::read(path + "texture.png")?;
 	Ok(data)
 }
 
 #[cfg(feature = "server")]
 pub fn load_chunk_data(chunk_ref: &ChunkRef, map_name: &str) -> Result<Chunk, Box<dyn Error>> {
-	let path: String = find_chunk(chunk_ref, map_name)?;
+	let path: String = find_chunk(chunk_ref, map_name)?.0;
 	let raw_string: String = load_file_with_better_error(&(path + "data.json"))?;
 	let mut chunk: Chunk = serde_json::from_str(&raw_string)?;
 	// Set chunk's position because the generic one will likely be incorrect
@@ -163,11 +164,11 @@ pub fn save_chunk_data(chunk: &Chunk, map_name: &str) -> Result<(), Box<dyn Erro
 		return Err(Box::new(GenericError::new("Attempt to save chunk to map which has a generic chunk".to_owned())));
 	}
 	// Create directory
-	fs::create_dir(&chunk.ref_.resource_path(map_name, false))?;
+	fs::create_dir(&chunk.ref_.resource_dir(map_name, false))?;
 	// Serialize
 	let raw_string: String = serde_json::to_string(chunk)?;
 	// Save to file
-	fs::write(chunk.ref_.resource_path(map_name, false) + "data.json", &raw_string)?;
+	fs::write(chunk.ref_.resource_dir(map_name, false) + "data.json", &raw_string)?;
 	Ok(())
 }
 

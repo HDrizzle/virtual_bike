@@ -1,21 +1,29 @@
 {
-	"name": "random_gen",
+	"generic": {
+		"name": "random_gen",
+		"path_set": {
+			"paths": {},
+			"query_grid_scale": 0,
+			"intersections": {},
+			"routes": {}
+		},
+		"chunk_size": 100,
+		"chunk_grid_size": 10,
+		"landmarks": {},
+		"background_color": [0, 128, 0],
+		"auto_gen_chunks": true,
+		"real_world_location": null
+	},
 	"gen": {
-		"seed": 1,
-		"max_slope": 10,
-		"rand_multiplier": 0.1,
-		"first_sum_multiplier": 0.1,
-		"second_sum_multiplier": 0.02,
-		"elev_abs_limit": 20
+		"RandomGen": {
+			"seed": 1,
+			"max_slope": 10,
+			"rand_multiplier": 0.1,
+			"first_sum_multiplier": 0.1,
+			"second_sum_multiplier": 0.02,
+			"elev_abs_limit": 20
+		}
 	},
-	"path_set": {
-		"paths": {},
-		"query_grid_scale": 0
-	},
-	"chunk_size": 100,
-	"chunk_grid_size": 10,
-	"landmarks": {},
-	"background_color": [0, 128, 0],
-	"auto_gen_chunks": true,
-	"real_world_location": null
+	"chunk_creation_rate_limit": 100,
+	"active_chunk_creators_limit": 20
 }

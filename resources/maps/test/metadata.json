@@ -1,5 +1,18 @@
 {
-    "name": "test",
+	"generic": {
+		"name": "test",
+		"path_set": {
+			"paths": {},
+			"query_grid_scale": 0,
+			"intersections": {},
+			"routes": {}
+		},
+		"chunk_size": 100,
+		"chunk_grid_size": 10,
+		"landmarks": {},
+		"background_color": [0, 128, 0],
+		"auto_gen_chunks": true
+	},
     "gen": {
 		"RandomGen": {
 			"seed": 1,
@@ -10,13 +23,6 @@
 			"elev_abs_limit": 20
 		}
 	},
-    "path_set": {
-		"paths": {},
-		"query_grid_scale": 0
-	},
-    "chunk_size": 100,
-    "chunk_grid_size": 10,
-    "landmarks": {},
-    "background_color": [0, 128, 0],
-	"auto_gen_chunks": true
+	"chunk_creation_rate_limit": 100,
+	"active_chunk_creators_limit": 20
 }

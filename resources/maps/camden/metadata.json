@@ -3,7 +3,9 @@
 		"name": "camden",
 		"path_set": {
 			"paths": {},
-			"query_grid_scale": 0
+			"query_grid_scale": 0,
+			"intersections": {},
+			"routes": {}
 		},
 		"chunk_size": 1000,
 		"chunk_grid_size": 9,
@@ -19,5 +21,6 @@
 			}
 		}
 	},
-	"chunk_creation_rate_limit": 5
+	"chunk_creation_rate_limit": 5,
+	"active_chunk_creators_limit": 10
 }

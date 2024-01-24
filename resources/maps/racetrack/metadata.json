@@ -1,21 +1,29 @@
 {
-    "name": "racetrack",
+    "generic": {
+        "name": "racetrack",
+        "path_set": {
+            "paths": {},
+            "query_grid_scale": 0,
+			"intersections": {},
+			"routes": {}
+        },
+        "chunk_size": 1000,
+        "chunk_grid_size": 100,
+        "landmarks": {},
+        "background_color": [0, 128, 0],
+        "auto_gen_chunks": false,
+        "real_world_location": null
+    },
     "gen": {
-        "seed": 1,
-        "max_slope": 10,
-        "rand_multiplier": 0,
-        "first_sum_multiplier": 0,
-        "second_sum_multiplier": 0,
-        "elev_abs_limit": 20
-    },
-    "path_set": {
-        "paths": {},
-        "query_grid_scale": 0
-    },
-    "chunk_size": 1000,
-    "chunk_grid_size": 100,
-    "landmarks": {},
-    "background_color": [0, 128, 0],
-    "auto_gen_chunks": false,
-    "real_world_location": null
+		"RandomGen": {
+			"seed": 1,
+			"max_slope": 10,
+			"rand_multiplier": 0,
+			"first_sum_multiplier": 0,
+			"second_sum_multiplier": 0,
+			"elev_abs_limit": 20
+		}
+	},
+	"chunk_creation_rate_limit": 100,
+	"active_chunk_creators_limit": 20
 }

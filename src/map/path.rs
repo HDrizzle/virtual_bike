@@ -512,7 +512,8 @@ pub struct PathBoundBodyState {
 	pub path_ref: PathRef,
 	pub pos: PathPosition,
 	pub velocity: Float,// in world-units / second. Wrt body
-	pub forward: bool
+	pub forward: bool,
+	pub route_opt: Option<RouteId>
 }
 
 impl PathBoundBodyState {

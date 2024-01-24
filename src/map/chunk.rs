@@ -244,7 +244,7 @@ impl ChunkRef {
 		resource_interface::find_chunk(&self, map_name).is_ok()
 	}
 	#[cfg(feature = "server")]
-	pub fn resource_path(&self, map_name: &str, generic: bool) -> String {
+	pub fn resource_dir(&self, map_name: &str, generic: bool) -> String {
 		match generic {
 			true  => format!("{}{}/generic_chunk/", resource_interface::MAPS_DIR.to_owned(), map_name.to_owned()),
 			false => format!("{}{}/chunks/{}/",     resource_interface::MAPS_DIR.to_owned(), map_name.to_owned(), self.resource_dir_name())

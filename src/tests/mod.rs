@@ -257,7 +257,8 @@ pub mod paths {
 				t: 0.5
 			},
 			velocity: 0.2,
-			forward: true
+			forward: true,
+			route_opt: None
 		}
 	}
 	fn initial_path_bound_body_state_past_end() -> PathBoundBodyState {
@@ -268,7 +269,8 @@ pub mod paths {
 				t: 0.5
 			},
 			velocity: 0.2,
-			forward: true
+			forward: true,
+			route_opt: None
 		}
 	}
 	fn vehicle_static() -> VehicleStatic {
@@ -300,7 +302,8 @@ pub mod paths {
 				t: 0.6367426
 			},// side length is 10, 0.5 side length (5 units) + 1 unit = 0.6 of a side length
 			velocity: 12.0,
-			forward: true
+			forward: true,
+			route_opt: None
 		};
 		assert_eq!(state, ideal_new_state);
 	}
@@ -325,7 +328,8 @@ pub mod paths {
 					t: 0.0
 				},
 				velocity: -5.0,
-				forward: true
+				forward: true,
+				route_opt: None
 			}
 		);
 		// 2
@@ -341,7 +345,8 @@ pub mod paths {
 					t: 0.36325753
 				},
 				velocity: -7.0,
-				forward: true
+				forward: true,
+				route_opt: None
 			}
 		);
 	}
