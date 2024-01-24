@@ -417,8 +417,8 @@ impl ServerMap {
 #[cfg(feature = "server")]
 struct ChunkCreationManager {
 	active_chunk_creators: Vec<AsyncChunkCreator>,
-	chunk_creation_queue: Vec<ChunkCreationArgs>,
-	active_chunk_creators_limit: usize,
+	creation_stack_before_threads: Vec<ChunkCreationArgs>,// For chunks to be created after the `active_chunk_creators` length goes below `active_chunk_creators_limit`
+	active_chunk_creators_limit: usize,// Maximum length of `active_chunk_creators`
 	rate_limit: Float,
 	most_recent_creation: Arc<Mutex<Instant>>,
 	priority: Arc<Mutex<Vec<ChunkRef>>>,// 0 is highest
@@ -429,8 +429,8 @@ impl ChunkCreationManager {
 	pub fn new(rate_limit: Float, active_chunk_creators_limit: usize) -> Self {
 		Self {
 			active_chunk_creators: Vec::new(),
-			chunk_creation_queue: Vec::new(),// For chunks to be created after the `active_chunk_creators` length goes below `active_chunk_creators_limit`
-			active_chunk_creators_limit,// Maximum length of `active_chunk_creators`
+			creation_stack_before_threads: Vec::new(),
+			active_chunk_creators_limit,
 			rate_limit,
 			most_recent_creation: Arc::new(Mutex::new(Instant::now())),
 			priority: Arc::new(Mutex::new(Vec::new())),
@@ -450,7 +450,7 @@ impl ChunkCreationManager {
 			self.spawn_chunk_creator(chunk_creation_args);
 		}
 		else {
-			self.chunk_creation_queue.push(chunk_creation_args);
+			self.creation_stack_before_threads.push(chunk_creation_args);
 		}
 	}
 	fn spawn_chunk_creator(&mut self, chunk_creation_args: ChunkCreationArgs) {
@@ -479,8 +479,8 @@ impl ChunkCreationManager {
 			self.active_chunk_creators.remove(*i_to_delete);
 		}
 		// Spawn new chunk creators if `self.active_chunk_creators_limit` allows it
-		for _ in 0..((self.active_chunk_creators_limit - self.active_chunk_creators.len()).min(self.chunk_creation_queue.len())) {
-			let new_chunk_args = self.chunk_creation_queue.remove(0);// If this panics then I have messed up the math in the for-loop
+		for _ in 0..((self.active_chunk_creators_limit - self.active_chunk_creators.len()).min(self.creation_stack_before_threads.len())) {
+			let new_chunk_args = self.creation_stack_before_threads.remove(0);// If this panics then I have messed up the math in the for-loop
 			self.spawn_chunk_creator(new_chunk_args);
 		}
 		// Done
