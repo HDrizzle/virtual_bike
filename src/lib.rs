@@ -64,6 +64,7 @@ pub mod renet_server;
 mod tests;
 
 // Prelude, added 2023-9-9
+#[allow(unused)]
 mod prelude {
 	use super::*;
 	// Name of this app

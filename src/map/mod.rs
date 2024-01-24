@@ -1,6 +1,6 @@
 // Map main module file
 
-use std::{collections::HashMap, mem, thread, sync::{mpsc, Arc, Mutex}, time::{Instant, Duration}};
+use std::{collections::HashMap, mem, thread, sync::{Arc, Mutex}, time::{Instant, Duration}};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 use serde_json;
 #[cfg(feature = "client")]
@@ -218,7 +218,7 @@ impl GenericMap {
 					ValidityTestResult::Ok
 				}
 			},
-			ValidityTestResult::Problem{type_, message, auto_fix_opt} => ValidityTestResult::problem(
+			ValidityTestResult::Problem{type_, message, ..} => ValidityTestResult::problem(
 				type_.clone(),
 				message.clone(),
 				None
@@ -255,6 +255,7 @@ impl validity::ValidityTest for SaveMap {
 				auto_fix_opt: Some(
 					SaveMapAutoFix::new(
 						&self.generic.name,
+						self.generic.chunk_size,
 						SaveMapAutoFixEnum::CreateChunksFolder(validity::DirectoryExistanceAutoFix::new(chunks_dir))
 					)
 				)
@@ -265,6 +266,10 @@ impl validity::ValidityTest for SaveMap {
 		if fs::read_dir(&generic_chunk_dir).is_ok() {
 			out.push(self.generic.validate_chunk(&(generic_chunk_dir + "/data.json")));
 		}
+		if abort {
+			return out;
+		}
+		// Stage 2
 		// All folders in chunks dir have valid names
 		// TODO
 		// Done
@@ -276,13 +281,15 @@ impl validity::ValidityTest for SaveMap {
 #[derive(Clone)]
 pub struct SaveMapAutoFix {
 	map_name: String,
+	chunk_size: UInt,
 	fix: SaveMapAutoFixEnum
 }
 
 impl SaveMapAutoFix {
-	pub fn new(map_name: &str, fix: SaveMapAutoFixEnum) -> Self {
+	pub fn new(map_name: &str, chunk_size: UInt, fix: SaveMapAutoFixEnum) -> Self {
 		Self {
 			map_name: map_name.to_owned(),
+			chunk_size,
 			fix
 		}
 	}
@@ -293,13 +300,13 @@ impl validity::AutoFix for SaveMapAutoFix {
 		self.fix.description(&self.map_name)
 	}
 	fn fix(&self) -> Result<(), String> {
-		self.fix.fix(&self.map_name)
+		self.fix.fix(&self.map_name, self.chunk_size)
 	}
 }
 
 #[derive(Clone)]
 #[cfg(feature = "server")]
-enum SaveMapAutoFixEnum {
+pub enum SaveMapAutoFixEnum {
 	DeleteEmptyGenericChunkFolder,
 	DeleteEmptyChunkFolder(ChunkRef),
 	CreateChunksFolder(validity::DirectoryExistanceAutoFix),
@@ -309,18 +316,20 @@ enum SaveMapAutoFixEnum {
 impl SaveMapAutoFixEnum {
 	fn description(&self, map_name: &str) -> String {
 		match self {
-			Self::DeleteEmptyGenericChunkFolder => "Delete empty generic chunk folder".to_owned(),
+			Self::DeleteEmptyGenericChunkFolder => format!("Delete empty generic chunk folder for map \"{}\"", map_name),
 			Self::DeleteEmptyChunkFolder(chunk_ref) => format!("Delete empty folder for chunk {:?}", chunk_ref),
 			Self::CreateChunksFolder(fix) => fix.description(),
 			Self::AlignChunkEdges(ref1, ref2) => format!("Modify chunks {:?} and {:?} so their edges line up", ref1, ref2)
 		}
 	}
-	fn fix(&self, map_name: &str) -> Result<(), String> {
+	fn fix(&self, map_name: &str, chunk_size: UInt) -> Result<(), String> {
 		match self {
 			Self::DeleteEmptyGenericChunkFolder => to_string_err(fs::remove_dir(ChunkRef{position: IntV2(0, 0)}.resource_dir(map_name, true))),
 			Self::DeleteEmptyChunkFolder(chunk_ref) => to_string_err(fs::remove_dir(chunk_ref.resource_dir(map_name, false))),
 			Self::CreateChunksFolder(fix) => fix.fix(),
 			Self::AlignChunkEdges(ref1, ref2) => {
+				// Assert that they are adjacent
+				let diff: IntV2 = ref2.position - ref1.position;
 				// TODO
 				Ok(())
 			}
@@ -389,7 +398,7 @@ impl ServerMap {
 		for res in results {
 			match res {
 				ChunkCreationResult::Ok(chunk) => {self.generic.insert_chunk(chunk, Some(rapier_data));},
-				ChunkCreationResult::Err(e, chunk_ref) => out.push(Err(format!("Error creating chunk at {}", chunk_ref.resource_dir_name())))
+				ChunkCreationResult::Err(e, chunk_ref) => out.push(Err(format!("Error creating chunk at {}: {}", chunk_ref.resource_dir_name(), e)))
 			}
 		}
 		// Done

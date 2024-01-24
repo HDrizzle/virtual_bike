@@ -135,8 +135,8 @@ impl PhysicsState {
 	}
 	#[cfg(feature = "debug_render_physics")]
 	#[cfg(feature = "server")]
-	pub fn send(&self, vehicles: &HashMap<String, Vehicle>) -> PhysicsStateSend {// TODO: only send the states of vehicles, wheel mounts and wheels
-		let (mut bodies_v, mut colliders_v, mut impulse_joints_v): (Vec<RigidBodyHandle>, Vec<ColliderHandle>, Vec<ImpulseJointHandle>) = (Vec::new(), Vec::new(), Vec::new());
+	pub fn send(&self/*, vehicles: &HashMap<String, Vehicle>*/) -> PhysicsStateSend {// TODO: only send the states of vehicles, wheel mounts and wheels
+		//let (mut bodies_v, mut colliders_v, mut impulse_joints_v): (Vec<RigidBodyHandle>, Vec<ColliderHandle>, Vec<ImpulseJointHandle>) = (Vec::new(), Vec::new(), Vec::new());
 		PhysicsStateSend {
 			islands: IslandManager::new(),//self.islands.clone(),
 			bodies: self.bodies.clone(),
@@ -262,7 +262,7 @@ impl World {
 	pub fn load(name: &str) -> Result<Self, Box<dyn Error>> {
 		// name: name of world file
 		let save = load_world(name)?;
-		let map: ServerMap = load_map_metadata(&save.map).expect(&format!("Could not load map for world \"{name}\""));
+		let map: ServerMap = ServerMap::from_save(load_map_metadata(&save.map).expect(&format!("Could not load map for world \"{name}\"")));
 		// Create blank physics state
 		let mut physics_state: PhysicsState = PhysicsState::new(save.gravity);
 		// Load vehicles
@@ -298,7 +298,7 @@ impl World {
 	}
 	pub fn new(map: &str) -> Result<Self, Box<dyn Error>> {
 		Ok(Self {
-			map: load_map_metadata(map)?,
+			map: ServerMap::from_save(load_map_metadata(map)?),
 			vehicles: HashMap::<String, Vehicle>::new(),
 			age: Duration::new(0, 0),
 			playing: false,
@@ -445,7 +445,7 @@ impl World {
 		}
 		// Physics send
 		#[cfg(feature = "debug_render_physics")]
-		let mut partial_physics = self.physics_state.send(&self.vehicles);
+		let mut partial_physics = self.physics_state.send(/*&self.vehicles*/);
 		// Done
 		StaticData {
 			map: self.map.send(#[cfg(feature = "debug_render_physics")] &mut partial_physics),// Need to remove map colliders from physics send as they are redundant and makes the StaticData very large

@@ -214,7 +214,17 @@ fn test_ui<T: ValidityTest>(tester: T) -> bool {
 			ValidityTestResult::Problem{type_, message, auto_fix_opt} => {
 				println!("{}. {}: {}", problem_i, type_.to_string(), &message);
 				match auto_fix_opt {
-					Some(auto_fix) => {auto_fix.ui().unwrap();},// TODO: handle better
+					Some(auto_fix) => {
+						match auto_fix.ui() {
+							Ok(_) => {},
+							Err(e) => {
+								println!("\tAuto fix error: {}", e);
+								if let ProblemType::Error = type_ {
+									out = false;
+								}
+							}
+						}
+					},
 					None => {}
 				}
 				problem_i += 1;
@@ -236,11 +246,20 @@ pub fn all_tests() {
 		let entry = entry_res.unwrap();
 		if entry.metadata().unwrap().is_dir() {
 			let path = entry.path().to_str().expect("Could not get &str from path").to_owned() + "/metadata.json";
-			test_ui(ResourceDeserializationChecker::<SaveMap>::new(path));
+			test_ui(ResourceDeserializationChecker::<SaveMap>::new(path.clone()));
+			test_ui(resource_interface::load_map_metadata(entry.path().file_name().expect(&format!("Couldn't get filename for map path \"{}\"", &path)).to_str().unwrap()).unwrap());
+			// TODO: map.generic.name == path filename
 		}
 	}
 	// Worlds
 	test_ui(ResourceExistanceChecker::new(resource_interface::WORLDS_DIR.to_owned(), false));
+	for entry_res in fs::read_dir(resource_interface::WORLDS_DIR).unwrap() {
+		let entry = entry_res.unwrap();
+		if entry.metadata().unwrap().is_file() {
+			let path = entry.path().to_str().expect("Could not get &str from path").to_owned();
+			test_ui(ResourceDeserializationChecker::<WorldSave>::new(path));
+		}
+	}
 	// Paths
 	test_ui(ResourceExistanceChecker::new(resource_interface::PATHS_DIR.to_owned(), false));
 	// Server's users file

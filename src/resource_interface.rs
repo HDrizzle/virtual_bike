@@ -114,11 +114,10 @@ pub fn load_chunk_data(chunk_ref: &ChunkRef, map_name: &str) -> Result<Chunk, Bo
 }
 
 #[cfg(feature = "server")]
-pub fn load_map_metadata(name: &str) -> Result<ServerMap, Box<dyn Error>> {
+pub fn load_map_metadata(name: &str) -> Result<SaveMap, Box<dyn Error>> {
 	let raw_string: String = load_file_with_better_error(&(MAPS_DIR.to_owned() + name + "/metadata.json"))?;
 	let save_map: SaveMap = serde_json::from_str(&raw_string)?;
-	let map = ServerMap::from_save(save_map);
-	Ok(map)
+	Ok(save_map)
 }
 
 // Is now part of map metadata
