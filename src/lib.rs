@@ -84,7 +84,7 @@ mod prelude {
 	pub use crate::{
 		world::{StaticData, WorldSave, WorldSend},
 		map::{GenericMap, path::{Path, PathSet, PathBoundBodyState, PathPosition, BCurve, BCurveSample, BCURVE_LENGTH_ESTIMATION_SEGMENTS}, chunk::{Chunk, ChunkRef, RegularElevationMesh}},
-		vehicle::{VehicleStatic, VehicleSave, VehicleSend, Wheel, WheelStatic, BodyStateSerialize, BodyForces},
+		vehicle::{VehicleStatic, VehicleStaticModel, VehicleSave, VehicleSend, Wheel, WheelStatic, BodyStateSerialize, BodyForces},
 		renet_server::{Request, Response},
 		GenericError,
 		InputData,
@@ -105,7 +105,10 @@ mod prelude {
 		map::{ServerMap, SaveMap, map_generation::{MapGenerator, MeshCreationArgs, gis::WorldLocation}, chunk::{ChunkCreationArgs, ChunkCreationResult}},
 		validity
 	};
-	#[cfg(any(feature = "server", feature = "debug_render_physics"))] pub use crate::RapierBodyCreationDeletionContext;
+	#[cfg(any(feature = "server", feature = "debug_render_physics"))] pub use crate::{
+		RapierBodyCreationDeletionContext,
+		client::cache::CacheableBevyAsset
+	};
 	// Utility functions because nalgebra is friggin complicated
 	pub fn add_isometries(iso1: &Iso, iso2: &Iso) -> Iso {
 		// Adds two isometries together

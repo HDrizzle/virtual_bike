@@ -1,6 +1,6 @@
 // Map main module file
 
-use std::{collections::HashMap, mem, thread, sync::{Arc, Mutex}, time::{Instant, Duration}};
+use std::{collections::HashMap, mem, thread, sync::{Arc, Mutex}, time::{Instant, Duration}, ops::Index};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 use serde_json;
 #[cfg(feature = "client")]
@@ -438,10 +438,10 @@ impl ChunkCreationManager {
 		}
 	}
 	pub fn start(&mut self, chunk_creation_args: ChunkCreationArgs) {
-		// Check if chunk ref is already in priority vec
+		// Check if chunk ref is already in priority vec or `creation_stack_before_threads`
 		{
 			let mut priority_access = self.priority.lock().unwrap();
-			if priority_access.contains(&chunk_creation_args.ref_) {
+			if priority_access.contains(&chunk_creation_args.ref_) || self.creation_stack_before_threads.iter().find(|args| {&args.ref_ == &chunk_creation_args.ref_}).is_some() {
 				return;
 			}
 			priority_access.push(chunk_creation_args.ref_.clone());
@@ -457,7 +457,7 @@ impl ChunkCreationManager {
 		// Clone Arcs and start chunk creator
 		let most_recent_creation_clone = self.most_recent_creation.clone();
 		let priority_clone = self.priority.clone();
-		self.active_chunk_creators.push(AsyncChunkCreator::start(chunk_creation_args, most_recent_creation_clone, priority_clone, self.rate_limit, self.filesystem_lock.clone()));// TODO: rate limiting, priority, and such things
+		self.active_chunk_creators.push(AsyncChunkCreator::start(chunk_creation_args, most_recent_creation_clone, priority_clone, self.rate_limit, self.filesystem_lock.clone()));
 	}
 	pub fn update(&mut self) -> Vec<ChunkCreationResult> {
 		// Check chunk creators
@@ -480,7 +480,7 @@ impl ChunkCreationManager {
 		}
 		// Spawn new chunk creators if `self.active_chunk_creators_limit` allows it
 		for _ in 0..((self.active_chunk_creators_limit - self.active_chunk_creators.len()).min(self.creation_stack_before_threads.len())) {
-			let new_chunk_args = self.creation_stack_before_threads.remove(0);// If this panics then I have messed up the math in the for-loop
+			let new_chunk_args = self.creation_stack_before_threads.remove(0);//.pop().expect("Expected value, if this vec is empty then this loop should not even be run");// If this panics then I have messed up the math in the for-loop
 			self.spawn_chunk_creator(new_chunk_args);
 		}
 		// Done

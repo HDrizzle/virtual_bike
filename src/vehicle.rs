@@ -1,10 +1,10 @@
 /* Defines a vehicle in the game
 Potentially usefull https://www.sheldonbrown.com/rinard/aero/formulas.html
 Any vehicle can be in one of two states: normal physics and path-bound. Normal physics means it will simply be controlled by the physics engine (Rapier 3D).
-when path-bound it will be controlled by the specific Path it is bound to. it's velocity will be a single scalar value whose sign indicates which direction it is travelling on the path.
+when path-bound it will be controlled by the specific Path it is bound to. it's velocity will be a single scalar value whose sign indicates which direction it is travelling on the path wrt itself.
 */
 
-use std::{error::Error, rc::Rc, ops::AddAssign};
+use std::{error::Error, rc::Rc, ops::AddAssign, io::Write};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 #[cfg(feature = "client")]
 use bevy::{prelude::*, ecs::component::Component};
@@ -152,6 +152,39 @@ pub struct VehicleStatic {// This is loaded from the resources and is identified
 	pub ctr_g_hight: Float,
 	pub drag: V2,
 	pub wheels: Vec<WheelStatic>
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct VehicleStaticModel {
+	static_name: String,
+	glb_data: Vec<u8>
+}
+
+impl VehicleStaticModel {
+	pub fn new(
+		static_name: String,
+		glb_data: Vec<u8>
+	) -> Self {
+		Self {
+			static_name,
+			glb_data
+		}
+	}
+}
+
+#[cfg(feature = "client")]
+impl CacheableBevyAsset for VehicleStaticModel {
+	const CACHE_SUB_DIR: &'static str = "static_vehicles/";
+	type BevyAssetType = Scene;
+	fn name(&self) -> String {
+		self.static_name.clone()
+	}
+	fn cache_path(name: &str) -> String {
+		format!("{}/model.glb", name)
+	}
+	fn write_to_file(&self, file: &mut std::fs::File) -> Result<(), String> {
+		to_string_err(file.write_all(&self.glb_data))
+	}
 }
 
 #[cfg(feature = "server")]
@@ -521,6 +554,6 @@ impl AddAssign for BodyForces {
 		// Linear
 		self.lin += rhs.lin;
 		// Angular
-		self.ang += rhs.ang;// TODO: I'm pretty sure this is correct, but not certain
+		self.ang += rhs.ang;// TODO: I'm pretty sure this is correct for summing torques, but not certain
 	}
 }

@@ -25,7 +25,7 @@ pub enum Request {// All possible requests
 #[derive(Serialize, Deserialize)]
 pub enum Response {// All possible responses
 	InitState(StaticData),
-	VehicleRawGltfData(String, Vec<u8>),// Username, file contents
+	VehicleRawGltfData(VehicleStaticModel),// Username, file contents
 	WorldState(WorldSend),
 	Chunk(Chunk),
 	Err(String)
@@ -84,7 +84,7 @@ impl NetworkRuntimeManager {
 								println!("Recieved vehicle model request for: {}", &name);
 								let load_result: Result<Vec<u8>, String> = resource_interface::load_static_vehicle_gltf(&name);
 								self.server.send_message(*client_id, DefaultChannel::ReliableOrdered, bincode::serialize(&match load_result {
-									Ok(data) => Response::VehicleRawGltfData(name.clone(), data),
+									Ok(data) => Response::VehicleRawGltfData(VehicleStaticModel::new(name.clone(), data)),
 									Err(e) => Response::Err(e)
 								}).expect("Unable to serialize vehicle raw GLTF file data with bincode"));
 							},

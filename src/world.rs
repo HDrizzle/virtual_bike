@@ -46,7 +46,7 @@ impl StaticData {
 	pub fn vehicle_models_to_load(&self, server_addr: IpAddr) -> Vec<String> {
 		let mut out: Vec<String> = Vec::<String>::new();
 		for (_, v) in self.static_vehicles.iter() {
-			if !cache::is_vehicle_model_cached(server_addr, &v.name) {
+			if !VehicleStaticModel::new(v.name.clone(), Vec::new()).is_already_cached(server_addr) {
 				out.push(v.name.clone());
 			}
 		}

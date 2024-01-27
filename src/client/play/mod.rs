@@ -129,7 +129,7 @@ pub struct InitInfo {// Provided by the sign-in window, DOES NOT CHANGE
 }
 
 impl InitInfo {
-	pub fn setup_app(init_info: InitInfo, app: &mut App) {
+	pub fn setup_app(init_info: Self, app: &mut App) {
 		app.insert_resource(CameraController::Vehicle{username: init_info.network.auth.name.clone(), rel_pos: CameraController::default_pos_wrt_vehicle()});
 		app.insert_resource(init_info.static_data);
 		app.insert_resource(init_info.network.renet_transport);
@@ -154,9 +154,10 @@ impl InitInfo {
 		// https://bevy-cheatbook.github.io/3d/gltf.html, https://bevy-cheatbook.github.io/assets/assetserver.html
 		let mut static_v_asset_handles = StaticVehicleAssetHandles::default();
 		for (v_type, v) in static_data.static_vehicles.iter() {
-			let asset_path = cache::get_static_vehicle_model_path(server_addr.0, &v.name).strip_prefix("assets/").unwrap_or("<Error: vehicle model path does not start with correct dir ('assets/')>").to_owned() + "#Scene0";
+			/*let asset_path = cache::get_static_vehicle_model_path(server_addr.0, &v.name).strip_prefix("assets/").unwrap_or("<Error: vehicle model path does not start with correct dir ('assets/')>").to_owned() + "#Scene0";
 			dbg!(&asset_path);
-			let handle = asset_server.load(asset_path);
+			let handle = asset_server.load(asset_path);*/
+			let handle = VehicleStaticModel::load_to_bevy(&v_type, server_addr.0, &*asset_server).unwrap();
 			static_v_asset_handles.0.insert(v_type.clone(), handle);
 		}
 		//dbg!(&static_v_asset_handles);
@@ -207,7 +208,7 @@ fn vehicle_input_key_event_system(// Only for manual vehicle control should be b
 	let input = {
 		// Drive
 		let power_forward: Float = if keys.pressed(KeyCode::W) {
-			200.0
+			500.0
 		}
 		else {
 			0.0
@@ -337,8 +338,9 @@ fn update_system(
 			Response::InitState(..) => {
 				panic!("Bevy app recieved `Response::InitState(..) response which should not be possible.`");
 			},
-			Response::VehicleRawGltfData(v_type, data) => {
-				cache::save_static_vehicle_model(server_addr.0, &v_type, data).unwrap();
+			Response::VehicleRawGltfData(v_static_model) => {
+				//cache::save_static_vehicle_model(server_addr.0, &v_type, data).unwrap();
+				v_static_model.save(server_addr.0).unwrap();
 			}
 			Response::WorldState(world_send) => {
 				most_recent_world_state = Some(world_send);// In case multiple come through, only use the most recent one
