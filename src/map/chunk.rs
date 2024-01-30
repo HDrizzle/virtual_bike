@@ -1,6 +1,6 @@
 // Created 2023-9-29
 
-use std::{rc::Rc, error::Error, collections::HashMap, sync::{Arc, Mutex}};
+use std::{rc::Rc, error::Error, collections::HashMap, sync::{Arc, Mutex}, io::Write, net::IpAddr};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 #[cfg(feature = "client")]
 use bevy::prelude::*;
@@ -301,11 +301,50 @@ pub struct ChunkCreationArgs {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
+pub struct ChunkTexture {
+	chunk_ref: ChunkRef,
+	raw_data: Vec<u8>,// PNG format
+	generic: bool
+}
+
+impl ChunkTexture {
+	pub fn new(
+		chunk_ref: ChunkRef,
+		raw_data: Vec<u8>,// PNG format
+		generic: bool
+	) -> Self {
+		Self {
+			chunk_ref,
+			raw_data,
+			generic
+		}
+	}
+}
+
+#[cfg(feature = "client")]
+impl CacheableBevyAsset for ChunkTexture {
+	const CACHE_SUB_DIR: &'static str = "chunk_textures/";
+	type BevyAssetType = Image;
+	fn name(&self) -> String {
+		match self.generic {
+			true => "generic".to_owned(),
+			false => self.chunk_ref.resource_dir_name()
+		}
+	}
+	fn cache_path(name: &str) -> String {
+		format!("{}.png", name)
+	}
+	fn write_to_file(&self, file: &mut std::fs::File) -> Result<(), String> {
+		to_string_err(file.write_all(&self.raw_data))
+	}
+}
+
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Chunk {
 	pub ref_: ChunkRef,
 	pub elevation: RegularElevationMesh,
 	#[serde(skip)]// Texture image data is in a seperate file (.png)
-	pub texture_data: Option<Vec<u8>>,
+	pub texture_data: Option<ChunkTexture>,
 	pub size: UInt,
 	pub grid_size: UInt,// Number of spaces inside grid, for example if this is 4 then the elevation grid coordinates should be 5x5, because fence-post problem
 	pub background_color: [u8; 3],
@@ -365,13 +404,21 @@ impl Chunk {
 		self.collider_handle = None;
 	}
 	#[cfg(feature = "client")]
-	pub fn bevy_pbr_bundle(&mut self, commands: &mut Commands, meshes:  &mut ResMut<Assets<Mesh>>, materials: &mut ResMut<Assets<StandardMaterial>>, asset_server: &AssetServer) {// See https://stackoverflow.com/questions/66677098/how-can-i-manually-create-meshes-in-bevy-with-vertices
+	pub fn bevy_pbr_bundle(&mut self, commands: &mut Commands, meshes:  &mut ResMut<Assets<Mesh>>, materials: &mut ResMut<Assets<StandardMaterial>>, asset_server: &AssetServer, server_addr: IpAddr) {// See https://stackoverflow.com/questions/66677098/how-can-i-manually-create-meshes-in-bevy-with-vertices
 		// TODO: paths
 		// With help from https://github.com/bevyengine/bevy/blob/main/examples/3d/texture.rs
-		let texture_handle: Handle<Image> = asset_server.load("../../resources/grass_texture_large.png");// TODO: use self.texture_data
+		let texture_handle_opt: Option<Handle<Image>> = match &self.texture_data {
+			Some(texture) => Some(ChunkTexture::load_to_bevy(&texture.name(), server_addr, asset_server).unwrap()),
+			None => None
+		};//ChunkTexture::load_to_bevy(&self.ref_.resource_dir_name(), server_addr, asset_server).unwrap();//asset_server.load("../../resources/grass_texture_large.png");// TODO: use self.texture_data
 		let material_handle = materials.add(StandardMaterial {
-			base_color: Color::rgba(0.5, 0.5, 0.5, 1.0),
-			base_color_texture: Some(texture_handle),
+			base_color: Color::rgba(
+				self.background_color[0] as Float / 255.0,
+				self.background_color[1] as Float / 255.0,
+				self.background_color[2] as Float / 255.0,
+				1.0
+			),
+			base_color_texture: texture_handle_opt,
 			alpha_mode: AlphaMode::Opaque,
 			unlit: true,
 			..default()
@@ -421,8 +468,12 @@ impl Chunk {
 	pub fn send(&self, map_name: &str) -> Self {// Makes sure that texture data is loaded
 		let mut out = self.clone();
 		// Load texture
-		let texture_data = resource_interface::load_chunk_texture(&self.ref_, map_name).expect(&format!("Unable to load texture for chunk {:?}", &self.ref_));
-		out.texture_data = Some(texture_data);
+		match resource_interface::load_chunk_texture(&self.ref_, map_name) {
+			Ok((texture_data, generic)) => {
+				out.texture_data = Some(ChunkTexture::new(self.ref_.clone(), texture_data, generic));
+			}
+			Err(_) => {}
+		}
 		out
 	}
 	pub fn set_position(&mut self, chunk_ref: &ChunkRef) {
@@ -437,6 +488,7 @@ pub enum ChunkCreationResult {
 	Err(String, ChunkRef)
 }
 
+#[cfg(feature = "server")]
 impl ChunkCreationResult {
 	pub fn chunk_ref(&self) -> &ChunkRef {
 		match self {

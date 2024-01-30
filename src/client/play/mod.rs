@@ -346,9 +346,13 @@ fn update_system(
 				most_recent_world_state = Some(world_send);// In case multiple come through, only use the most recent one
 			},
 			Response::Chunk(chunk) => {
-				//println!("Recieved chunk");//, but doing nothing else because debug reasons");
+				//println!("Recieved chunk {:?}", &chunk.ref_);
 				requested_chunks.remove(&chunk.ref_);
-				static_data.map.insert_chunk_client(chunk, #[cfg(feature = "debug_render_physics")] &mut RapierBodyCreationDeletionContext::from_bevy_rapier_context(&mut rapier_context), &mut commands, &mut meshes, &mut materials, &asset_server);
+				match &chunk.texture_data {
+					Some(data) => data.save(server_addr.0).unwrap(),
+					None => {}//panic!("Server should send chunks with texture data")
+				}
+				static_data.map.insert_chunk_client(chunk, #[cfg(feature = "debug_render_physics")] &mut RapierBodyCreationDeletionContext::from_bevy_rapier_context(&mut rapier_context), &mut commands, &mut meshes, &mut materials, &asset_server, server_addr.0);
 			},
 			Response::Err(err_string) => {
 				panic!("Server sent following error message: {}", err_string);

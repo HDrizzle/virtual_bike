@@ -1,6 +1,6 @@
 // Map main module file
 
-use std::{collections::HashMap, mem, thread, sync::{Arc, Mutex}, time::{Instant, Duration}, ops::Index};
+use std::{collections::HashMap, mem, thread, sync::{Arc, Mutex}, time::{Instant, Duration}, ops::Index, net::IpAddr};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 use serde_json;
 #[cfg(feature = "client")]
@@ -12,7 +12,7 @@ use bevy_rapier3d::plugin::RapierContext;
 use crate::prelude::*;
 #[cfg(feature = "debug_render_physics")]
 use crate::world::PhysicsStateSend;
-#[cfg(feature = "server")]
+#[cfg(all(feature = "server", feature = "client"))]
 use validity::{ValidityTest, AutoFix, ValidityTestResult, ResourceDeserializationChecker};
 #[cfg(feature = "server")]
 use std::fs;
@@ -144,10 +144,10 @@ impl GenericMap {
 		false
 	}
     #[cfg(feature = "client")]
-	pub fn insert_chunk_client(&mut self, mut chunk: Chunk, #[cfg(feature = "debug_render_physics")] rapier_data: &mut RapierBodyCreationDeletionContext, commands: &mut Commands, meshes:  &mut ResMut<Assets<Mesh>>, materials: &mut ResMut<Assets<StandardMaterial>>, asset_server: &AssetServer) {
+	pub fn insert_chunk_client(&mut self, mut chunk: Chunk, #[cfg(feature = "debug_render_physics")] rapier_data: &mut RapierBodyCreationDeletionContext, commands: &mut Commands, meshes:  &mut ResMut<Assets<Mesh>>, materials: &mut ResMut<Assets<StandardMaterial>>, asset_server: &AssetServer, server_addr: IpAddr) {
 		// Add to bevy rendering world
 		if !self.is_chunk_loaded(&chunk.ref_) {
-			chunk.bevy_pbr_bundle(commands, meshes, materials, asset_server);
+			chunk.bevy_pbr_bundle(commands, meshes, materials, asset_server, server_addr);
 		}
 		// Generic insert
 		#[cfg(any(feature = "server", feature = "debug_render_physics"))]
@@ -200,7 +200,7 @@ impl GenericMap {
 			path.init_bevy(commands, meshes, materials, asset_server);
 		}
 	}
-	#[cfg(feature = "server")]
+	#[cfg(all(feature = "server", feature = "client"))]
 	pub fn validate_chunk(&self, path: &str) -> ValidityTestResult<SaveMapAutoFix> {
 		let deserialize_result = &ResourceDeserializationChecker::<Chunk>::new(path.to_owned()).check()[0];
 		match deserialize_result {
@@ -236,6 +236,7 @@ pub struct SaveMap {
 	pub active_chunk_creators_limit: usize
 }
 
+#[cfg(all(feature = "server", feature = "client"))]
 impl validity::ValidityTest for SaveMap {
 	type AutoFixT = SaveMapAutoFix;
 	fn condition_description(&self) -> String {
@@ -277,7 +278,7 @@ impl validity::ValidityTest for SaveMap {
 	}
 }
 
-#[cfg(feature = "server")]
+#[cfg(all(feature = "server", feature = "client"))]
 #[derive(Clone)]
 pub struct SaveMapAutoFix {
 	map_name: String,
@@ -285,6 +286,7 @@ pub struct SaveMapAutoFix {
 	fix: SaveMapAutoFixEnum
 }
 
+#[cfg(all(feature = "server", feature = "client"))]
 impl SaveMapAutoFix {
 	pub fn new(map_name: &str, chunk_size: UInt, fix: SaveMapAutoFixEnum) -> Self {
 		Self {
@@ -295,6 +297,7 @@ impl SaveMapAutoFix {
 	}
 }
 
+#[cfg(all(feature = "server", feature = "client"))]
 impl validity::AutoFix for SaveMapAutoFix {
 	fn description(&self) -> String {
 		self.fix.description(&self.map_name)
@@ -305,7 +308,7 @@ impl validity::AutoFix for SaveMapAutoFix {
 }
 
 #[derive(Clone)]
-#[cfg(feature = "server")]
+#[cfg(all(feature = "server", feature = "client"))]
 pub enum SaveMapAutoFixEnum {
 	DeleteEmptyGenericChunkFolder,
 	DeleteEmptyChunkFolder(ChunkRef),
@@ -313,6 +316,7 @@ pub enum SaveMapAutoFixEnum {
 	AlignChunkEdges(ChunkRef, ChunkRef)
 }
 
+#[cfg(all(feature = "server", feature = "client"))]
 impl SaveMapAutoFixEnum {
 	fn description(&self, map_name: &str) -> String {
 		match self {
@@ -344,6 +348,7 @@ pub struct ServerMap {
 	chunk_creator: ChunkCreationManager
 }
 
+#[cfg(feature = "server")]
 impl ServerMap {
 	pub fn from_save(save: SaveMap) -> Self {
 		Self {
@@ -425,6 +430,7 @@ struct ChunkCreationManager {
 	pub filesystem_lock: Arc<Mutex<()>>// To prevent concurrent writing and reading which messes with stuff and also I'm paranoid
 }
 
+#[cfg(feature = "server")]
 impl ChunkCreationManager {
 	pub fn new(rate_limit: Float, active_chunk_creators_limit: usize) -> Self {
 		Self {
@@ -504,6 +510,7 @@ struct AsyncChunkCreator {
 	result: Arc<Mutex<Option<ChunkCreationResult>>>
 }
 
+#[cfg(feature = "server")]
 impl AsyncChunkCreator {
 	pub fn start(chunk_creation_args: ChunkCreationArgs, most_recent_creation: Arc<Mutex<Instant>>, priority: Arc<Mutex<Vec<ChunkRef>>>, rate_limit: Float, filesystem_lock: Arc<Mutex<()>>) -> Self {
 		let result: Arc<Mutex<Option<ChunkCreationResult>>> = Arc::new(Mutex::new(None));

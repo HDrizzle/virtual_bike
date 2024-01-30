@@ -34,7 +34,7 @@ Created by Hadrian Ward, 2023-6-8
 2023-12-9: I decided to not use rapier in the client except when `debug_render_physics` is enabled
 */
 #![allow(warnings)]// TODO: remove when I have a lot of free-time
-use std::{fmt, env, ops, error::Error, collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, time::{SystemTime, UNIX_EPOCH}, f32::consts::PI};
+use std::{fmt, env, ops, error::Error, collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, time::{SystemTime, UNIX_EPOCH}, f32::consts::PI, fs, path, net::IpAddr};
 #[cfg(any(feature = "server", feature = "debug_render_physics"))]
 use rapier3d::{dynamics::{RigidBodySet, IslandManager}, geometry::ColliderSet};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
@@ -45,6 +45,8 @@ use bevy::{prelude::Transform, ecs::system::Resource, render::{mesh::{Mesh, Indi
 use bevy_rapier3d::plugin::RapierContext;
 use dialoguer;
 use rand::Rng;
+#[cfg(feature = "client")]
+use bevy::prelude::*;
 
 // Modules
 mod world;
@@ -52,7 +54,7 @@ mod map;
 mod vehicle;
 #[cfg(feature = "server")]
 mod physics;
-#[cfg(feature = "server")]
+#[cfg(all(feature = "server", feature = "client"))]
 pub mod validity;
 pub mod resource_interface;
 #[cfg(feature = "client")]
@@ -96,18 +98,18 @@ mod prelude {
 		BasicTriMesh,
 		SimpleIso,
 		SimpleRotation,
+		CacheableBevyAsset,
 		struct_subset
 	};
 	#[cfg(feature = "server")] pub use crate::{
 		physics::{PhysicsController, PhysicsUpdateArgs, BodyAveragableState, defaut_extra_forces_calculator},
 		vehicle::Vehicle,
 		world::{World, PhysicsState},
-		map::{ServerMap, SaveMap, map_generation::{MapGenerator, MeshCreationArgs, gis::WorldLocation}, chunk::{ChunkCreationArgs, ChunkCreationResult}},
-		validity
+		map::{ServerMap, SaveMap, map_generation::{MapGenerator, MeshCreationArgs, gis::WorldLocation}, chunk::{ChunkCreationArgs, ChunkCreationResult}}
 	};
+	#[cfg(all(feature = "server", feature = "client"))] pub use crate::validity;
 	#[cfg(any(feature = "server", feature = "debug_render_physics"))] pub use crate::{
-		RapierBodyCreationDeletionContext,
-		client::cache::CacheableBevyAsset
+		RapierBodyCreationDeletionContext
 	};
 	// Utility functions because nalgebra is friggin complicated
 	pub fn add_isometries(iso1: &Iso, iso2: &Iso) -> Iso {
@@ -510,6 +512,44 @@ impl SimpleRotation {
 	}
 }
 
+pub trait CacheableBevyAsset: Sized {
+	const CACHE_SUB_DIR: &'static str;// Ex: "static_vehicles/"
+	#[cfg(feature = "client")]
+	type BevyAssetType: Asset;// Ex: `Scene` for GLTF / GLB
+	fn name(&self) -> String;// Ex: "test-bike"
+	fn cache_path(name: &str) -> String;// Ex: "test-bike/model.glb"
+	fn write_to_file(&self, file: &mut std::fs::File) -> Result<(), String>;
+	#[cfg(feature = "client")]
+	fn save(&self, server_addr: IpAddr) -> Result<(), String> {
+		let path = Self::get_path(&self.name(), server_addr);
+		let mut path_buf = path::Path::new(&path).to_path_buf();
+		assert!(path_buf.pop());// removes filename https://doc.rust-lang.org/stable/std/path/struct.PathBuf.html#method.pop
+		fs::create_dir_all(path_buf).unwrap();//.split("/").next().unwrap_or("<Error: path could not be split with forward slash>"));
+		self.write_to_file(&mut fs::File::create(path).unwrap())
+	}
+	#[cfg(feature = "client")]
+	fn get_path(name: &str, server_addr: IpAddr) -> String {
+		format!("{}{}{}", get_or_create_cache_dir(server_addr), Self::CACHE_SUB_DIR, Self::cache_path(name))
+	}
+	#[cfg(feature = "client")]
+	fn load_to_bevy(name: &str, server_addr: IpAddr, asset_server: &AssetServer) -> Result<Handle<Self::BevyAssetType>, String> {
+		let path_raw = Self::get_path(name, server_addr);
+		match path_raw.strip_prefix("assets/") {
+			Some(path) => Ok(asset_server.load(path.to_owned())),
+			None => Err(format!("Unable to strip \"assets/\" off the beginning of \"{}\" so it can be compatible with bevy's asset server", &path_raw))
+		}
+	}
+	#[cfg(feature = "client")]
+	fn is_already_cached(&self, server_addr: IpAddr) -> bool {
+		path::Path::new(&Self::get_path(&self.name(), server_addr)).exists()
+	}
+}
+
+#[cfg(feature = "client")]
+fn get_or_create_cache_dir(addr: IpAddr) -> String {
+	format!("{}{:?}/", crate::client::cache::CACHE_DIR, addr)
+}
+
 #[macro_export]
 macro_rules! struct_subset {
 	($struct_name:ident, $new_struct_name:ident, $($field:ident),+) => {
@@ -552,7 +592,10 @@ pub fn ui_main() {
 				println!("Created user \"{}\" with password \"{}\"", &args[2], &args[3]);
 			},
 			"-validity-test" => {
+				#[cfg(all(feature = "server", feature = "client"))]
 				validity::main_ui();
+				#[cfg(not(all(feature = "server", feature = "client")))]
+				println!("Both the `client` and `server` features are required for this function");
 			}
 			_ => panic!("Invalid arguments")
 		}

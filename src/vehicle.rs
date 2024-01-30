@@ -4,7 +4,7 @@ Any vehicle can be in one of two states: normal physics and path-bound. Normal p
 when path-bound it will be controlled by the specific Path it is bound to. it's velocity will be a single scalar value whose sign indicates which direction it is travelling on the path wrt itself.
 */
 
-use std::{error::Error, rc::Rc, ops::AddAssign, io::Write};
+use std::{error::Error, rc::Rc, ops::AddAssign, io::Write, net::IpAddr};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 #[cfg(feature = "client")]
 use bevy::{prelude::*, ecs::component::Component};
@@ -184,6 +184,14 @@ impl CacheableBevyAsset for VehicleStaticModel {
 	}
 	fn write_to_file(&self, file: &mut std::fs::File) -> Result<(), String> {
 		to_string_err(file.write_all(&self.glb_data))
+	}
+	// Copied from default trait implementation to add "#Scene0" to asset path
+	fn load_to_bevy(name: &str, server_addr: IpAddr, asset_server: &AssetServer) -> Result<Handle<Self::BevyAssetType>, String> {
+		let path_raw = Self::get_path(name, server_addr);
+		match path_raw.strip_prefix("assets/") {
+			Some(path) => Ok(asset_server.load(path.to_owned() + "#Scene0")),
+			None => Err(format!("Unable to strip \"assets/\" off the beginning of \"{}\" so it can be compatible with bevy's asset server", &path_raw))
+		}
 	}
 }
 

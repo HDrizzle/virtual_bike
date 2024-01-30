@@ -2,6 +2,7 @@ use std::{collections::HashMap, rc::Rc, sync::Arc, f32::consts::PI};
 use approx::assert_relative_eq;
 use crate::prelude::*;
 
+#[cfg(feature = "server")]// TODO: fix: I don't like feature-gating tests, there should be a better way
 pub mod gen {
 	use crate::map::map_generation;
 	use super::*;

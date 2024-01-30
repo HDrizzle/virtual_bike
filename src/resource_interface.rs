@@ -58,7 +58,7 @@ pub fn load_static_vehicle(name: &str) -> Result<VehicleStatic, Box<dyn Error>> 
 
 #[cfg(feature = "server")]
 /// Finds path of given chunk ref, if successful returns: (Path, whether it is a generic chunk)
-pub fn find_chunk(chunk_ref: &ChunkRef, map_name: &str) -> Result<(String, bool), Box<dyn Error>> {
+pub fn find_chunk(chunk_ref: &ChunkRef, map_name: &str) -> Result<(String, bool), String> {
 	// Tries everything to find path to chunk dir
 	// 1. Test if it exists as a normal chunk
 	if let Some(path) = does_non_generic_chunk_exist(chunk_ref, map_name) {
@@ -69,7 +69,7 @@ pub fn find_chunk(chunk_ref: &ChunkRef, map_name: &str) -> Result<(String, bool)
         return Ok((path, true));
     }
 	// The chunk does not exist
-	Err(Box::new(GenericError::new(format!("Could not find regular or generic chunk for: {:?}", chunk_ref))))
+	Err(format!("Could not find regular or generic chunk for: {:?}", chunk_ref))
 }
 
 #[cfg(feature = "server")]
@@ -96,10 +96,11 @@ pub fn does_non_generic_chunk_exist(chunk_ref: &ChunkRef, map_name: &str) -> Opt
 }
 
 #[cfg(feature = "server")]
-pub fn load_chunk_texture(chunk_ref: &ChunkRef, map_name: &str) -> Result<Vec<u8>, Box<dyn Error>> {
-	let path: String = find_chunk(chunk_ref, map_name)?.0;
-	let data: Vec<u8> = fs::read(path + "texture.png")?;
-	Ok(data)
+pub fn load_chunk_texture(chunk_ref: &ChunkRef, map_name: &str) -> Result<(Vec<u8>, bool), String> {
+	let (dir_path, generic): (String, bool) = find_chunk(chunk_ref, map_name)?;
+	let path: String = dir_path + "texture.png";
+	let data: Vec<u8> = to_string_err_with_message(fs::read(&path), &format!("Attempt to load \"{}\"", &path))?;
+	Ok((data, generic))
 }
 
 #[cfg(feature = "server")]

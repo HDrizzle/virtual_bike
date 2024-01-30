@@ -97,7 +97,7 @@ impl NetworkRuntimeManager {
 								//println!("Recieved chunk request: {:?}", &chunk_ref);
 								match Chunk::load(&chunk_ref, &self.static_data.map.name) {
 									Ok(chunk) => {
-										let res = Response::Chunk(chunk);
+										let res = Response::Chunk(chunk.send(&self.static_data.map.name));
 										self.server.send_message(*client_id, DefaultChannel::ReliableOrdered, bincode::serialize(&res).expect("Unable to serialize chunk with bincode"));
 									},
 									Err(e) => {

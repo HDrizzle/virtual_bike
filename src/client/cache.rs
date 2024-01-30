@@ -1,8 +1,9 @@
 /* For dealing with cached assets for the client
 Caches corresponding to each server will be stored in CACHE_DIR/<IP addr>:<port #>/
 */
-const CACHE_DIR: &str = "assets/client_cache/";
-//const VEHICLE_MODEL_FILE_NAME: &str = "model.glb";
+pub const CACHE_DIR: &str = "assets/client_cache/";
+#[deprecated]
+const VEHICLE_MODEL_FILE_NAME: &str = "model.glb";
 
 use std::{fs, path, net::IpAddr, io};
 use crate::prelude::*;
@@ -40,10 +41,12 @@ fn get_or_create_cache_dir(addr: IpAddr) -> String {
 	format!("{}{:?}/", CACHE_DIR, addr)
 }
 
-/*pub fn get_static_vehicle_model_path(addr: IpAddr, type_: &str) -> String {
+#[deprecated]
+pub fn get_static_vehicle_model_path(addr: IpAddr, type_: &str) -> String {
 	format!("{}static_vehicles/{}/{}", get_or_create_cache_dir(addr), type_, VEHICLE_MODEL_FILE_NAME)
 }
 
+#[deprecated]
 pub fn save_static_vehicle_model(addr: IpAddr, type_: &str, data: Vec<u8>) -> Result<(), String> {
 	let path: String = get_static_vehicle_model_path(addr, type_);
 	// This will create the dir if it doesn't exist. If it does it will return an Err(), which can be ignored. TODO: crash if the error is something other than `dir_` already existing
@@ -51,6 +54,7 @@ pub fn save_static_vehicle_model(addr: IpAddr, type_: &str, data: Vec<u8>) -> Re
 	to_string_err_with_message(fs::write(&path, data), &format!("Error writing static vehicle glb model file to {}", path))
 }
 
+#[deprecated]
 pub fn is_vehicle_model_cached(addr: IpAddr, type_: &str) -> bool {
 	path::Path::new(&get_static_vehicle_model_path(addr, type_)).exists()
-}*/
+}
