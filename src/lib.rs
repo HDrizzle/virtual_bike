@@ -466,6 +466,15 @@ pub struct SimpleIso {// Isometry with just
 }
 
 impl SimpleIso {
+	pub fn new(
+		translation: V3,
+		rotation: SimpleRotation
+	) -> Self {
+		Self {
+			translation,
+			rotation
+		}
+	}
 	pub fn to_iso(&self) -> Iso {
 		Iso {
 			translation: Translation{vector: self.translation},
@@ -487,6 +496,15 @@ pub struct SimpleRotation {
 }
 
 impl SimpleRotation {
+	pub fn new(
+		yaw: Float,
+		pitch: Float
+	) -> Self {
+		Self {
+			yaw,
+			pitch
+		}
+	}
 	pub fn to_quat(&self) -> UnitQuaternion<Float> {
 		UnitQuaternion::from_axis_angle(&V3::y_axis(), self.yaw) * UnitQuaternion::from_axis_angle(&V3::x_axis(), self.pitch)
 	}

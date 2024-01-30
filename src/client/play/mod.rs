@@ -52,17 +52,23 @@ enum CameraController {
 	},
 	Vehicle {
 		username: String,
-		rel_pos: Iso
+		rel_rot: SimpleRotation,
+		radius: Float
 	}
 }
 
 impl CameraController {
+	pub fn vehicle(username: String) -> Self {
+		let rel_pos = Self::default_pos_wrt_vehicle();
+		Self::Vehicle{username, rel_rot: rel_pos.0, radius: rel_pos.1}
+	}
 	pub fn toggle(&mut self, vehicles: &HashMap<String, VehicleSend>, username: String) {
 		*self = match self {
 			Self::Spectator{pos} => {
-				Self::Vehicle{username, rel_pos: Self::default_pos_wrt_vehicle()}
+				let rel_pos = Self::default_pos_wrt_vehicle();
+				Self::Vehicle{username, rel_rot: rel_pos.0, radius: rel_pos.1}
 			},
-			Self::Vehicle{username, rel_pos} => {
+			Self::Vehicle{username, ..} => {
 				Self::Spectator{pos: SimpleIso::from_iso(self.get_pos(vehicles))}
 			}
 		};
@@ -85,16 +91,25 @@ impl CameraController {
 				let delta_pitch = rot_input.y * ang_speed * dt;
 				pos.rotation.pitch += delta_pitch;
 			},
-			Self::Vehicle{username, rel_pos} => {
-				// TODO
+			Self::Vehicle{username, rel_rot, radius} => {
+				let ang_speed: Float = 1.0;// Rad/s
+				// Delta-yaw
+				let delta_yaw = rot_input.x * ang_speed * dt;
+				rel_rot.yaw += delta_yaw;
+				// Delta-pitch
+				let delta_pitch = rot_input.y * ang_speed * dt;
+				rel_rot.pitch += delta_pitch;
 			}
 		}
 	}
 	pub fn get_pos(&self, vehicles: &HashMap<String, VehicleSend>) -> Iso {
 		match self {
 			Self::Spectator{pos} => pos.to_iso(),
-			Self::Vehicle{username, rel_pos} => match vehicles.get(&*username) {
-				Some(v) => add_isometries(&v.body_state.position, &rel_pos),
+			Self::Vehicle{username, rel_rot, radius} => match vehicles.get(&*username) {
+				Some(v) => {
+					let rel_translation = rel_rot.to_quat().transform_vector(&V3::new(0.0, 0.0, *radius));
+					add_isometries(&v.body_state.position, &SimpleIso::new(rel_translation, rel_rot.clone()).to_iso())
+				},
 				None => {
 					warn!("Unable to get vehicle with username \"{}\" to calculate camera position", &*username);
 					Isometry::identity()
@@ -102,13 +117,12 @@ impl CameraController {
 			}
 		}
 	}
-	pub fn default_pos_wrt_vehicle() -> Iso {
+	pub fn default_pos_wrt_vehicle() -> (SimpleRotation, Float) {
 		// Create rotation quat
-		let rot = UnitQuaternion::from_axis_angle(&V3::x_axis(), -0.2);
+		let rot = SimpleRotation::new(0.0, -0.2);//UnitQuaternion::from_axis_angle(&V3::x_axis(), -0.2);
 		// 2nd POV
-		let rel_translation = rot.transform_vector(&V3::new(0.0, 0.0, 30.0));
-		let rel_rotation = rot;
-		Iso{translation: nalgebra::Translation{vector: rel_translation}, rotation: rel_rotation}
+		//let rel_translation = rot.to_quat().transform_vector(&V3::new(0.0, 0.0, 30.0));
+		(rot, 30.0)
 	}
 }
 
@@ -130,7 +144,7 @@ pub struct InitInfo {// Provided by the sign-in window, DOES NOT CHANGE
 
 impl InitInfo {
 	pub fn setup_app(init_info: Self, app: &mut App) {
-		app.insert_resource(CameraController::Vehicle{username: init_info.network.auth.name.clone(), rel_pos: CameraController::default_pos_wrt_vehicle()});
+		app.insert_resource(CameraController::vehicle(init_info.network.auth.name.clone()));
 		app.insert_resource(init_info.static_data);
 		app.insert_resource(init_info.network.renet_transport);
 		app.insert_resource(init_info.network.renet_client);
