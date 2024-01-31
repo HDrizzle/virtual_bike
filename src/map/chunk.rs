@@ -419,8 +419,9 @@ impl Chunk {
 				1.0
 			),
 			base_color_texture: texture_handle_opt,
+			perceptual_roughness: 1.0,
 			alpha_mode: AlphaMode::Opaque,
-			unlit: true,
+			//unlit: true,
 			..default()
 		});
 		let mesh = self.elevation.bevy_mesh(self.grid_size, &v2_to_v3(self.ref_.to_v2()));

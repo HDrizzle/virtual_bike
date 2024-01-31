@@ -2,7 +2,7 @@
 	"map": "rollercoaster",
 	"vehicles": {
 		"admin": {
-			"type_": "test-bike",
+			"type_": "toilet",
 			"body_state": {
 				"position": {
 					"translation": [0, 20, 0],

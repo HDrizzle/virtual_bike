@@ -7,7 +7,7 @@ Bevy 3D rendering simple example: https://bevyengine.org/examples/3D%20Rendering
 Major change 2023-11-21: this module will only be used when the game is signed-in and being played
 */
 
-use std::{collections::{HashMap, HashSet}, net::IpAddr};
+use std::{collections::{HashMap, HashSet}, net::IpAddr, f32::consts::PI};
 use bevy::{
 	prelude::*,
 	input::{keyboard::KeyboardInput, ButtonState}
@@ -33,6 +33,7 @@ mod chunk_manager;
 use chunk_manager::{ChunkManagerPlugin, RenderDistance, RequestedChunks};
 mod gui;
 use gui::GuiPlugin;
+mod weather;
 
 // Custom resources
 #[derive(Resource)]
@@ -477,13 +478,35 @@ fn render_test(mut commands: Commands) {
 		},
 		CameraComponent
 	));
-	commands.spawn(PointLightBundle {
+	/*commands.spawn(PointLightBundle {
         point_light: PointLight {
             intensity: 1500.0,
             shadows_enabled: true,
             ..default()
         },
         transform: Transform::from_xyz(50.0, 50.0, 50.0),
+        ..default()
+    });*/
+	// directional 'sun' light, copied from https://bevyengine.org/examples/3D%20Rendering/lighting/
+    commands.spawn(DirectionalLightBundle {
+        directional_light: DirectionalLight {
+            shadows_enabled: true,
+            ..default()
+        },
+        transform: Transform {
+            translation: Vec3::new(0.0, 100.0, 0.0),
+            rotation: Quat::from_rotation_x(-PI / 2.),
+            ..default()
+        },
+        // The default cascade config is designed to handle large scenes.
+        // As this example has a much smaller world, we can tighten the shadow
+        // bounds for better visual quality.
+        /*cascade_shadow_config: CascadeShadowConfigBuilder {
+            first_cascade_far_bound: 4.0,
+            maximum_distance: 10.0,
+            ..default()
+        }
+        .into(),*/
         ..default()
     });
 }
