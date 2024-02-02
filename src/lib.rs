@@ -95,6 +95,7 @@ mod prelude {
 		EightWayDir,
 		IntV2,
 		resource_interface,
+		renet_server,
 		BasicTriMesh,
 		SimpleIso,
 		SimpleRotation,

@@ -268,6 +268,8 @@ pub fn all_tests() {
 	test_ui(ResourceDeserializationChecker::<HashMap<String, String>>::new(resource_interface::CLIENT_LOGIN_FILE.to_owned()));
 	// Client's hardware calibration file
 	test_ui(ResourceDeserializationChecker::<client::hardware_controller::Calibration>::new(resource_interface::CALIBRATION_FILE.to_owned()));
+	// Client's settings file
+	test_ui(ResourceDeserializationChecker::<client::Settings>::new(resource_interface::CLIENT_SETTINGS_FILE.to_owned()));
 }
 
 pub fn main_ui() {

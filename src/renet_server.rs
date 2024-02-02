@@ -1,19 +1,28 @@
 // Created 2023-7-29, some things copied from `web_server`
 // see README on https://github.com/lucaspoffo/renet
-use std::{net::{SocketAddr, UdpSocket, IpAddr, Ipv4Addr}, time::{SystemTime, Duration}, thread, sync::mpsc, mem};
-use renet::{RenetServer, ServerEvent, ConnectionConfig, transport::{ServerAuthentication, ServerConfig}, transport::NetcodeServerTransport, DefaultChannel};
+use std::{net::{SocketAddr, UdpSocket, IpAddr, Ipv4Addr}, time::{SystemTime, Duration, Instant, UNIX_EPOCH}, thread, sync::mpsc, mem};
+use renet::{RenetServer, ServerEvent, ConnectionConfig, SendType, ChannelConfig, transport::{ServerAuthentication, ServerConfig}, transport::NetcodeServerTransport, DefaultChannel};
 use serde::{Serialize, Deserialize};
 use bincode;
 use local_ip_address::local_ip;
 
 use crate::{prelude::*, world::async_messages, resource_interface};
 
+pub const BIG_DATA_SEND_UNRELIABLE: ChannelConfig = ChannelConfig {
+	channel_id: 3,// first 3 are the unreliable and reliable(un)ordered channels
+    max_memory_usage_bytes: 50_000_000,// Arbitrary
+    send_type: SendType::Unreliable
+};
+
 #[derive(Serialize, Deserialize)]
 pub enum Request {// All possible requests
 	Init,
 	VehicleRawGltfData(String),
 	ClientUpdate(ClientUpdate),
-	Chunk(ChunkRef),
+	Chunk {
+		chunk_ref: ChunkRef,
+		with_texture: bool
+	},
 	TogglePlaying,
 	RecoverVehicleFromFlip(ClientAuth),
 	NewUser {
@@ -83,7 +92,7 @@ impl NetworkRuntimeManager {
 							Request::VehicleRawGltfData(name) => {
 								println!("Recieved vehicle model request for: {}", &name);
 								let load_result: Result<Vec<u8>, String> = resource_interface::load_static_vehicle_gltf(&name);
-								self.server.send_message(*client_id, DefaultChannel::ReliableOrdered, bincode::serialize(&match load_result {
+								self.server.send_message(*client_id, BIG_DATA_SEND_UNRELIABLE.channel_id, bincode::serialize(&match load_result {
 									Ok(data) => Response::VehicleRawGltfData(VehicleStaticModel::new(name.clone(), data)),
 									Err(e) => Response::Err(e)
 								}).expect("Unable to serialize vehicle raw GLTF file data with bincode"));
@@ -92,15 +101,18 @@ impl NetworkRuntimeManager {
 								// TODO: authenticate client
 								tx.send(async_messages::ToWorld::ClientUpdate(update)).expect("Unable to send client update to world");
 							},
-							Request::Chunk(chunk_ref) => {
-								// TODO: change to Reliable
+							Request::Chunk{chunk_ref, with_texture} => {
 								//println!("Recieved chunk request: {:?}", &chunk_ref);
+								//self.server.send_message(*client_id, BIG_DATA_SEND_UNRELIABLE.channel_id, bincode::serialize(&Response::Err("Test error sent over BIG_DATA_SEND_UNRELIABLE".to_owned())).unwrap());
 								match Chunk::load(&chunk_ref, &self.static_data.map.name) {
-									Ok(chunk) => {
-										let res = Response::Chunk(chunk.send(&self.static_data.map.name));
-										self.server.send_message(*client_id, DefaultChannel::ReliableOrdered, bincode::serialize(&res).expect("Unable to serialize chunk with bincode"));
+									Ok(mut chunk) => {
+										chunk.set_texture_opt(with_texture, &self.static_data.map.name);
+										let res = Response::Chunk(chunk);
+										println!("Sending chunk: {:?}", &chunk_ref);
+										self.server.send_message(*client_id, BIG_DATA_SEND_UNRELIABLE.channel_id, bincode::serialize(&res).expect("Unable to serialize chunk with bincode"));
 									},
 									Err(e) => {
+										println!("Error loading chunk {:?}: {:?}", &chunk_ref, e);
 										tx.send(async_messages::ToWorld::CreateChunk(chunk_ref)).expect("Unable to send chunk creation request to world");
 										//Response::Err(format!("Error loading chunk: {}", e.to_string()))
 									}
@@ -155,7 +167,7 @@ impl WorldServer {
 		let world = World::load(world_name).expect(&format!("Failed to load world \"{}\"", world_name));
 		let static_data = world.build_static_data();
 		// Init renet server, mostly copied from https://crates.io/crates/renet
-		let server = RenetServer::new(ConnectionConfig::default());
+		let server = RenetServer::new(connection_config());
 		let ip_addr: IpAddr = if localhost {
 			IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))
 		}
@@ -166,13 +178,14 @@ impl WorldServer {
 		println!("Server listening on {:?}", addr);
 		let socket: UdpSocket = UdpSocket::bind(addr).unwrap();
 		let server_config = ServerConfig {
+			current_time: SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
 			max_clients: 64,
 			protocol_id: 0,
-			public_addr: addr,
+			public_addresses: vec![addr],
 			authentication: ServerAuthentication::Unsecure
 		};
 		let current_time = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap();
-		let transport = NetcodeServerTransport::new(current_time, server_config, socket).unwrap();
+		let transport = NetcodeServerTransport::new(server_config, socket).unwrap();
 		Self {
 			world,
 			net_manager_opt: Some(NetworkRuntimeManager {
@@ -206,5 +219,15 @@ impl WorldServer {
 		// Join network thread
 		println!("World done, joining network thread");
 		network_thread_handle.join().unwrap();
+	}
+}
+
+pub fn connection_config() -> ConnectionConfig {
+	let mut channels_config: Vec<ChannelConfig> = DefaultChannel::config();
+	channels_config.push(BIG_DATA_SEND_UNRELIABLE.clone());
+	ConnectionConfig {
+		available_bytes_per_tick: 60_000,
+		server_channels_config: channels_config.clone(),
+		client_channels_config: channels_config
 	}
 }

@@ -32,6 +32,8 @@ fn loading_screen(go: Arc<Mutex<bool>>) {
 }
 
 pub fn get_play_init_info() -> Option<play::InitInfo> {
+	// Load settings
+	let settings = resource_interface::load_client_settings().unwrap();
 	// Create client/transport
 	#[cfg(feature = "client_default_signin")]
 	let entry = SigninEntryState::default();
@@ -102,7 +104,7 @@ pub fn get_play_init_info() -> Option<play::InitInfo> {
 							if let Response::InitState(static_data) = res {// Static data has been recieved from server
 								println!("\nRecieved static data");
 								// Request vehicle models
-								if !requested_vehicle_models {
+								if settings.cache && !requested_vehicle_models {
 									for v_type in static_data.vehicle_models_to_load(network_init_info.addr) {
 										network_init_info.renet_client.send_message(DefaultChannel::ReliableOrdered, bincode::serialize(&Request::VehicleRawGltfData(v_type)).unwrap());
 									}
@@ -116,7 +118,7 @@ pub fn get_play_init_info() -> Option<play::InitInfo> {
 					}
 				}
 				if let Some(static_data) = &static_data_opt {
-					if static_data.vehicle_models_to_load(network_init_info.addr).len() == 0 {// Whether all vehicle models have been loaded
+					if static_data.vehicle_models_to_load(network_init_info.addr).len() == 0 || !settings.cache {// Whether all vehicle models have been loaded
 						done = true;
 						println!("No more vehicle models to load, loop should exit now");
 					}
@@ -128,7 +130,8 @@ pub fn get_play_init_info() -> Option<play::InitInfo> {
 					Some(static_data) => {
 						break play::InitInfo {
 							network: network_init_info,
-							static_data
+							static_data,
+							settings
 						};
 					},
 					None => panic!("The program is in a state which it is not supposed to be able to be in AAAAAHHHHHHH")

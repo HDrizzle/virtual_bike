@@ -6,7 +6,9 @@ use bevy_renet::renet::*;
 #[cfg(feature = "debug_render_physics")]
 use bevy_rapier3d::plugin::RapierContext;
 
-use crate::{prelude::*, renet_server::Request};
+use crate::{prelude::*, renet_server::Request, map::chunk::ChunkTexture};
+
+use super::Settings;
 
 // Structs/enums
 #[derive(PartialEq)]
@@ -114,7 +116,7 @@ impl RequestedChunks {
 			timeout: Duration::from_secs_f32(timeout)
 		}
 	}
-	pub fn add(&mut self, req_ref: ChunkRef, renet_client: &mut RenetClient) {
+	pub fn add(&mut self, req_ref: ChunkRef, renet_client: &mut RenetClient, settings: &Settings) {
 		// Check if it has been already requested within the timeout
 		for (ref_, t) in self.requested.iter() {
 			if ref_ == &req_ref {
@@ -126,7 +128,13 @@ impl RequestedChunks {
 		//println!("Requested chunk {:?}", &req_ref);
 		// Perform request
 		self.requested.insert(req_ref.clone(), SystemTime::now());
-		renet_client.send_message(DefaultChannel::ReliableOrdered, bincode::serialize(&Request::Chunk(req_ref)).unwrap());
+		renet_client.send_message(
+			DefaultChannel::ReliableOrdered,
+			bincode::serialize(&Request::Chunk{
+				chunk_ref: req_ref,
+				with_texture: true// TODO: check if already cached
+			}).unwrap()
+		);
 	}
 	pub fn remove(&mut self, ref_: &ChunkRef) {
 		self.requested.remove(ref_);
@@ -142,11 +150,13 @@ pub fn update_chunks_system(// TODO get this to only run when main vehicle is mo
 	#[cfg(feature = "debug_render_physics")]
 	mut rapier_context_res: ResMut<RapierContext>,
 	mut renet_client: ResMut<RenetClient>,
-	mut requested_chunks: ResMut<RequestedChunks>
+	mut requested_chunks: ResMut<RequestedChunks>,
+	settings: Res<Settings>
+
 ) {
 	let chunks_to_load: Vec<ChunkRef> = render_distance.load_unload_chunks(&mut static_data.map, #[cfg(feature = "debug_render_physics")] &mut rapier_context_res, &mut meshes, &mut materials);
 	for chunk_ref in chunks_to_load {
-		requested_chunks.add(chunk_ref, &mut renet_client);
+		requested_chunks.add(chunk_ref, &mut renet_client, &*settings);
 	}
 }
 
@@ -156,7 +166,7 @@ pub struct ChunkManagerPlugin;
 impl Plugin for ChunkManagerPlugin {
 	fn build(&self, app: &mut App) {
 		app.insert_resource(RenderDistance{load: 300.0, unload: 2000.0, pos: P2::new(0.0, 0.0)});// TODO: fix hardcoded values
-		app.insert_resource(RequestedChunks::new(0.5));
+		app.insert_resource(RequestedChunks::new(5.0));
 		app.add_systems(Update, update_chunks_system);
 	}
 }

@@ -27,6 +27,7 @@ pub trait CacheableBevyAsset: Sized {
 	}
 	fn load_to_bevy(name: &str, server_addr: IpAddr, asset_server: &AssetServer) -> Result<Handle<Self::BevyAssetType>, String> {
 		let path_raw = Self::get_path(name, server_addr);
+		dbg!(&path_raw);
 		match path_raw.strip_prefix("assets/") {
 			Some(path) => Ok(asset_server.load(path.to_owned())),
 			None => Err(format!("Unable to strip \"assets/\" off the beginning of \"{}\" so it can be compatible with bevy's asset server", &path_raw))

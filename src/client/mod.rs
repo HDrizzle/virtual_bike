@@ -3,8 +3,10 @@ This module contains the bevy-based module `play` and sign-in screen logic using
 Template for using `eframe` copied from https://github.com/appcove/egui.info/blob/master/examples/egui-101-basic/src/main.rsc
 */
 use std::{net::{SocketAddr, UdpSocket, IpAddr, Ipv4Addr}, time::SystemTime};
+use bevy::ecs::system::Resource;
 use bevy_renet::renet::{RenetClient, ConnectionConfig, transport::{NetcodeClientTransport, ClientAuthentication}};
 use local_ip_address::local_ip;
+use serde::{Serialize, Deserialize};
 
 use crate::prelude::*;
 
@@ -17,6 +19,11 @@ pub mod play;
 pub mod hardware_controller;
 mod network;
 pub mod cache;
+
+#[derive(Serialize, Deserialize, Resource)]
+pub struct Settings {
+	pub cache: bool
+}
 
 #[derive(Debug)]
 struct SigninEntryState {
@@ -54,7 +61,7 @@ impl SigninEntryState {
 		};
 		let current_time = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap();
 		let transport = NetcodeClientTransport::new(current_time, client_auth, client_socket).unwrap();
-		let client = RenetClient::new(ConnectionConfig::default());
+		let client = RenetClient::new(renet_server::connection_config());
 		//client.send_message(DefaultChannel::ReliableOrdered, bincode::serialize(&Request::Init).unwrap());
 		play::NetworkInitInfo {
 			renet_transport: transport,

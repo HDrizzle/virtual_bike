@@ -19,6 +19,7 @@ pub static USERS_FILE: &str = "../resources/server_credentials.json";
 pub static CLIENT_LOGIN_FILE: &str = "../resources/client_credentials.json";
 pub static CALIBRATION_FILE: &str = "../resources/calibration.json";
 pub static PORT_FILE: &str = "../resources/port.txt";
+pub static CLIENT_SETTINGS_FILE: &str = "../resources/client_settings.json";
 
 /*
 fn get_chunk_dir_path(chunk_ref: &ChunkRef, map_name: &str) -> String {
@@ -119,6 +120,13 @@ pub fn load_map_metadata(name: &str) -> Result<SaveMap, Box<dyn Error>> {
 	let raw_string: String = load_file_with_better_error(&(MAPS_DIR.to_owned() + name + "/metadata.json"))?;
 	let save_map: SaveMap = serde_json::from_str(&raw_string)?;
 	Ok(save_map)
+}
+
+#[cfg(feature = "client")]
+pub fn load_client_settings() -> Result<crate::client::Settings, Box<dyn Error>> {
+	let raw_string: String = load_file_with_better_error(CLIENT_SETTINGS_FILE)?;
+	let settings: crate::client::Settings = serde_json::from_str(&raw_string)?;
+	Ok(settings)
 }
 
 // Is now part of map metadata

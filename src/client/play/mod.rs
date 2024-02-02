@@ -10,6 +10,7 @@ Major change 2023-11-21: this module will only be used when the game is signed-i
 use std::{collections::{HashMap, HashSet}, net::IpAddr, f32::consts::PI};
 use bevy::{
 	prelude::*,
+	core_pipeline::Skybox,
 	input::{keyboard::KeyboardInput, ButtonState}
 };
 use bevy_renet::renet::{RenetClient, DefaultChannel, transport::NetcodeClientTransport};
@@ -23,17 +24,17 @@ use bincode;
 
 use crate::{
 	prelude::*,
-	renet_server::{Request, Response}
+	renet_server::{Request, Response, BIG_DATA_SEND_UNRELIABLE}
 };
 
-use super::{hardware_controller::HardwareControllerPlugin, network::CustomRenetPlugin, cache};
+use super::{hardware_controller::HardwareControllerPlugin, network::CustomRenetPlugin, cache, Settings};
 
 // Mods
 mod chunk_manager;
 use chunk_manager::{ChunkManagerPlugin, RenderDistance, RequestedChunks};
 mod gui;
 use gui::GuiPlugin;
-mod weather;
+mod skybox;
 
 // Custom resources
 #[derive(Resource)]
@@ -141,6 +142,7 @@ impl VehicleBodyStates {
 pub struct InitInfo {// Provided by the sign-in window, DOES NOT CHANGE
 	pub network: NetworkInitInfo,
 	pub static_data: StaticData,
+	pub settings: Settings
 }
 
 impl InitInfo {
@@ -153,6 +155,7 @@ impl InitInfo {
 		app.insert_resource(ServerAddr(init_info.network.addr));
 		app.add_systems(Startup, Self::setup_system);
 		app.insert_resource(WorldSend::default());
+		app.insert_resource(init_info.settings);
 	}
 	pub fn setup_system(
 		mut commands: Commands,
@@ -333,7 +336,8 @@ fn update_system(
 	mut requested_chunks: ResMut<RequestedChunks>,
 	auth: Res<ClientAuth>,
 	server_addr: Res<ServerAddr>,
-	mut world_state_res: ResMut<WorldSend>
+	mut world_state_res: ResMut<WorldSend>,
+	settings: Res<Settings>
 ) {
 	// How to move a camera: https://bevy-cheatbook.github.io/cookbook/pan-orbit-camera.html
 	#[cfg(feature = "debug_render_physics")]
@@ -344,7 +348,13 @@ fn update_system(
 	while let Some(message) = renet_client.receive_message(DefaultChannel::ReliableOrdered) {
 		messages.push(message.to_vec());
 	}
+	while let Some(message) = renet_client.receive_message(DefaultChannel::ReliableUnordered) {
+		messages.push(message.to_vec());
+	}
 	while let Some(message) = renet_client.receive_message(DefaultChannel::Unreliable) {
+		messages.push(message.to_vec());
+	}
+	while let Some(message) = renet_client.receive_message(BIG_DATA_SEND_UNRELIABLE.channel_id) {
 		messages.push(message.to_vec());
 	}
 	for message in messages {
@@ -361,11 +371,15 @@ fn update_system(
 				most_recent_world_state = Some(world_send);// In case multiple come through, only use the most recent one
 			},
 			Response::Chunk(chunk) => {
-				//println!("Recieved chunk {:?}", &chunk.ref_);
+				println!("Recieved chunk {:?}", &chunk.ref_);
 				requested_chunks.remove(&chunk.ref_);
-				match &chunk.texture_data {
-					Some(data) => data.save(server_addr.0).unwrap(),
-					None => {}//panic!("Server should send chunks with texture data")
+				match &chunk.texture_opt {
+					Some(data) => {
+						if settings.cache {
+							data.save(server_addr.0).unwrap();
+						}
+					},
+					None => panic!("Server should send chunks with texture data")
 				}
 				static_data.map.insert_chunk_client(chunk, #[cfg(feature = "debug_render_physics")] &mut RapierBodyCreationDeletionContext::from_bevy_rapier_context(&mut rapier_context), &mut commands, &mut meshes, &mut materials, &asset_server, server_addr.0);
 			},
@@ -468,16 +482,20 @@ fn camera_update_system(
 	}
 }
 
-fn render_test(mut commands: Commands) {
+fn render_test(
+	mut commands: Commands,
+	asset_server: Res<AssetServer>
+) {
 	// Copied from https://bevyengine.org/examples/3D%20Rendering/3d-scene/
 	// Camera
-	commands.spawn((
+	/*commands.spawn((
 		Camera3dBundle {
 			transform: Transform::from_xyz(50.0, 10.0, 0.0).looking_at(Vec3::new(50., 0., 50.), Vec3::Y),
 			..default()
 		},
-		CameraComponent
-	));
+		CameraComponent,
+		Skybox(asset_server.load("Ryfjallet_cubemap.png"))
+	));*/
 	/*commands.spawn(PointLightBundle {
         point_light: PointLight {
             intensity: 1500.0,
@@ -558,6 +576,7 @@ pub fn start(init_info: InitInfo) {
 		ChunkManagerPlugin,
 		GuiPlugin,
 		HardwareControllerPlugin,
+		skybox::Sky,
 		MainClientPlugin
 	));
 	InitInfo::setup_app(init_info, &mut app);

@@ -3,7 +3,7 @@
 use std::{rc::Rc, error::Error, collections::HashMap, sync::{Arc, Mutex}, io::Write, net::IpAddr};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 #[cfg(feature = "client")]
-use bevy::prelude::*;
+use bevy::{prelude::*, render::texture::{ImageType, CompressedImageFormats, ImageSampler, ImageFormat}};
 // Rapier 3D physics
 #[cfg(any(feature = "server", feature = "debug_render_physics"))]
 use rapier3d::prelude::*;
@@ -303,7 +303,7 @@ pub struct ChunkCreationArgs {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct ChunkTexture {
 	chunk_ref: ChunkRef,
-	raw_data: Vec<u8>,// PNG format
+	pub raw_data: Vec<u8>,// PNG format
 	generic: bool
 }
 
@@ -343,8 +343,7 @@ impl CacheableBevyAsset for ChunkTexture {
 pub struct Chunk {
 	pub ref_: ChunkRef,
 	pub elevation: RegularElevationMesh,
-	#[serde(skip)]// Texture image data is in a seperate file (.png)
-	pub texture_data: Option<ChunkTexture>,
+	pub texture_opt: Option<ChunkTexture>,
 	pub size: UInt,
 	pub grid_size: UInt,// Number of spaces inside grid, for example if this is 4 then the elevation grid coordinates should be 5x5, because fence-post problem
 	pub background_color: [u8; 3],
@@ -372,7 +371,7 @@ impl Chunk {
 		let out = Self {
 			ref_: args.ref_.clone(),
 			elevation,
-			texture_data: None,
+			texture_opt: None,
 			size: args.size,
 			grid_size: args.grid_size,
 			background_color: args.background_color,
@@ -405,10 +404,13 @@ impl Chunk {
 	}
 	#[cfg(feature = "client")]
 	pub fn bevy_pbr_bundle(&mut self, commands: &mut Commands, meshes:  &mut ResMut<Assets<Mesh>>, materials: &mut ResMut<Assets<StandardMaterial>>, asset_server: &AssetServer, server_addr: IpAddr) {// See https://stackoverflow.com/questions/66677098/how-can-i-manually-create-meshes-in-bevy-with-vertices
-		// TODO: paths
 		// With help from https://github.com/bevyengine/bevy/blob/main/examples/3d/texture.rs
-		let texture_handle_opt: Option<Handle<Image>> = match &self.texture_data {
-			Some(texture) => Some(ChunkTexture::load_to_bevy(&texture.name(), server_addr, asset_server).unwrap()),
+		let texture_handle_opt: Option<Handle<Image>> = match &self.texture_opt {
+			Some(texture) => {
+				//Some(ChunkTexture::load_to_bevy(&texture.name(), server_addr, asset_server).unwrap())// TODO: this should work if self.texture_opt is None
+				println!("Chunk {:?} has texture", &self.ref_);
+				Some(asset_server.add(Image::from_buffer(&texture.raw_data[..], ImageType::Format(ImageFormat::Png), CompressedImageFormats::NONE, true, ImageSampler::Default).unwrap()))
+			},
 			None => None
 		};//ChunkTexture::load_to_bevy(&self.ref_.resource_dir_name(), server_addr, asset_server).unwrap();//asset_server.load("../../resources/grass_texture_large.png");// TODO: use self.texture_data
 		let material_handle = materials.add(StandardMaterial {
@@ -466,16 +468,22 @@ impl Chunk {
 		(dx.powi(2) + dy.powi(2)).sqrt()
 	}
 	#[cfg(feature = "server")]
-	pub fn send(&self, map_name: &str) -> Self {// Makes sure that texture data is loaded
-		let mut out = self.clone();
+	pub fn set_texture_opt(&mut self, load_texture: bool, map_name: &str) {// Makes sure that texture data is loaded
 		// Load texture
-		match resource_interface::load_chunk_texture(&self.ref_, map_name) {
-			Ok((texture_data, generic)) => {
-				out.texture_data = Some(ChunkTexture::new(self.ref_.clone(), texture_data, generic));
+		if load_texture {
+			match &self.texture_opt {
+				Some(..) => {},
+				None => match resource_interface::load_chunk_texture(&self.ref_, map_name) {
+					Ok((texture_data, generic)) => {
+						self.texture_opt = Some(ChunkTexture::new(self.ref_.clone(), texture_data, generic));
+					}
+					Err(_) => {}
+				}
 			}
-			Err(_) => {}
 		}
-		out
+		else {
+			self.texture_opt = None;
+		}
 	}
 	pub fn set_position(&mut self, chunk_ref: &ChunkRef) {
 		// Sets chunk's position if it has been loaded as a generic chunk because if so it will likely be incorrect
