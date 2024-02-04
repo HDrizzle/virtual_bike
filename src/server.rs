@@ -1,21 +1,24 @@
 // Created 2023-7-29, some things copied from `web_server`
 // see README on https://github.com/lucaspoffo/renet
-use std::{net::{SocketAddr, UdpSocket, IpAddr, Ipv4Addr}, time::{SystemTime, Duration, Instant, UNIX_EPOCH}, thread, sync::mpsc, mem};
+use std::{net::{SocketAddr, UdpSocket, IpAddr, Ipv4Addr}, time::{SystemTime, Duration, Instant, UNIX_EPOCH}, thread, sync::{mpsc, Arc}, mem};
 use renet::{RenetServer, ServerEvent, ConnectionConfig, SendType, ChannelConfig, transport::{ServerAuthentication, ServerConfig}, transport::NetcodeServerTransport, DefaultChannel};
 use serde::{Serialize, Deserialize};
 use bincode;
 use local_ip_address::local_ip;
+use rouille;// Simple HTTP Server
+//use rocket::{State, Rocket};
+//use futures::executor::block_on;
 
 use crate::{prelude::*, world::async_messages, resource_interface};
 
 pub const BIG_DATA_SEND_UNRELIABLE: ChannelConfig = ChannelConfig {
 	channel_id: 3,// first 3 are the unreliable and reliable(un)ordered channels
-    max_memory_usage_bytes: 50_000_000,// Arbitrary
-    send_type: SendType::Unreliable
+    max_memory_usage_bytes: 500_000_000,// Arbitrary
+    send_type: SendType::ReliableUnordered{resend_time: Duration::from_secs(5)}
 };
 
 #[derive(Serialize, Deserialize)]
-pub enum Request {// All possible requests
+pub enum RenetRequest {// All possible requests
 	Init,
 	VehicleRawGltfData(String),
 	ClientUpdate(ClientUpdate),
@@ -32,7 +35,7 @@ pub enum Request {// All possible requests
 }
 
 #[derive(Serialize, Deserialize)]
-pub enum Response {// All possible responses
+pub enum RenetResponse {// All possible responses
 	InitState(StaticData),
 	VehicleRawGltfData(VehicleStaticModel),// Username, file contents
 	WorldState(WorldSend),
@@ -65,7 +68,7 @@ impl NetworkRuntimeManager {
 						match update {
 							async_messages::FromWorld::State(world_send) => {
 								// Broadcast state to all clients
-								self.server.broadcast_message(DefaultChannel::Unreliable, bincode::serialize(&Response::WorldState(world_send)).unwrap());
+								self.server.broadcast_message(DefaultChannel::Unreliable, bincode::serialize(&RenetResponse::WorldState(world_send)).unwrap());
 							}
 							async_messages::FromWorld::Error(e) => panic!("Received the following error from world: {}", e)
 						}
@@ -82,32 +85,32 @@ impl NetworkRuntimeManager {
 			for client_id in self.server.clients_id().iter() {
 				// The enum DefaultChannel describe the channels used by the default configuration
 				while let Some(message) = self.server.receive_message(*client_id, DefaultChannel::ReliableOrdered) {
-					let decoded_result: Result<Request, Box<bincode::ErrorKind>> = bincode::deserialize(&message[..]);
+					let decoded_result: Result<RenetRequest, Box<bincode::ErrorKind>> = bincode::deserialize(&message[..]);
 					match decoded_result {
 						Ok(decoded) => match decoded {
-							Request::Init => {
+							RenetRequest::Init => {
 								println!("Received init request");
-								self.server.send_message(*client_id, DefaultChannel::ReliableOrdered, bincode::serialize(&Response::InitState(self.static_data.clone())).expect("Unable to serialize static data with bincode"));
+								self.server.send_message(*client_id, DefaultChannel::ReliableOrdered, bincode::serialize(&RenetResponse::InitState(self.static_data.clone())).expect("Unable to serialize static data with bincode"));
 							},
-							Request::VehicleRawGltfData(name) => {
+							RenetRequest::VehicleRawGltfData(name) => {
 								println!("Recieved vehicle model request for: {}", &name);
 								let load_result: Result<Vec<u8>, String> = resource_interface::load_static_vehicle_gltf(&name);
 								self.server.send_message(*client_id, BIG_DATA_SEND_UNRELIABLE.channel_id, bincode::serialize(&match load_result {
-									Ok(data) => Response::VehicleRawGltfData(VehicleStaticModel::new(name.clone(), data)),
-									Err(e) => Response::Err(e)
+									Ok(data) => RenetResponse::VehicleRawGltfData(VehicleStaticModel::new(name.clone(), data)),
+									Err(e) => RenetResponse::Err(e)
 								}).expect("Unable to serialize vehicle raw GLTF file data with bincode"));
 							},
-							Request::ClientUpdate(update) => {
+							RenetRequest::ClientUpdate(update) => {
 								// TODO: authenticate client
 								tx.send(async_messages::ToWorld::ClientUpdate(update)).expect("Unable to send client update to world");
 							},
-							Request::Chunk{chunk_ref, with_texture} => {
+							RenetRequest::Chunk{chunk_ref, with_texture} => {
 								//println!("Recieved chunk request: {:?}", &chunk_ref);
 								//self.server.send_message(*client_id, BIG_DATA_SEND_UNRELIABLE.channel_id, bincode::serialize(&Response::Err("Test error sent over BIG_DATA_SEND_UNRELIABLE".to_owned())).unwrap());
 								match Chunk::load(&chunk_ref, &self.static_data.map.name) {
 									Ok(mut chunk) => {
-										chunk.set_texture_opt(with_texture, &self.static_data.map.name);
-										let res = Response::Chunk(chunk);
+										chunk.set_texture_opt(with_texture, &self.static_data.map.name).unwrap();
+										let res = RenetResponse::Chunk(chunk);
 										println!("Sending chunk: {:?}", &chunk_ref);
 										self.server.send_message(*client_id, BIG_DATA_SEND_UNRELIABLE.channel_id, bincode::serialize(&res).expect("Unable to serialize chunk with bincode"));
 									},
@@ -118,15 +121,15 @@ impl NetworkRuntimeManager {
 									}
 								}
 							},
-							Request::TogglePlaying => {
+							RenetRequest::TogglePlaying => {
 								// TODO: authenticate client
 								tx.send(async_messages::ToWorld::TogglePlaying).expect("Unable to send client update to world");
 							},
-							Request::RecoverVehicleFromFlip(auth) => {
+							RenetRequest::RecoverVehicleFromFlip(auth) => {
 								// TODO: authenticate client
 								tx.send(async_messages::ToWorld::RecoverVehicleFromFlip(auth)).expect("Unable to send message to world");
 							},
-							Request::NewUser{name, psswd} => {
+							RenetRequest::NewUser{name, psswd} => {
 								todo!();// TODO
 							}
 						},
@@ -157,7 +160,8 @@ impl NetworkRuntimeManager {
 #[cfg(feature = "server")]
 pub struct WorldServer {
 	world: World,
-	net_manager_opt: Option<NetworkRuntimeManager>
+	net_manager_opt: Option<NetworkRuntimeManager>,
+	asset_server_thread_handle: thread::JoinHandle<()>
 }
 
 #[cfg(feature = "server")]
@@ -174,8 +178,9 @@ impl WorldServer {
 		else {
 			local_ip().expect("Could not get this machine's local ip address, to run on localhost/127.0.0.1 pass the flag `-localhost`")
 		};
-		let addr = SocketAddr::new(ip_addr, resource_interface::load_port().expect("Unable to load and parse port.txt"));
-		println!("Server listening on {:?}", addr);
+		let renet_port = resource_interface::load_port().expect("Unable to load and parse port.txt");
+		let addr = SocketAddr::new(ip_addr, renet_port);
+		println!("Renet server listening on {:?}", addr);
 		let socket: UdpSocket = UdpSocket::bind(addr).unwrap();
 		let server_config = ServerConfig {
 			current_time: SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
@@ -186,6 +191,13 @@ impl WorldServer {
 		};
 		let current_time = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap();
 		let transport = NetcodeServerTransport::new(server_config, socket).unwrap();
+		// Init HTTP server
+		let asset_server = AssetServer::new(
+			world_name.to_owned(),
+			world.map.generic.name.clone()
+		);
+		let asset_server_thread_handle = asset_server.start(SocketAddr::new(ip_addr, renet_port + 1));
+		// Done
 		Self {
 			world,
 			net_manager_opt: Some(NetworkRuntimeManager {
@@ -193,7 +205,8 @@ impl WorldServer {
 				addr,
 				transport,
 				static_data
-			})
+			}),
+			asset_server_thread_handle
 		}
 	}
 	pub fn main_loop(&mut self) {
@@ -210,7 +223,7 @@ impl WorldServer {
 			let (world_tx, net_rx) = mpsc::channel::<async_messages::FromWorld>();// From thread
 			let mut net_manager_owned = match mem::replace(&mut self.net_manager_opt, None) {
 				Some(net_manager) => net_manager,
-				None => panic!("Network Runtime Manager option in Some. Has this function been run more than once?")
+				None => panic!("Network Runtime Manager option isn't Some. Has this function been run more than once?")
 			};
 			(thread::spawn(move || net_manager_owned.main_loop(net_rx, net_tx)), world_rx, world_tx)
 		};
@@ -231,3 +244,52 @@ pub fn connection_config() -> ConnectionConfig {
 		client_channels_config: channels_config
 	}
 }
+
+#[derive(Clone)]
+struct AssetServer {// Nothing to do with Bevy
+	world_name: String,
+	map_name: String
+}
+
+impl AssetServer {
+	pub fn new(
+		world_name: String,
+		map_name: String,
+	) -> Self {
+		Self {
+			world_name,
+			map_name
+		}
+	}
+	pub fn start(&self, addr: SocketAddr) -> thread::JoinHandle<()> {
+		let self_clone_arc = Arc::new(self.clone());
+		thread::Builder::new().name(format!("{} HTTP Server", APP_NAME)).spawn(
+			move || {
+				rouille::start_server(
+					addr,
+					move |req: &rouille::Request| -> rouille::Response {
+						self_clone_arc.request_handler(req)
+					}
+				);
+			}
+		).unwrap()
+	}
+	pub fn request_handler(&self, req: &rouille::Request) -> rouille::Response {
+		match req.url().as_str() {
+			"/" => rouille::Response::text(format!("{} Asset Server", APP_NAME)),
+			"/hello" => rouille::Response::text("Hello World"),
+			_ => rouille::Response::empty_404()
+		}
+	}
+}
+
+/*
+#[get("/chunks/<id>")]
+fn get_chunk(state: &State<HttpServerStaticState>, id: String) -> String {
+	format!("Request for chunk: \"{}\"", id)
+}
+
+#[get("/")]
+fn get_base() -> String {
+	format!("{} HTTP Server", APP_NAME)
+}*/

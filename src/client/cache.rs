@@ -8,6 +8,7 @@ const VEHICLE_MODEL_FILE_NAME: &str = "model.glb";
 use std::{fs, path, net::IpAddr, io};
 use crate::prelude::*;
 use bevy::prelude::*;
+use reqwest;
 
 pub trait CacheableBevyAsset: Sized {
 	const CACHE_SUB_DIR: &'static str;// Ex: "static_vehicles/"

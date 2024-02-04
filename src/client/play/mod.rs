@@ -24,7 +24,7 @@ use bincode;
 
 use crate::{
 	prelude::*,
-	renet_server::{Request, Response, BIG_DATA_SEND_UNRELIABLE}
+	server::BIG_DATA_SEND_UNRELIABLE
 };
 
 use super::{hardware_controller::HardwareControllerPlugin, network::CustomRenetPlugin, cache, Settings};
@@ -113,7 +113,7 @@ impl CameraController {
 					add_isometries(&v.body_state.position, &SimpleIso::new(rel_translation, rel_rot.clone()).to_iso())
 				},
 				None => {
-					warn!("Unable to get vehicle with username \"{}\" to calculate camera position", &*username);
+					bevy::log::warn!("Unable to get vehicle with username \"{}\" to calculate camera position", &*username);
 					Isometry::identity()
 				}
 			}
@@ -258,7 +258,7 @@ fn vehicle_input_key_event_system(// Only for manual vehicle control should be b
 		auth: auth.into_inner().clone(),
 		input
 	};
-	renet_client.send_message(DefaultChannel::ReliableOrdered, bincode::serialize(&Request::ClientUpdate(client_update)).unwrap());
+	renet_client.send_message(DefaultChannel::ReliableOrdered, bincode::serialize(&RenetRequest::ClientUpdate(client_update)).unwrap());
 }
 
 fn misc_key_event_system(
@@ -273,8 +273,8 @@ fn misc_key_event_system(
 			ButtonState::Pressed => {
 				match ev.key_code {
 					Some(key_code) => match key_code {
-						KeyCode::P => renet_client.send_message(DefaultChannel::ReliableOrdered, bincode::serialize(&Request::TogglePlaying).unwrap()),
-						KeyCode::E => renet_client.send_message(DefaultChannel::ReliableOrdered, bincode::serialize(&Request::RecoverVehicleFromFlip(auth.clone())).unwrap()),
+						KeyCode::P => renet_client.send_message(DefaultChannel::ReliableOrdered, bincode::serialize(&RenetRequest::TogglePlaying).unwrap()),
+						KeyCode::E => renet_client.send_message(DefaultChannel::ReliableOrdered, bincode::serialize(&RenetRequest::RecoverVehicleFromFlip(auth.clone())).unwrap()),
 						_ => {}
 					}
 					None => {}
@@ -358,19 +358,19 @@ fn update_system(
 		messages.push(message.to_vec());
 	}
 	for message in messages {
-		let res = bincode::deserialize::<Response>(&message).unwrap();
+		let res = bincode::deserialize::<RenetResponse>(&message).unwrap();
 		match res {
-			Response::InitState(..) => {
+			RenetResponse::InitState(..) => {
 				panic!("Bevy app recieved `Response::InitState(..) response which should not be possible.`");
 			},
-			Response::VehicleRawGltfData(v_static_model) => {
+			RenetResponse::VehicleRawGltfData(v_static_model) => {
 				//cache::save_static_vehicle_model(server_addr.0, &v_type, data).unwrap();
 				v_static_model.save(server_addr.0).unwrap();
 			}
-			Response::WorldState(world_send) => {
+			RenetResponse::WorldState(world_send) => {
 				most_recent_world_state = Some(world_send);// In case multiple come through, only use the most recent one
 			},
-			Response::Chunk(chunk) => {
+			RenetResponse::Chunk(chunk) => {
 				println!("Recieved chunk {:?}", &chunk.ref_);
 				requested_chunks.remove(&chunk.ref_);
 				match &chunk.texture_opt {
@@ -379,11 +379,11 @@ fn update_system(
 							data.save(server_addr.0).unwrap();
 						}
 					},
-					None => panic!("Server should send chunks with texture data")
+					None => {}//panic!("Server should send chunks with texture data")
 				}
 				static_data.map.insert_chunk_client(chunk, #[cfg(feature = "debug_render_physics")] &mut RapierBodyCreationDeletionContext::from_bevy_rapier_context(&mut rapier_context), &mut commands, &mut meshes, &mut materials, &asset_server, server_addr.0);
 			},
-			Response::Err(err_string) => {
+			RenetResponse::Err(err_string) => {
 				panic!("Server sent following error message: {}", err_string);
 			}
 		}

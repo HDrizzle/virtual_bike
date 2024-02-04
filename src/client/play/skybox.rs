@@ -79,14 +79,14 @@ impl Sky {
 		mut skyboxes: Query<&mut Skybox>
 	) {
 		if !cubemap.is_loaded && asset_server.load_state(&cubemap.image_handle) == LoadState::Loaded {
-			info!("Skybox texture loaded");
+			bevy::log::info!("Skybox texture loaded");
 			let image = images.get_mut(&cubemap.image_handle).unwrap();
 			image.reinterpret_stacked_2d_as_array(image.height() / image.width());
             image.texture_view_descriptor = Some(TextureViewDescriptor {
                 dimension: Some(TextureViewDimension::Cube),
                 ..default()
             });
-			info!("Spawning camera with skybox");
+			bevy::log::info!("Spawning camera with skybox");
 			commands.spawn((
 				Camera3dBundle {
 					transform: Transform::from_xyz(50.0, 10.0, 0.0).looking_at(Vec3::new(50., 0., 50.), Vec3::Y),

@@ -468,7 +468,7 @@ impl Chunk {
 		(dx.powi(2) + dy.powi(2)).sqrt()
 	}
 	#[cfg(feature = "server")]
-	pub fn set_texture_opt(&mut self, load_texture: bool, map_name: &str) {// Makes sure that texture data is loaded
+	pub fn set_texture_opt(&mut self, load_texture: bool, map_name: &str) -> Result<(), String> {// Makes sure that texture data is loaded
 		// Load texture
 		if load_texture {
 			match &self.texture_opt {
@@ -477,13 +477,16 @@ impl Chunk {
 					Ok((texture_data, generic)) => {
 						self.texture_opt = Some(ChunkTexture::new(self.ref_.clone(), texture_data, generic));
 					}
-					Err(_) => {}
+					Err(e) => {
+						return Err(e);
+					}
 				}
 			}
 		}
 		else {
 			self.texture_opt = None;
 		}
+		Ok(())
 	}
 	pub fn set_position(&mut self, chunk_ref: &ChunkRef) {
 		// Sets chunk's position if it has been loaded as a generic chunk because if so it will likely be incorrect

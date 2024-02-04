@@ -61,7 +61,7 @@ impl SigninEntryState {
 		};
 		let current_time = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap();
 		let transport = NetcodeClientTransport::new(current_time, client_auth, client_socket).unwrap();
-		let client = RenetClient::new(renet_server::connection_config());
+		let client = RenetClient::new(server::connection_config());
 		//client.send_message(DefaultChannel::ReliableOrdered, bincode::serialize(&Request::Init).unwrap());
 		play::NetworkInitInfo {
 			renet_transport: transport,

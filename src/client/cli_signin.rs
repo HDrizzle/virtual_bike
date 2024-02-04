@@ -6,7 +6,7 @@ use std::{time::Duration, thread, sync::{Arc, Mutex}, mem};
 use bevy_renet::renet::DefaultChannel;
 //use extras::prompt;
 
-use crate::{prelude::*, renet_server::{Request, Response}};
+use crate::prelude::*;
 use super::{SigninEntryState, play, cache};
 
 fn loading_screen(go: Arc<Mutex<bool>>) {
@@ -66,7 +66,7 @@ pub fn get_play_init_info() -> Option<play::InitInfo> {
 		if !network_init_info.renet_client.is_disconnected() {
 			// Send static data request if haven't already
 			if !requested_static_data {
-				network_init_info.renet_client.send_message(DefaultChannel::ReliableOrdered, bincode::serialize(&Request::Init).unwrap());
+				network_init_info.renet_client.send_message(DefaultChannel::ReliableOrdered, bincode::serialize(&RenetRequest::Init).unwrap());
 				//network_init_info.renet_client.send_message(DefaultChannel::ReliableOrdered, bincode::serialize(&Request::VehicleRawGltfData("test-bike".to_owned())).unwrap());
 				requested_static_data = true;
 			}
@@ -89,24 +89,24 @@ pub fn get_play_init_info() -> Option<play::InitInfo> {
 			}*/
 			let mut done = false;// Can't break from inside while loop, use this flag instead
 			while let Some(message) = network_init_info.renet_client.receive_message(DefaultChannel::ReliableOrdered) {
-				let res = bincode::deserialize::<Response>(&message).unwrap();
+				let res = bincode::deserialize::<RenetResponse>(&message).unwrap();
 				match res {
-					Response::Err(e) => panic!("Server sent following error message: {}", e),
+					RenetResponse::Err(e) => panic!("Server sent following error message: {}", e),
 					res => match &static_data_opt {
 						Some(_) => {
-							if let Response::VehicleRawGltfData(v_static_model) = res {
+							if let RenetResponse::VehicleRawGltfData(v_static_model) = res {
 								println!("Recieved model for vehicle type {}", &v_static_model.name());
 								//cache::save_static_vehicle_model(network_init_info.addr, &v_type, data).unwrap();
 								v_static_model.save(network_init_info.addr).unwrap();
 							}
 						}
 						None => {
-							if let Response::InitState(static_data) = res {// Static data has been recieved from server
+							if let RenetResponse::InitState(static_data) = res {// Static data has been recieved from server
 								println!("\nRecieved static data");
 								// Request vehicle models
 								if settings.cache && !requested_vehicle_models {
 									for v_type in static_data.vehicle_models_to_load(network_init_info.addr) {
-										network_init_info.renet_client.send_message(DefaultChannel::ReliableOrdered, bincode::serialize(&Request::VehicleRawGltfData(v_type)).unwrap());
+										network_init_info.renet_client.send_message(DefaultChannel::ReliableOrdered, bincode::serialize(&RenetRequest::VehicleRawGltfData(v_type)).unwrap());
 									}
 									requested_vehicle_models = true;
 									println!("Requested vehicle models");

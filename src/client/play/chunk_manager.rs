@@ -6,7 +6,7 @@ use bevy_renet::renet::*;
 #[cfg(feature = "debug_render_physics")]
 use bevy_rapier3d::plugin::RapierContext;
 
-use crate::{prelude::*, renet_server::Request, map::chunk::ChunkTexture};
+use crate::{prelude::*, map::chunk::ChunkTexture};
 
 use super::Settings;
 
@@ -130,7 +130,7 @@ impl RequestedChunks {
 		self.requested.insert(req_ref.clone(), SystemTime::now());
 		renet_client.send_message(
 			DefaultChannel::ReliableOrdered,
-			bincode::serialize(&Request::Chunk{
+			bincode::serialize(&RenetRequest::Chunk{
 				chunk_ref: req_ref,
 				with_texture: true// TODO: check if already cached
 			}).unwrap()

@@ -32,6 +32,8 @@ Created by Hadrian Ward, 2023-6-8
 2023-12-2: I will attempt to upgrade to the latest version of Bevy (bevy-^0.12) as well as everything that uses it.
 
 2023-12-9: I decided to not use rapier in the client except when `debug_render_physics` is enabled
+
+2023-2-3: Renet doesn't handle very large pieces of data well, so I will now use a simple HTTP server to serve 3D assets and other such chunky files
 */
 #![allow(warnings)]// TODO: remove when I have a lot of free-time
 use std::{fmt, env, ops, error::Error, collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, time::{SystemTime, UNIX_EPOCH}, f32::consts::PI, fs, path, net::IpAddr};
@@ -48,6 +50,8 @@ use rand::Rng;
 #[cfg(feature = "client")]
 use bevy::prelude::*;
 
+//#[macro_use] extern crate rocket;
+
 // Modules
 mod world;
 mod map;
@@ -59,7 +63,7 @@ pub mod validity;
 pub mod resource_interface;
 #[cfg(feature = "client")]
 pub mod client;
-pub mod renet_server;
+pub mod server;
 
 // Tests
 #[cfg(test)]
@@ -87,7 +91,7 @@ mod prelude {
 		world::{StaticData, WorldSave, WorldSend},
 		map::{GenericMap, path::{Path, PathSet, PathBoundBodyState, PathPosition, BCurve, BCurveSample, BCURVE_LENGTH_ESTIMATION_SEGMENTS}, chunk::{Chunk, ChunkRef, RegularElevationMesh}},
 		vehicle::{VehicleStatic, VehicleStaticModel, VehicleSave, VehicleSend, Wheel, WheelStatic, BodyStateSerialize, BodyForces},
-		renet_server::{Request, Response},
+		server::{RenetRequest, RenetResponse},
 		GenericError,
 		InputData,
 		ClientAuth,
@@ -95,7 +99,7 @@ mod prelude {
 		EightWayDir,
 		IntV2,
 		resource_interface,
-		renet_server,
+		server,
 		BasicTriMesh,
 		SimpleIso,
 		SimpleRotation,
@@ -591,7 +595,7 @@ pub fn ui_main() {
 			"-server" => {
 				assert!(args.len() >= 3, "Not enough arguments");
 				// Start server with renet
-				let mut server = renet_server::WorldServer::init(&args[2], args.contains(&"-localhost".to_string()));
+				let mut server = server::WorldServer::init(&args[2], args.contains(&"-localhost".to_string()));
 				println!("Running world");
 				server.main_loop();
 			},
