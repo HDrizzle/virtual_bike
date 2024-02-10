@@ -91,7 +91,7 @@ mod prelude {
 		world::{StaticData, WorldSave, WorldSend},
 		map::{GenericMap, path::{Path, PathSet, PathBoundBodyState, PathPosition, BCurve, BCurveSample, BCURVE_LENGTH_ESTIMATION_SEGMENTS}, chunk::{Chunk, ChunkRef, RegularElevationMesh}},
 		vehicle::{VehicleStatic, VehicleStaticModel, VehicleSave, VehicleSend, Wheel, WheelStatic, BodyStateSerialize, BodyForces},
-		server::{RenetRequest, RenetResponse},
+		server::{RenetRequest, RenetResponse, AssetResponse},
 		GenericError,
 		InputData,
 		ClientAuth,
@@ -111,6 +111,9 @@ mod prelude {
 		vehicle::Vehicle,
 		world::{World, PhysicsState},
 		map::{ServerMap, SaveMap, map_generation::{MapGenerator, MeshCreationArgs, gis::WorldLocation}, chunk::{ChunkCreationArgs, ChunkCreationResult}}
+	};
+	#[cfg(feature = "client")] pub use crate::{
+		server::AssetRequest
 	};
 	#[cfg(all(feature = "server", feature = "client"))] pub use crate::validity;
 	#[cfg(any(feature = "server", feature = "debug_render_physics"))] pub use crate::{
@@ -186,13 +189,13 @@ mod prelude {
 		}
 	}
 	// Copied from extras
-	pub fn to_string_err<T, E: Error>(result: Result<T, E>) -> Result<T, String> {
+	pub fn to_string_err<T, E: ToString>(result: Result<T, E>) -> Result<T, String> {
 		match result {
 			Ok(t) => Ok(t),
 			Err(e) => Err(e.to_string())
 		}
 	}
-	pub fn to_string_err_with_message<T, E: Error>(result: Result<T, E>, message: &str) -> Result<T, String> {
+	pub fn to_string_err_with_message<T, E: ToString>(result: Result<T, E>, message: &str) -> Result<T, String> {
 		match result {
 			Ok(t) => Ok(t),
 			Err(e) => Err(format!("Message: {}, Error: {}", message, e.to_string()))
@@ -595,7 +598,7 @@ pub fn ui_main() {
 			"-server" => {
 				assert!(args.len() >= 3, "Not enough arguments");
 				// Start server with renet
-				let mut server = server::WorldServer::init(&args[2], args.contains(&"-localhost".to_string()));
+				let mut server = server::WorldServer::init(args[2].to_owned(), args.contains(&"-localhost".to_string()));
 				println!("Running world");
 				server.main_loop();
 			},

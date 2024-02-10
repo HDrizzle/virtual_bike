@@ -8,7 +8,10 @@ use bevy_rapier3d::plugin::RapierContext;
 
 use crate::{prelude::*, map::chunk::ChunkTexture};
 
-use super::Settings;
+use super::{
+	Settings,
+	super::asset_client::AssetLoaderManager
+};
 
 // Structs/enums
 #[derive(PartialEq)]
@@ -116,7 +119,7 @@ impl RequestedChunks {
 			timeout: Duration::from_secs_f32(timeout)
 		}
 	}
-	pub fn add(&mut self, req_ref: ChunkRef, renet_client: &mut RenetClient, settings: &Settings) {
+	pub fn add(&mut self, req_ref: ChunkRef, asset_client: &mut AssetLoaderManager, settings: &Settings) {
 		// Check if it has been already requested within the timeout
 		for (ref_, t) in self.requested.iter() {
 			if ref_ == &req_ref {
@@ -128,12 +131,11 @@ impl RequestedChunks {
 		//println!("Requested chunk {:?}", &req_ref);
 		// Perform request
 		self.requested.insert(req_ref.clone(), SystemTime::now());
-		renet_client.send_message(
-			DefaultChannel::ReliableOrdered,
-			bincode::serialize(&RenetRequest::Chunk{
+		asset_client.request(
+			AssetRequest::Chunk{
 				chunk_ref: req_ref,
-				with_texture: true// TODO: check if already cached
-			}).unwrap()
+				with_texture: true// TODO
+			}
 		);
 	}
 	pub fn remove(&mut self, ref_: &ChunkRef) {
@@ -149,14 +151,14 @@ pub fn update_chunks_system(// TODO get this to only run when main vehicle is mo
 	mut static_data: ResMut<StaticData>,
 	#[cfg(feature = "debug_render_physics")]
 	mut rapier_context_res: ResMut<RapierContext>,
-	mut renet_client: ResMut<RenetClient>,
+	mut asset_client: ResMut<AssetLoaderManager>,
 	mut requested_chunks: ResMut<RequestedChunks>,
 	settings: Res<Settings>
 
 ) {
 	let chunks_to_load: Vec<ChunkRef> = render_distance.load_unload_chunks(&mut static_data.map, #[cfg(feature = "debug_render_physics")] &mut rapier_context_res, &mut meshes, &mut materials);
 	for chunk_ref in chunks_to_load {
-		requested_chunks.add(chunk_ref, &mut renet_client, &*settings);
+		requested_chunks.add(chunk_ref, &mut asset_client, &*settings);
 	}
 }
 

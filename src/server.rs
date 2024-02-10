@@ -20,12 +20,7 @@ pub const BIG_DATA_SEND_UNRELIABLE: ChannelConfig = ChannelConfig {
 #[derive(Serialize, Deserialize)]
 pub enum RenetRequest {// All possible requests
 	Init,
-	VehicleRawGltfData(String),
 	ClientUpdate(ClientUpdate),
-	Chunk {
-		chunk_ref: ChunkRef,
-		with_texture: bool
-	},
 	TogglePlaying,
 	RecoverVehicleFromFlip(ClientAuth),
 	NewUser {
@@ -37,10 +32,42 @@ pub enum RenetRequest {// All possible requests
 #[derive(Serialize, Deserialize)]
 pub enum RenetResponse {// All possible responses
 	InitState(StaticData),
-	VehicleRawGltfData(VehicleStaticModel),// Username, file contents
 	WorldState(WorldSend),
-	Chunk(Chunk),
 	Err(String)
+}
+
+// Not actually serialized and sent to the server, just a way to represent asset HTTP requests
+#[cfg(feature = "client")]
+#[derive(Hash)]
+pub enum AssetRequest {
+	VehicleRawGltfData(String),
+	Chunk {
+		chunk_ref: ChunkRef,
+		with_texture: bool
+	}
+}
+
+impl AssetRequest {
+	/// For example: "/chunks/100_200?with_texture=0" or "/vehicle_static_models/cool_bike"
+	pub fn request_path(&self) -> String {
+		match self {
+			Self::VehicleRawGltfData(static_name) => format!("/vehicle_static_models/{}", static_name),
+			Self::Chunk{chunk_ref, with_texture} => format!(
+				"/chunks/{}?with_texture={}",
+				chunk_ref.resource_dir_name(),
+				match with_texture {
+					true => "1",
+					false => "0"
+				}
+			)
+		}
+	}
+}
+
+#[derive(Serialize, Deserialize)]
+pub enum AssetResponse {
+	VehicleRawGltfData(VehicleStaticModel),// Username, file contents
+	Chunk(Chunk)
 }
 
 #[cfg(feature = "server")]
@@ -92,26 +119,26 @@ impl NetworkRuntimeManager {
 								println!("Received init request");
 								self.server.send_message(*client_id, DefaultChannel::ReliableOrdered, bincode::serialize(&RenetResponse::InitState(self.static_data.clone())).expect("Unable to serialize static data with bincode"));
 							},
-							RenetRequest::VehicleRawGltfData(name) => {
+							/*RenetRequest::VehicleRawGltfData(name) => {
 								println!("Recieved vehicle model request for: {}", &name);
 								let load_result: Result<Vec<u8>, String> = resource_interface::load_static_vehicle_gltf(&name);
 								self.server.send_message(*client_id, BIG_DATA_SEND_UNRELIABLE.channel_id, bincode::serialize(&match load_result {
 									Ok(data) => RenetResponse::VehicleRawGltfData(VehicleStaticModel::new(name.clone(), data)),
 									Err(e) => RenetResponse::Err(e)
 								}).expect("Unable to serialize vehicle raw GLTF file data with bincode"));
-							},
+							},*/
 							RenetRequest::ClientUpdate(update) => {
 								// TODO: authenticate client
 								tx.send(async_messages::ToWorld::ClientUpdate(update)).expect("Unable to send client update to world");
 							},
-							RenetRequest::Chunk{chunk_ref, with_texture} => {
+							/*RenetRequest::Chunk{chunk_ref} => {
 								//println!("Recieved chunk request: {:?}", &chunk_ref);
 								//self.server.send_message(*client_id, BIG_DATA_SEND_UNRELIABLE.channel_id, bincode::serialize(&Response::Err("Test error sent over BIG_DATA_SEND_UNRELIABLE".to_owned())).unwrap());
 								match Chunk::load(&chunk_ref, &self.static_data.map.name) {
 									Ok(mut chunk) => {
-										chunk.set_texture_opt(with_texture, &self.static_data.map.name).unwrap();
+										//chunk.set_texture_opt(with_texture, &self.static_data.map.name).unwrap();
 										let res = RenetResponse::Chunk(chunk);
-										println!("Sending chunk: {:?}", &chunk_ref);
+										//println!("Sending chunk: {:?}", &chunk_ref);
 										self.server.send_message(*client_id, BIG_DATA_SEND_UNRELIABLE.channel_id, bincode::serialize(&res).expect("Unable to serialize chunk with bincode"));
 									},
 									Err(e) => {
@@ -120,7 +147,7 @@ impl NetworkRuntimeManager {
 										//Response::Err(format!("Error loading chunk: {}", e.to_string()))
 									}
 								}
-							},
+							},*/
 							RenetRequest::TogglePlaying => {
 								// TODO: authenticate client
 								tx.send(async_messages::ToWorld::TogglePlaying).expect("Unable to send client update to world");
@@ -159,16 +186,18 @@ impl NetworkRuntimeManager {
 
 #[cfg(feature = "server")]
 pub struct WorldServer {
+	world_name: String,
 	world: World,
 	net_manager_opt: Option<NetworkRuntimeManager>,
-	asset_server_thread_handle: thread::JoinHandle<()>
+	asset_server_addr: SocketAddr
+	//asset_server_thread_handle: thread::JoinHandle<()>
 }
 
 #[cfg(feature = "server")]
 impl WorldServer {
-	pub fn init(world_name: &str, localhost: bool) -> Self {
+	pub fn init(world_name: String, localhost: bool) -> Self {
 		// Load world
-		let world = World::load(world_name).expect(&format!("Failed to load world \"{}\"", world_name));
+		let world = World::load(&world_name).expect(&format!("Failed to load world \"{}\"", world_name));
 		let static_data = world.build_static_data();
 		// Init renet server, mostly copied from https://crates.io/crates/renet
 		let server = RenetServer::new(connection_config());
@@ -185,20 +214,15 @@ impl WorldServer {
 		let server_config = ServerConfig {
 			current_time: SystemTime::now().duration_since(UNIX_EPOCH).unwrap(),
 			max_clients: 64,
-			protocol_id: 0,
+			protocol_id: 0,// TODO: hash program version like what the renet docs says, so different versions can't connect
 			public_addresses: vec![addr],
 			authentication: ServerAuthentication::Unsecure
 		};
 		let current_time = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap();
 		let transport = NetcodeServerTransport::new(server_config, socket).unwrap();
-		// Init HTTP server
-		let asset_server = AssetServer::new(
-			world_name.to_owned(),
-			world.map.generic.name.clone()
-		);
-		let asset_server_thread_handle = asset_server.start(SocketAddr::new(ip_addr, renet_port + 1));
 		// Done
 		Self {
+			world_name,
 			world,
 			net_manager_opt: Some(NetworkRuntimeManager {
 				server,
@@ -206,7 +230,8 @@ impl WorldServer {
 				transport,
 				static_data
 			}),
-			asset_server_thread_handle
+			asset_server_addr: SocketAddr::new(ip_addr, renet_port + 1)
+			//asset_server_thread_handle
 		}
 	}
 	pub fn main_loop(&mut self) {
@@ -218,15 +243,23 @@ impl WorldServer {
 			let world_copy = self.world.clone();
 			(thread::spawn(move || ((*world_copy).lock().unwrap()).main_loop(rx_remote, tx_remote)), tx, rx)
 		};*/
-		let (network_thread_handle, world_rx, world_tx) = {
+		let (network_thread_handle, world_rx, world_tx, asset_server_tx) = {
 			let (net_tx, world_rx) = mpsc::channel::<async_messages::ToWorld>();// To thread
+			let asset_server_tx = net_tx.clone();
 			let (world_tx, net_rx) = mpsc::channel::<async_messages::FromWorld>();// From thread
 			let mut net_manager_owned = match mem::replace(&mut self.net_manager_opt, None) {
 				Some(net_manager) => net_manager,
 				None => panic!("Network Runtime Manager option isn't Some. Has this function been run more than once?")
 			};
-			(thread::spawn(move || net_manager_owned.main_loop(net_rx, net_tx)), world_rx, world_tx)
+			(thread::spawn(move || net_manager_owned.main_loop(net_rx, net_tx)), world_rx, world_tx, asset_server_tx)
 		};
+		// Init HTTP server
+		let asset_server = AssetServer::new(
+			self.world_name.to_owned(),
+			self.world.map.generic.name.clone(),
+			asset_server_tx
+		);
+		let _asset_server_thread_handle = asset_server.start(self.asset_server_addr);
 		// Main loop
 		self.world.main_loop(world_rx, world_tx);
 		// Join network thread
@@ -245,20 +278,32 @@ pub fn connection_config() -> ConnectionConfig {
 	}
 }
 
+fn response_code_and_message(code: u16, message: String) -> rouille::Response {
+	rouille::Response {
+		status_code: code,
+		headers: Vec::new(),
+		data: rouille::ResponseBody::from_string(message),
+		upgrade: None
+	}
+}
+
 #[derive(Clone)]
 struct AssetServer {// Nothing to do with Bevy
 	world_name: String,
-	map_name: String
+	map_name: String,
+	tx: mpsc::Sender<async_messages::ToWorld>
 }
 
 impl AssetServer {
 	pub fn new(
 		world_name: String,
 		map_name: String,
+		tx: mpsc::Sender<async_messages::ToWorld>
 	) -> Self {
 		Self {
 			world_name,
-			map_name
+			map_name,
+			tx
 		}
 	}
 	pub fn start(&self, addr: SocketAddr) -> thread::JoinHandle<()> {
@@ -275,9 +320,40 @@ impl AssetServer {
 		).unwrap()
 	}
 	pub fn request_handler(&self, req: &rouille::Request) -> rouille::Response {
-		match req.url().as_str() {
-			"/" => rouille::Response::text(format!("{} Asset Server", APP_NAME)),
-			"/hello" => rouille::Response::text("Hello World"),
+		let binding = req.url();
+		let url_parts: Vec<&str> = binding.strip_prefix("/").expect("url should start with \"/\"").split("/").collect();
+		//dbg!(&url_parts);
+		match url_parts[0] {
+			"" => rouille::Response::text(format!("{} Asset Server", APP_NAME)),
+			"hello" => rouille::Response::text("Hello World"),
+			"chunks" => match url_parts.len() >= 2 {
+				true => match ChunkRef::from_resource_dir_name(url_parts[1]) {
+					Ok(chunk_ref) => {
+						match Chunk::load(&chunk_ref, &self.map_name, true) {
+							Ok(chunk) => rouille::Response::from_data("application/octet-stream", bincode::serialize(&AssetResponse::Chunk(chunk)).expect("Unable to serialize chunk")),
+							Err(e) => {
+								self.tx.send(async_messages::ToWorld::CreateChunk(chunk_ref)).expect("Unable to send chunk creation request to world");
+								response_code_and_message(400, format!("Error loading chunk: {}, request to create chunk was sent to the world server", e))
+							}
+						}
+					},
+					Err(e) => response_code_and_message(400, e)
+				},
+				false => {
+					rouille::Response::text("Chunks")
+				}
+			},
+			"vehicle_static_models" => match url_parts.len() >= 2 {
+				true => {
+					match resource_interface::load_static_vehicle_gltf(url_parts[1]) {
+						Ok(raw_file) => rouille::Response::from_data("application/octet-stream", bincode::serialize(&AssetResponse::VehicleRawGltfData(VehicleStaticModel::new(url_parts[1].to_owned(), raw_file))).expect("Unable to serialize vehicle static model")),
+						Err(e) => response_code_and_message(400, format!("Error loading vehicle static model: {}", e))
+					}
+				},
+				false => {
+					rouille::Response::text("Vehicle static models")
+				}
+			},
 			_ => rouille::Response::empty_404()
 		}
 	}

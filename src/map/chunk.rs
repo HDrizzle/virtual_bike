@@ -1,6 +1,6 @@
 // Created 2023-9-29
 
-use std::{rc::Rc, error::Error, collections::HashMap, sync::{Arc, Mutex}, io::Write, net::IpAddr};
+use std::{rc::Rc, error::Error, collections::HashMap, sync::{Arc, Mutex}, io::Write, net::IpAddr, fs};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 #[cfg(feature = "client")]
 use bevy::{prelude::*, render::texture::{ImageType, CompressedImageFormats, ImageSampler, ImageFormat}};
@@ -172,7 +172,7 @@ impl RegularElevationMesh {
 	pub fn build_uv_coords(&self, grid_size: u64, vertices: &Vec<P3>, offset: &V3) -> Vec<[f32; 2]> {
 		// Offset is required because unless this is the chunk at (0, 0), the vertex coordinates will be out of the grid precision range
 		let mut out = Vec::<[f32; 2]>::new();
-		let size = self.precision * (grid_size + 1) as Float;
+		let size = self.precision * grid_size as Float;
 		for vertex_shifted in vertices {
 			let vertex = vertex_shifted - offset;
 			out.push([vertex[0] / size, vertex[2] / size]);
@@ -185,7 +185,6 @@ impl RegularElevationMesh {
 		let tri_mesh = self.build_trimesh(offset);
 		let mut mesh = tri_mesh.build_bevy_mesh();
 		mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, self.build_uv_coords(size, &tri_mesh.vertices, offset));
-
 		// Done
 		mesh
 	}
@@ -241,7 +240,7 @@ impl ChunkRef {
 	}
 	#[cfg(feature = "server")]
 	pub fn exists(&self, map_name: &str) -> bool {
-		resource_interface::find_chunk(&self, map_name).is_ok()
+		resource_interface::find_chunk(&self, map_name, &vec![ChunkDirComponent::JsonData]).is_ok()
 	}
 	#[cfg(feature = "server")]
 	pub fn resource_dir(&self, map_name: &str, generic: bool) -> String {
@@ -343,7 +342,7 @@ impl CacheableBevyAsset for ChunkTexture {
 pub struct Chunk {
 	pub ref_: ChunkRef,
 	pub elevation: RegularElevationMesh,
-	pub texture_opt: Option<ChunkTexture>,
+	pub texture_opt: Option<ChunkTexture>,// Do not serde ignore this as it will not be sent to the client, one of the dumbest bugs I've had to fix
 	pub size: UInt,
 	pub grid_size: UInt,// Number of spaces inside grid, for example if this is 4 then the elevation grid coordinates should be 5x5, because fence-post problem
 	pub background_color: [u8; 3],
@@ -357,8 +356,13 @@ pub struct Chunk {
 
 impl Chunk {
 	#[cfg(feature = "server")]
-	pub fn load(ref_: &ChunkRef, map_name: &str) -> Result<Self, Box<dyn Error>> {
-		resource_interface::load_chunk_data(ref_, map_name)
+	pub fn load(ref_: &ChunkRef, map_name: &str, with_texture: bool) -> Result<Self, String> {
+		let mut out: Chunk = to_string_err(resource_interface::load_chunk_data(ref_, map_name))?;
+		if with_texture {
+			out.set_texture_opt(true, map_name)?;
+		}
+		// Done
+		Ok(out)
 	}
 	#[cfg(feature = "server")]
 	pub fn new(args: ChunkCreationArgs, filesystem_lock: Arc<Mutex<()>>) -> ChunkCreationResult {
@@ -407,23 +411,34 @@ impl Chunk {
 		// With help from https://github.com/bevyengine/bevy/blob/main/examples/3d/texture.rs
 		let texture_handle_opt: Option<Handle<Image>> = match &self.texture_opt {
 			Some(texture) => {
-				//Some(ChunkTexture::load_to_bevy(&texture.name(), server_addr, asset_server).unwrap())// TODO: this should work if self.texture_opt is None
-				println!("Chunk {:?} has texture", &self.ref_);
+				//println!("Chunk {:?} has texture", &self.ref_);
 				Some(asset_server.add(Image::from_buffer(&texture.raw_data[..], ImageType::Format(ImageFormat::Png), CompressedImageFormats::NONE, true, ImageSampler::Default).unwrap()))
 			},
-			None => None
-		};//ChunkTexture::load_to_bevy(&self.ref_.resource_dir_name(), server_addr, asset_server).unwrap();//asset_server.load("../../resources/grass_texture_large.png");// TODO: use self.texture_data
-		let material_handle = materials.add(StandardMaterial {
-			base_color: Color::rgba(
+			None => match ChunkTexture::load_to_bevy("generic", server_addr, asset_server) {
+				Ok(handle) => Some(handle),
+				Err(e) => panic!("Could not load generic chunk: {}", e)
+			}
+		};
+		let base_color = match &texture_handle_opt {
+			Some(_) => Color::rgba(
+				1.0,//self.background_color[0] as Float / 255.0,
+				1.0,//self.background_color[1] as Float / 255.0,
+				1.0,//self.background_color[2] as Float / 255.0,
+				0.0
+			),
+			None => Color::rgba(
 				self.background_color[0] as Float / 255.0,
 				self.background_color[1] as Float / 255.0,
 				self.background_color[2] as Float / 255.0,
 				1.0
-			),
+			)
+		};
+		let material_handle = materials.add(StandardMaterial {
+			base_color,
 			base_color_texture: texture_handle_opt,
-			perceptual_roughness: 1.0,
+			//perceptual_roughness: 1.0,
 			alpha_mode: AlphaMode::Opaque,
-			//unlit: true,
+			unlit: true,
 			..default()
 		});
 		let mesh = self.elevation.bevy_mesh(self.grid_size, &v2_to_v3(self.ref_.to_v2()));
@@ -507,5 +522,30 @@ impl ChunkCreationResult {
 			Self::Ok(chunk) => &chunk.ref_,
 			Self::Err(_, chunk_ref) => &chunk_ref
 		}
+	}
+}
+
+#[derive(Clone, Debug)]
+pub enum ChunkDirComponent {
+	JsonData,
+	Texture
+}
+
+impl ChunkDirComponent {
+	pub fn all() -> Vec<Self> {
+		vec![
+			Self::JsonData,
+			Self::Texture
+		]
+	}
+	pub fn file_name(&self) -> String {
+		match self {
+			Self::JsonData => "data.json",
+			Self::Texture => "texture.png"
+		}.to_owned()
+	}
+	pub fn exists(&self, dir_path: &str) -> bool {
+		let path: String = dir_path.to_owned() + &self.file_name();
+		fs::read(path).is_ok()
 	}
 }

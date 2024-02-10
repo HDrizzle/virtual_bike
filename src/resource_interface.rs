@@ -1,10 +1,14 @@
 // For loading & saving resources
+// Mr Ballen's medical mysteries #1: ashes to ashes
 
 use std::{error::Error, fs, collections::HashMap};
 use std::io::Error as IoError;
 use serde_json;
 
-use crate::prelude::*;
+use crate::{
+	prelude::*,
+	map::chunk::ChunkDirComponent
+};
 #[cfg(feature = "client")]
 use crate::client::hardware_controller::Calibration;
 
@@ -59,18 +63,35 @@ pub fn load_static_vehicle(name: &str) -> Result<VehicleStatic, Box<dyn Error>> 
 
 #[cfg(feature = "server")]
 /// Finds path of given chunk ref, if successful returns: (Path, whether it is a generic chunk)
-pub fn find_chunk(chunk_ref: &ChunkRef, map_name: &str) -> Result<(String, bool), String> {
+pub fn find_chunk(chunk_ref: &ChunkRef, map_name: &str, required_components: &Vec<ChunkDirComponent>) -> Result<(String, bool), String> {
 	// Tries everything to find path to chunk dir
-	// 1. Test if it exists as a normal chunk
-	if let Some(path) = does_non_generic_chunk_exist(chunk_ref, map_name) {
+	let path_options: Vec<(bool, Option<String>)> = vec![
+		(false, does_non_generic_chunk_exist(chunk_ref, map_name)),// 1. Test if it exists as a normal chunk
+		(true, does_generic_chunk_exist(map_name))// 2. Is there a generic chunk to use instead?
+	];
+	// Loop over options
+	for (generic, opt) in path_options {
+		if let Some(dir_path) = opt {
+			//dbg!(&dir_path);
+			let mut component_missing = false;
+			for requirement in required_components {
+				if !requirement.exists(&dir_path) {
+					component_missing = true;
+				}
+			}
+			if !component_missing {
+				return Ok((dir_path, generic));
+			}
+		}
+	}
+	/*if let Some(path) = does_non_generic_chunk_exist(chunk_ref, map_name) {
         return Ok((path, false));
     }
-	// 2. Is there a generic chunk to use instead?
 	if let Some(path) = does_generic_chunk_exist(map_name) {
         return Ok((path, true));
-    }
+    }*/
 	// The chunk does not exist
-	Err(format!("Could not find regular or generic chunk for: {:?}", chunk_ref))
+	Err(format!("Could not find regular or generic chunk for ref: {:?} with requirements: {:?}", chunk_ref, required_components))
 }
 
 #[cfg(feature = "server")]
@@ -98,15 +119,18 @@ pub fn does_non_generic_chunk_exist(chunk_ref: &ChunkRef, map_name: &str) -> Opt
 
 #[cfg(feature = "server")]
 pub fn load_chunk_texture(chunk_ref: &ChunkRef, map_name: &str) -> Result<(Vec<u8>, bool), String> {
-	let (dir_path, generic): (String, bool) = find_chunk(chunk_ref, map_name)?;
-	let path: String = dir_path + "texture.png";
+	let texture_component = ChunkDirComponent::Texture;
+	let (dir_path, generic): (String, bool) = find_chunk(chunk_ref, map_name, &vec![texture_component.clone()])?;
+	//dbg!(&dir_path);
+	//dbg!(texture_component.exists(&dir_path));
+	let path: String = dir_path + &texture_component.file_name();
 	let data: Vec<u8> = to_string_err_with_message(fs::read(&path), &format!("Attempt to load \"{}\"", &path))?;
 	Ok((data, generic))
 }
 
 #[cfg(feature = "server")]
 pub fn load_chunk_data(chunk_ref: &ChunkRef, map_name: &str) -> Result<Chunk, Box<dyn Error>> {
-	let path: String = find_chunk(chunk_ref, map_name)?.0;
+	let path: String = find_chunk(chunk_ref, map_name, &vec![ChunkDirComponent::JsonData])?.0;
 	let raw_string: String = load_file_with_better_error(&(path + "data.json"))?;
 	let mut chunk: Chunk = serde_json::from_str(&raw_string)?;
 	// Set chunk's position because the generic one will likely be incorrect
@@ -168,9 +192,6 @@ pub fn save_map(map: &SaveMap) -> Result<(), Box<dyn Error>> {
 
 #[cfg(feature = "server")]
 pub fn save_chunk_data(chunk: &Chunk, map_name: &str) -> Result<(), Box<dyn Error>> {
-	if does_generic_chunk_exist(map_name).is_some() {
-		return Err(Box::new(GenericError::new("Attempt to save chunk to map which has a generic chunk".to_owned())));
-	}
 	// Create directory
 	fs::create_dir(&chunk.ref_.resource_dir(map_name, false))?;
 	// Serialize

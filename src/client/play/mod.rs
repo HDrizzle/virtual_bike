@@ -7,7 +7,7 @@ Bevy 3D rendering simple example: https://bevyengine.org/examples/3D%20Rendering
 Major change 2023-11-21: this module will only be used when the game is signed-in and being played
 */
 
-use std::{collections::{HashMap, HashSet}, net::IpAddr, f32::consts::PI};
+use std::{collections::{HashMap, HashSet}, net, f32::consts::PI, os::unix::net::SocketAddr};
 use bevy::{
 	prelude::*,
 	core_pipeline::Skybox,
@@ -27,7 +27,7 @@ use crate::{
 	server::BIG_DATA_SEND_UNRELIABLE
 };
 
-use super::{hardware_controller::HardwareControllerPlugin, network::CustomRenetPlugin, cache, Settings};
+use super::{hardware_controller::HardwareControllerPlugin, network::CustomRenetPlugin, cache, Settings, asset_client::AssetLoaderManager};
 
 // Mods
 mod chunk_manager;
@@ -42,7 +42,7 @@ mod skybox;
 struct MapBodyHandle(pub RigidBodyHandle);
 
 #[derive(Resource)]
-pub struct ServerAddr(pub IpAddr);
+pub struct ServerAddr(pub net::SocketAddr);
 
 #[derive(Resource, Default, Debug)]
 struct StaticVehicleAssetHandles(pub HashMap<String, Handle<Scene>>);// Vehicle type, scene handle
@@ -139,10 +139,11 @@ impl VehicleBodyStates {
 	}
 }*/
 
-pub struct InitInfo {// Provided by the sign-in window, DOES NOT CHANGE
+pub struct InitInfo {// Provided by the sign-in window
 	pub network: NetworkInitInfo,
 	pub static_data: StaticData,
-	pub settings: Settings
+	pub settings: Settings,
+	pub asset_client: AssetLoaderManager
 }
 
 impl InitInfo {
@@ -152,10 +153,11 @@ impl InitInfo {
 		app.insert_resource(init_info.network.renet_transport);
 		app.insert_resource(init_info.network.renet_client);
 		app.insert_resource(init_info.network.auth);
-		app.insert_resource(ServerAddr(init_info.network.addr));
+		app.insert_resource(ServerAddr(init_info.network.renet_server_addr));
 		app.add_systems(Startup, Self::setup_system);
 		app.insert_resource(WorldSend::default());
 		app.insert_resource(init_info.settings);
+		app.insert_resource(init_info.asset_client);
 	}
 	pub fn setup_system(
 		mut commands: Commands,
@@ -175,7 +177,7 @@ impl InitInfo {
 			/*let asset_path = cache::get_static_vehicle_model_path(server_addr.0, &v.name).strip_prefix("assets/").unwrap_or("<Error: vehicle model path does not start with correct dir ('assets/')>").to_owned() + "#Scene0";
 			dbg!(&asset_path);
 			let handle = asset_server.load(asset_path);*/
-			let handle = VehicleStaticModel::load_to_bevy(&v_type, server_addr.0, &*asset_server).unwrap();
+			let handle = VehicleStaticModel::load_to_bevy(&v_type, server_addr.0.ip(), &*asset_server).unwrap();
 			static_v_asset_handles.0.insert(v_type.clone(), handle);
 		}
 		//dbg!(&static_v_asset_handles);
@@ -202,7 +204,7 @@ pub struct NetworkInitInfo {
 	pub renet_transport: NetcodeClientTransport,// Trying https://doc.rust-lang.org/std/mem/fn.replace.html
 	pub renet_client: RenetClient,
 	pub auth: ClientAuth,
-	pub addr: IpAddr
+	pub renet_server_addr: net::SocketAddr
 }
 
 // Components
@@ -330,6 +332,7 @@ fn update_system(
 	mut static_data: ResMut<StaticData>,
 	asset_server: Res<AssetServer>,
 	mut renet_client: ResMut<RenetClient>,
+	mut asset_client: ResMut<AssetLoaderManager>,
 	#[cfg(feature = "debug_render_physics")] rapier_context_res: ResMut<RapierContext>,
 	mut camera_query: Query<(&mut CameraComponent, &mut Transform, &Projection)>,
 	#[cfg(feature = "debug_render_physics")] map_body_handle: Res<MapBodyHandle>,
@@ -363,29 +366,37 @@ fn update_system(
 			RenetResponse::InitState(..) => {
 				panic!("Bevy app recieved `Response::InitState(..) response which should not be possible.`");
 			},
-			RenetResponse::VehicleRawGltfData(v_static_model) => {
-				//cache::save_static_vehicle_model(server_addr.0, &v_type, data).unwrap();
-				v_static_model.save(server_addr.0).unwrap();
-			}
 			RenetResponse::WorldState(world_send) => {
 				most_recent_world_state = Some(world_send);// In case multiple come through, only use the most recent one
-			},
-			RenetResponse::Chunk(chunk) => {
-				println!("Recieved chunk {:?}", &chunk.ref_);
-				requested_chunks.remove(&chunk.ref_);
-				match &chunk.texture_opt {
-					Some(data) => {
-						if settings.cache {
-							data.save(server_addr.0).unwrap();
-						}
-					},
-					None => {}//panic!("Server should send chunks with texture data")
-				}
-				static_data.map.insert_chunk_client(chunk, #[cfg(feature = "debug_render_physics")] &mut RapierBodyCreationDeletionContext::from_bevy_rapier_context(&mut rapier_context), &mut commands, &mut meshes, &mut materials, &asset_server, server_addr.0);
 			},
 			RenetResponse::Err(err_string) => {
 				panic!("Server sent following error message: {}", err_string);
 			}
+		}
+	}
+	// Asset responses
+	for asset_response_result in asset_client.update() {
+		match asset_response_result {
+			Ok(asset_response) => match asset_response {
+				AssetResponse::VehicleRawGltfData(v_static_model) => {
+					//cache::save_static_vehicle_model(server_addr.0, &v_type, data).unwrap();
+					v_static_model.save(server_addr.0.ip()).unwrap();
+				},
+				AssetResponse::Chunk(chunk) => {
+					//println!("Recieved chunk {:?}", &chunk.ref_);
+					requested_chunks.remove(&chunk.ref_);
+					match &chunk.texture_opt {
+						Some(data) => {
+							if settings.cache {
+								data.save(server_addr.0.ip()).unwrap();
+							}
+						},
+						None => {}//panic!("Server should send chunks with texture data")
+					}
+					static_data.map.insert_chunk_client(chunk, #[cfg(feature = "debug_render_physics")] &mut RapierBodyCreationDeletionContext::from_bevy_rapier_context(&mut rapier_context), &mut commands, &mut meshes, &mut materials, &asset_server, server_addr.0.ip());
+				}
+			},
+			Err(e) => error!("Error from asset client: {}", e)
 		}
 	}
 	// This will be like the "main loop"
@@ -393,13 +404,6 @@ fn update_system(
 		// Update all bevy things, first get vect of wheels
 		#[cfg(feature = "debug_render_physics")]
 		world_state.update_bevy_rapier_context(&mut rapier_context, Some(map_body_handle.0));
-		// Update camera position
-		/*let main_vehicle = world_state.vehicles.get(&auth.name).expect(&format!("Unable to get vehicle for signed-in username: \"{}\"", &auth.name));
-		render_distance.set_position(p3_to_p2(matrix_to_opoint(main_vehicle.body_state.position.translation.vector.clone())));
-		for (_, mut transform, _) in camera_query.iter_mut() {
-			// Comment this out and add manual_camera_control() for debugging
-			main_vehicle.update_bevy_camera_transform(&mut transform);
-		}*/
 		#[cfg(feature = "debug_render_physics")]
 		rapier_context.propagate_modified_body_positions_to_colliders();// Just what I needed https://docs.rs/bevy_rapier3d/latest/bevy_rapier3d/plugin/struct.RapierContext.html#method.propagate_modified_body_positions_to_colliders
 		// Save world state

@@ -2,7 +2,7 @@
 This module contains the bevy-based module `play` and sign-in screen logic using egui and eframe
 Template for using `eframe` copied from https://github.com/appcove/egui.info/blob/master/examples/egui-101-basic/src/main.rsc
 */
-use std::{net::{SocketAddr, UdpSocket, IpAddr, Ipv4Addr}, time::SystemTime};
+use std::{net, time::SystemTime};
 use bevy::ecs::system::Resource;
 use bevy_renet::renet::{RenetClient, ConnectionConfig, transport::{NetcodeClientTransport, ClientAuthentication}};
 use local_ip_address::local_ip;
@@ -19,10 +19,12 @@ pub mod play;
 pub mod hardware_controller;
 mod network;
 pub mod cache;
+pub mod asset_client;
 
 #[derive(Serialize, Deserialize, Resource)]
 pub struct Settings {
-	pub cache: bool
+	pub cache: bool,
+	pub request_retry_time: Float
 }
 
 #[derive(Debug)]
@@ -41,11 +43,11 @@ impl SigninEntryState {
 		assert!(self.valid());
 		// Setup the transport layer TODO: use entry_state
 		let server_port: u16 = self.port.parse::<u16>().expect("Unable to parse server port");//resource_interface::load_port().expect("Unable to load and parse port.txt");
-		let server_ip: IpAddr = self.ip.parse::<IpAddr>().expect("Unable to parse server IP address");
-		let server_addr: SocketAddr = SocketAddr::new(server_ip, server_port);
-		let client_socket: UdpSocket = UdpSocket::bind(SocketAddr::new(// see https://doc.rust-lang.org/nightly/std/net/struct.UdpSocket.html#method.connect
-			if server_ip == Ipv4Addr::new(127, 0, 0, 1) {// If the server is on localhost, use localhost address
-				IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1))
+		let server_ip: net::IpAddr = self.ip.parse::<net::IpAddr>().expect("Unable to parse server IP address");
+		let server_addr: net::SocketAddr = net::SocketAddr::new(server_ip, server_port);
+		let client_socket: net::UdpSocket = net::UdpSocket::bind(net::SocketAddr::new(// see https://doc.rust-lang.org/nightly/std/net/struct.UdpSocket.html#method.connect
+			if server_ip == net::Ipv4Addr::new(127, 0, 0, 1) {// If the server is on localhost, use localhost address
+				net::IpAddr::V4(net::Ipv4Addr::new(127, 0, 0, 1))
 			}
 			else {// Otherwise, use LAN address
 				local_ip().expect("Could not get this machine's local ip address, this is required because the server's address is not localhost (127.0.0.1)")
@@ -67,7 +69,7 @@ impl SigninEntryState {
 			renet_transport: transport,
 			renet_client: client,
 			auth: ClientAuth{name: self.name.clone(), psswd: self.psswd.clone()},
-			addr: server_ip
+			renet_server_addr: server_addr
 		}
 	}
 }
@@ -76,7 +78,7 @@ impl Default for SigninEntryState {
 	fn default() -> Self {
 		Self {
 			name: "admin".to_string(),
-			psswd: "1234".to_string(),// Don't look very private
+			psswd: "1234".to_string(),// Don't look, very private
 			ip: "127.0.0.1".to_string(),
 			port: "62062".to_string()
 		}

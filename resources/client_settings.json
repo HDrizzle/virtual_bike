@@ -1,3 +1,4 @@
 {
-    "cache": false
+    "cache": true,
+    "request_retry_time": 2
 }

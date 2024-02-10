@@ -381,7 +381,7 @@ impl ServerMap {
 		return if ref_.exists(&self.generic.name) {// Chunk already exists on the disk, load it
 			//println!("Loading chunk {:?}", &ref_);
 			let _filesystem_access = self.chunk_creator.filesystem_lock.lock().unwrap();
-			Some(Chunk::load(ref_, &self.generic.name).unwrap())
+			Some(Chunk::load(ref_, &self.generic.name, false).unwrap())
 		}
 		else {// Chunk does not exist, create it
 			if self.generic.auto_gen_chunks {
