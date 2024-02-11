@@ -36,11 +36,11 @@ Created by Hadrian Ward, 2023-6-8
 2023-2-3: Renet doesn't handle very large pieces of data well, so I will now use a simple HTTP server to serve 3D assets and other such chunky files
 */
 #![allow(warnings)]// TODO: remove when I have a lot of free-time
-use std::{fmt, env, ops, error::Error, collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, time::{SystemTime, UNIX_EPOCH}, f32::consts::PI, fs, path, net::IpAddr};
+use std::{fmt, env, ops, error::Error, collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, time::{SystemTime, UNIX_EPOCH}, fs, path, net::IpAddr};
 #[cfg(any(feature = "server", feature = "debug_render_physics"))]
 use rapier3d::{dynamics::{RigidBodySet, IslandManager}, geometry::ColliderSet};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
-use nalgebra::{Point3, Point2, Vector3, Vector2, point, Matrix, Const, ArrayStorage, OPoint, Translation, Isometry3, UnitQuaternion};
+use nalgebra::{Point3, Point2, Vector3, Vector2, point, Matrix, Const, ArrayStorage, OPoint, Translation, Isometry3, UnitQuaternion, UnitComplex, Complex};
 #[cfg(feature = "client")]
 use bevy::{prelude::Transform, ecs::system::Resource, render::{mesh::{Mesh, Indices}, render_resource::PrimitiveTopology}};
 #[cfg(feature = "debug_render_physics")]
@@ -86,6 +86,7 @@ mod prelude {
 	pub type V3 = Vector3<Float>;
 	pub type Iso = Isometry3<Float>;
 	pub const EPSILON: Float = 1.0e-6;// Arbitrary
+	pub use std::f32::consts::PI;
 	// Misc
 	pub use crate::{
 		world::{StaticData, WorldSave, WorldSend},
@@ -171,6 +172,42 @@ mod prelude {
 			rotation: nalgebra_quat_to_bevy_quat(&iso.rotation),
 			scale: bevy::math::Vec3::ONE
 		}
+	}
+	#[cfg(feature = "client")]
+	pub fn image_to_bevy_image(in_: &image::RgbImage) -> bevy::prelude::Image {
+    	use bevy::render::render_resource::{Extent3d, TextureDimension};
+		// Create data
+		let mut data = Vec::<u8>::new();
+		for y in 0..in_.height() {
+			for x in 0..in_.width() {
+				let px: &image::Rgb<u8> = in_.get_pixel(x, y);
+				/*data.push(px.0[0]);
+				data.push(px.0[1]);
+				data.push(px.0[2]);
+				data.push(255);// Alpha*/
+				for channel_i in 0..3 {
+					let float_bytes: [u8; 4] = (px.0[channel_i] as f32 / 256.0).to_le_bytes();
+					for byte_i in 0..4 {
+						data.push(float_bytes[byte_i]);
+					}
+				}
+				let float_bytes: [u8; 4] = 1.0f32.to_le_bytes();// Alpha
+				for byte_i in 0..4 {
+					data.push(float_bytes[byte_i]);
+				}
+			}
+		}
+		// Done
+		Image::new(
+			Extent3d {
+				width: in_.width(),
+				height: in_.height(),
+				depth_or_array_layers: 1
+			},
+			TextureDimension::D2,
+			data,
+			bevy::render::render_resource::TextureFormat::Rgba32Float//Rgba8Uint
+		)
 	}
 	// Round float towards -inf
 	pub fn round_float_towards_neg_inf(n: Float) -> Int {
@@ -273,7 +310,7 @@ pub struct InputData {
 
 impl InputData {
 	pub fn to_string(&self) -> String {
-		format!("Power: {:.0}W, Speed: {:.1} m/s, Steering: {:.2}, Brake G-acc: {:.2}", self.power, self.speed, self.steering, self.brake)
+		format!("Power: {:.0}W, Speed: {:.1} m/s, Steering: {:.2}, Brake acc: {:.2}", self.power, self.speed, self.steering, self.brake)
 	}
 }
 
@@ -536,6 +573,28 @@ impl SimpleRotation {
 			pitch
 		}
 	}
+	// TODO: fix & test
+	pub fn from_v3(v: V3) -> Self {// https://bevy-cheatbook.github.io/fundamentals/coords.html
+		let xz_plane_radius = (v.x.powi(2) + v.z.powi(2)).sqrt();
+		if xz_plane_radius <= EPSILON {
+			Self::new(
+				0.0,
+				if v.y >= 0.0 {
+					PI/2.0
+				}
+				else {
+					-PI/2.0
+				}
+			)
+		}
+		else {
+			let slope = v.y / xz_plane_radius;
+			Self::new(
+				V2::new(1.0, 0.0).angle(&v3_to_v2(v)),//Complex::new(v.x, v.z)
+				slope.atan()
+			)
+		}
+	}
 }
 
 pub trait CacheableBevyAsset: Sized {
@@ -544,7 +603,7 @@ pub trait CacheableBevyAsset: Sized {
 	type BevyAssetType: Asset;// Ex: `Scene` for GLTF / GLB
 	fn name(&self) -> String;// Ex: "test-bike"
 	fn cache_path(name: &str) -> String;// Ex: "test-bike/model.glb"
-	fn write_to_file(&self, file: &mut std::fs::File) -> Result<(), String>;
+	fn write_to_file(&self, file: &mut fs::File) -> Result<(), String>;
 	#[cfg(feature = "client")]
 	fn save(&self, server_addr: IpAddr) -> Result<(), String> {
 		let path = Self::get_path(&self.name(), server_addr);

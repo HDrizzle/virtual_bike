@@ -580,7 +580,7 @@ pub fn start(init_info: InitInfo) {
 		ChunkManagerPlugin,
 		GuiPlugin,
 		HardwareControllerPlugin,
-		skybox::Sky,
+		skybox::Sky{resolution: 1000},
 		MainClientPlugin
 	));
 	InitInfo::setup_app(init_info, &mut app);

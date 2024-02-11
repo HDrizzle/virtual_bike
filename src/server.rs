@@ -5,6 +5,7 @@ use renet::{RenetServer, ServerEvent, ConnectionConfig, SendType, ChannelConfig,
 use serde::{Serialize, Deserialize};
 use bincode;
 use local_ip_address::local_ip;
+#[cfg(feature = "server")]
 use rouille;// Simple HTTP Server
 //use rocket::{State, Rocket};
 //use futures::executor::block_on;
@@ -47,6 +48,7 @@ pub enum AssetRequest {
 	}
 }
 
+#[cfg(feature = "client")]
 impl AssetRequest {
 	/// For example: "/chunks/100_200?with_texture=0" or "/vehicle_static_models/cool_bike"
 	pub fn request_path(&self) -> String {
@@ -278,6 +280,7 @@ pub fn connection_config() -> ConnectionConfig {
 	}
 }
 
+#[cfg(feature = "server")]
 fn response_code_and_message(code: u16, message: String) -> rouille::Response {
 	rouille::Response {
 		status_code: code,
@@ -287,6 +290,7 @@ fn response_code_and_message(code: u16, message: String) -> rouille::Response {
 	}
 }
 
+#[cfg(feature = "server")]
 #[derive(Clone)]
 struct AssetServer {// Nothing to do with Bevy
 	world_name: String,
@@ -294,6 +298,7 @@ struct AssetServer {// Nothing to do with Bevy
 	tx: mpsc::Sender<async_messages::ToWorld>
 }
 
+#[cfg(feature = "server")]
 impl AssetServer {
 	pub fn new(
 		world_name: String,

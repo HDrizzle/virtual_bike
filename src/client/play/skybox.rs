@@ -3,6 +3,7 @@
 // wgpu error: https://www.reddit.com/r/bevy/comments/1588577/how_to_skybox/
 
 use std::fs;
+use nalgebra::SimdValue;
 use serde::{Serialize, Deserialize};
 use bevy::{
 	prelude::*,
@@ -10,7 +11,7 @@ use bevy::{
     core_pipeline::Skybox,
 	render::{render_resource::{TextureViewDescriptor, TextureViewDimension}, texture::{ImageType, CompressedImageFormats, ImageSampler}}
 };
-use image::Rgb;
+use image::{Rgb, RgbImage};
 
 use crate::prelude::*;
 use super::CameraComponent;
@@ -59,8 +60,10 @@ impl Cubemap {
 	}
 }
 
-#[derive(Resource)]
-pub struct Sky;
+#[derive(Resource, Clone)]
+pub struct Sky {
+	pub resolution: u32
+}
 
 impl Sky {
 	fn skybox_begin_load(
@@ -99,13 +102,64 @@ impl Sky {
 		}
 	}
 	fn create_skybox_texture(&self) -> Image {
-		Image::from_buffer(&fs::read("assets/Ryfjallet_cubemap.png").unwrap()[..], ImageType::Extension("png"), CompressedImageFormats::NONE, true, ImageSampler::Default).unwrap()
+		let mut compiled_image = RgbImage::new(self.resolution, self.resolution * 6);
+		for x in 0..self.resolution {
+			for y in 0..self.resolution * 6 {
+				let direction = self.stacked_skybox_pos_to_simple_rot(x, y);
+				let color = Self::color_scale((direction.pitch + (PI/2.0) / PI));
+				compiled_image.put_pixel(x, y, color);
+			}
+		}
+		//image_to_bevy_image(image::open("assets/Ryfjallet_cubemap.png").unwrap().as_rgb8().expect("Expected image"))
+		image_to_bevy_image(&compiled_image)
+		//Image::from_buffer(&fs::read("assets/Ryfjallet_cubemap.png").unwrap()[..], ImageType::Extension("png"), CompressedImageFormats::NONE, true, ImageSampler::Default).unwrap()
+	}
+	/// Converts coords on image used for bevy skybox to a SimpleRotation representing where it is relative to the camera
+	/// Stacked image order (from top) is:
+	/// 0: +X
+	/// 1: -X
+	/// 2: Top (W/ image origin in (+X, +Z) orientation)
+	/// 3: Bottom (W/ image origin in (-X, -Z) orientation)
+	/// 4: -Z
+	/// 5: +Z
+	/// Bevy coord system: https://bevy-cheatbook.github.io/fundamentals/coords.html
+	fn stacked_skybox_pos_to_simple_rot(&self, px_x: u32, px_y_absolute: u32) -> SimpleRotation {
+		assert!(px_x < self.resolution);
+		assert!(px_y_absolute < self.resolution * 6);
+		// Determine which cube face the coord is in
+		let image_i = px_y_absolute / self.resolution;
+		let px_y = px_y_absolute % self.resolution;
+		// Get image unit pos
+		let resolution_float = self.resolution as Float;
+		let image_pos = (V2::new(// -1 to 1
+			px_x as Float / resolution_float,
+			(self.resolution - px_y) as Float / resolution_float
+		) * 2.0) - V2::new(1.0, 1.0);
+		// Get global pos, each cube face is represented as 1 unit away from the origin
+		let global_pos: V3 = match image_i {// TODO: verify
+			0 => V3::new(1.0, image_pos.y, image_pos.x),
+			1 => V3::new(-1.0, image_pos.y, -image_pos.x),
+			2 => V3::new(image_pos.x, 1.0, image_pos.y),
+			3 => V3::new(image_pos.x, -1.0, image_pos.y),
+			4 => V3::new(image_pos.x, image_pos.y, -1.0),
+			5 => V3::new(-image_pos.x, image_pos.y, 1.0),
+			_ => panic!("Image index should be < 6, something is wrong with the code in this function")
+		};
+		// Done
+		SimpleRotation::from_v3(global_pos)
+	}
+	fn color_scale(t: Float) -> Rgb<u8> {
+		Rgb([
+			((1.0-t) * 255.0) as u8,
+			((1.0-t).min(t) * 510.0) as u8,
+			(t * 255.0) as u8
+		])
 	}
 }
 
 impl Plugin for Sky {
 	fn build(&self, app: &mut App) {
-		app.insert_resource(Self);
+		app.insert_resource(self.clone());
 		app.add_systems(Startup, Self::skybox_begin_load);
 		app.add_systems(Update, Self::check_if_loaded);
 	}
