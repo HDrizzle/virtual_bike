@@ -71,7 +71,7 @@ mod tests;
 
 // Prelude, added 2023-9-9
 #[allow(unused)]
-mod prelude {
+pub mod prelude {
 	use super::*;
 	// Name of this app
 	pub const APP_NAME: &str = "Virtual Bike";
@@ -90,7 +90,7 @@ mod prelude {
 	// Misc
 	pub use crate::{
 		world::{StaticData, WorldSave, WorldSend},
-		map::{GenericMap, path::{Path, PathSet, PathBoundBodyState, PathPosition, BCurve, BCurveSample, BCURVE_LENGTH_ESTIMATION_SEGMENTS}, chunk::{Chunk, ChunkRef, RegularElevationMesh}},
+		map::{GenericMap, path::{Path, PathSet, PathBoundBodyState, PathPosition, BCurve, BCurveSample, Intersection, IntersectionDecision, IntersectionId, BCURVE_LENGTH_ESTIMATION_SEGMENTS}, chunk::{Chunk, ChunkRef, RegularElevationMesh}},
 		vehicle::{VehicleStatic, VehicleStaticModel, VehicleSave, VehicleSend, Wheel, WheelStatic, BodyStateSerialize, BodyForces},
 		server::{RenetRequest, RenetResponse, AssetResponse},
 		GenericError,
@@ -139,18 +139,28 @@ mod prelude {
 		let diff = v1 - v0;
 		(diff[0].powi(2) + diff[1].powi(2) + diff[2].powi(2)).powf(0.5)
 	}
-	// Convert between 2D and 3D, important to note that the Y-value in 2D corresponds to the Z-value in 3D
-	pub fn v3_to_v2(v: V3) -> V2 {
-		V2::new(v[0], v[2])
+	// Convertions between 2D and 3D, important to note that the Y-value in 2D corresponds to the Z-value in 3D
+	/// Converts V3 as used in bevy (https://bevy-cheatbook.github.io/fundamentals/coords.html) to V2 on 2D X-Y plane perpindicular to 3D Y-axis
+	/// X => -X
+	/// Y => unused
+	/// Z => Y
+	/// ```
+	/// use virtual_bike::prelude::{V2, V3, v3_to_v2};
+	/// assert_eq!(v3_to_v2(&V3::new(1.0, 2.0, 3.0)), V2::new(-1.0, 3.0));
+	/// ```
+	pub fn v3_to_v2(v: &V3) -> V2 {
+		V2::new(-v[0], v[2])
 	}
-	pub fn v2_to_v3(v: V2) -> V3 {
-		V3::new(v[0], 0.0, v[1])
-	}
-	pub fn p3_to_p2(p: P3) -> P2 {
-		point![p[0], p[2]]
-	}
-	pub fn p2_to_p3(p: P2) -> P3 {
-		point![p[0], 0.0, p[1]]
+	/// Opposite of `v3_to_v2`, converts a V2 on 2D X-Y plane perpindicular to 3D Y-axis to V3 as used in bevy (https://bevy-cheatbook.github.io/fundamentals/coords.html)
+	/// X => -X,
+	/// 0 => Y
+	/// Y => Z
+	/// ```
+	/// use virtual_bike::prelude::{V2, V3, v2_to_v3};
+	/// assert_eq!(v2_to_v3(&V2::new(-1.0, 3.0)), V3::new(1.0, 0.0, 3.0));
+	/// ```
+	pub fn v2_to_v3(v: &V2) -> V3 {// TODO: find and fix all uses of this, it used to be `V3::new(v[0], 0.0, v[1])`
+		V3::new(-v[0], 0.0, v[1])
 	}
 	// Convert between nalgebra and bevy
 	#[cfg(feature = "client")]
@@ -210,6 +220,7 @@ mod prelude {
 		)
 	}
 	// Round float towards -inf
+	#[inline]
 	pub fn round_float_towards_neg_inf(n: Float) -> Int {
 		n.floor() as Int
 	}
@@ -274,6 +285,26 @@ mod prelude {
 	pub fn get_unix_ts_secs_u64() -> u64 {
 		let start = SystemTime::now();
 		start.duration_since(UNIX_EPOCH).expect("Time went backwards").as_secs()
+	}
+	pub fn bool_sign(b: bool) -> Int {
+		match b {
+			true => 1,
+			false => -1
+		}
+	}
+	/// Computes angle (in Radians) from its cos and whether the sin is + or -. If the angle is 0 or 180, the `sin_sign` arg doesn't matter
+	/// ```
+	/// use virtual_bike::prelude::{PI, angle_from_cos_sign_sign};
+	/// assert_eq!(angle_from_cos_sign_sign(0.0, 1), PI/2.0);
+	/// assert_eq!(angle_from_cos_sign_sign(0.7071067811, -1), (7.0*PI)/4.0);
+	/// ```
+	pub fn angle_from_cos_sign_sign(cos: Float, sin_sign: Int) -> Float {
+		let angle_og = cos.acos();
+		match sin_sign {
+			1 => angle_og,
+			-1 => (PI*2.0) - angle_og,
+			_ => panic!("Sign must be 1 or -1")
+		}
 	}
 }
 
@@ -573,13 +604,19 @@ impl SimpleRotation {
 			pitch
 		}
 	}
-	// TODO: fix & test
-	pub fn from_v3(v: V3) -> Self {// https://bevy-cheatbook.github.io/fundamentals/coords.html
-		let xz_plane_radius = (v.x.powi(2) + v.z.powi(2)).sqrt();
+	/// Computes direction from origin towards `v`, which does not have to be normalized.
+	/// ```
+	/// use virtual_bike::{SimpleRotation, prelude::{V3, PI}};
+	/// assert_eq!(SimpleRotation::from_v3(V3::new(-1.0, 0.0, -1.0)), SimpleRotation::new((7.0*PI)/4.0, 0.0));
+	/// assert_eq!(SimpleRotation::from_v3(V3::new(0.0, 1.0, 1.0)), SimpleRotation::new(PI/2.0, PI/4.0));
+	/// ```
+	pub fn from_v3(v3: V3) -> Self {// https://bevy-cheatbook.github.io/fundamentals/coords.html
+		let v2 = v3_to_v2(&v3);
+		let xz_plane_radius = v2.magnitude();
 		if xz_plane_radius <= EPSILON {
 			Self::new(
 				0.0,
-				if v.y >= 0.0 {
+				if v3.y >= 0.0 {
 					PI/2.0
 				}
 				else {
@@ -588,9 +625,12 @@ impl SimpleRotation {
 			)
 		}
 		else {
-			let slope = v.y / xz_plane_radius;
+			let slope = v3.y / xz_plane_radius;
 			Self::new(
-				V2::new(1.0, 0.0).angle(&v3_to_v2(v)),//Complex::new(v.x, v.z)
+				angle_from_cos_sign_sign(
+					v2.x / xz_plane_radius,
+					bool_sign(v2.y >= 0.0)
+				),
 				slope.atan()
 			)
 		}

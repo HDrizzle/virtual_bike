@@ -530,7 +530,8 @@ impl PhysicsController for VehiclePathBoundController{
 		};
 		forces.lin += V3::new(0.0, 0.0, drive_force + brake_force);
 		// Update
-		path.update_body(args.dt, &forces, &self.v_static, &mut self.state);
+		self.state.update(args.dt, &forces, &self.v_static, &args.paths);
+		//path.update_body(args.dt, &forces, &self.v_static, &mut self.state);
 		forces
 	}
 }

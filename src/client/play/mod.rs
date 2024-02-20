@@ -482,7 +482,7 @@ fn camera_update_system(
 		let nalgebra_iso = camera_controller.get_pos(&world_state.vehicles);
 		*transform = nalgebra_iso_to_bevy_transform(nalgebra_iso.clone());
 		// Update render distance
-		render_distance.set_position(p3_to_p2(matrix_to_opoint(nalgebra_iso.translation.vector.clone())));
+		render_distance.set_position(v3_to_v2(&nalgebra_iso.translation.vector.clone()));
 	}
 }
 

@@ -106,7 +106,7 @@ impl Sky {
 		for x in 0..self.resolution {
 			for y in 0..self.resolution * 6 {
 				let direction = self.stacked_skybox_pos_to_simple_rot(x, y);
-				let color = Self::color_scale((direction.pitch + (PI/2.0) / PI));
+				let color = Self::color_scale(direction.yaw / (PI*2.0));// Yaw Self::color_scale((direction.pitch + (PI/2.0) / PI));// Pitch
 				compiled_image.put_pixel(x, y, color);
 			}
 		}
@@ -135,7 +135,7 @@ impl Sky {
 			px_x as Float / resolution_float,
 			(self.resolution - px_y) as Float / resolution_float
 		) * 2.0) - V2::new(1.0, 1.0);
-		// Get global pos, each cube face is represented as 1 unit away from the origin
+		// Get global pos, each cube face is a 2x2 square with the center 1 unit away from the origin
 		let global_pos: V3 = match image_i {// TODO: verify
 			0 => V3::new(1.0, image_pos.y, image_pos.x),
 			1 => V3::new(-1.0, image_pos.y, -image_pos.x),

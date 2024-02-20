@@ -397,7 +397,7 @@ impl World {
 		let mut needed_chunks = Vec::<ChunkRef>::new();
 		for (_, v) in self.vehicles.iter() {
 			let v_body_state = v.create_serialize_state(&self.physics_state.bodies, &self.map.generic.path_set);
-			needed_chunks.push(ChunkRef::from_world_point(matrix_to_opoint(v_body_state.position.translation.vector), self.map.generic.chunk_size));
+			needed_chunks.push(ChunkRef::from_world_point(v3_to_v2(&v_body_state.position.translation.vector), self.map.generic.chunk_size));
 		}
 		// Get adjacent chunks
 		let mut additional_chunks = Vec::<ChunkRef>::new();

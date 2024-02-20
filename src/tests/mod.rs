@@ -227,8 +227,9 @@ pub mod gis {
 }
 
 pub mod paths {
-	use crate::map::path::PathType;
+	use crate::map::path::{PathType, PathRef, Intersection, Route, IntersectionId, RouteId};
 	use super::*;
+	// TODO: test step distance with Some(intersection point)
 	// Initial states
 	fn square_loop_non_unit_edges() -> Path {// 10 x 10 square loop
 		Path {
@@ -294,7 +295,7 @@ pub mod paths {
 		// Update
 		let dt = 1.0;
 		let mut forces = BodyForces::default();
-		path.update_body(dt, &mut forces, &v_static, &mut state);
+		path.update_body(dt, &mut forces, &v_static, &mut state, None);
 		// Compare
 		let ideal_new_state = PathBoundBodyState {
 			path_ref: 0,
@@ -318,7 +319,7 @@ pub mod paths {
 		let mut forces = BodyForces::default();
 		// 1
 		state.velocity = -5.0;
-		path.update_body(dt, &mut forces, &v_static, &mut state);
+		path.update_body(dt, &mut forces, &v_static, &mut state, None);
 		// Compare
 		assert_eq!(
 			state,
@@ -335,7 +336,7 @@ pub mod paths {
 		);
 		// 2
 		state.velocity = -7.0;
-		path.update_body(dt, &mut forces, &v_static, &mut state);
+		path.update_body(dt, &mut forces, &v_static, &mut state, None);
 		// Compare
 		assert_eq!(
 			state,
@@ -460,7 +461,7 @@ pub mod paths {
 		let path: Path = square_loop_non_unit_edges();
 		let mut pos: PathPosition = PathPosition::default();
 		// + 15
-		assert!(!path.step_position_by_world_units(&mut pos, 15.0, None));
+		assert!(!path.step_position_by_world_units(&mut pos, 15.0, None, None).0);
 		assert_eq!(
 			pos,
 			PathPosition {
@@ -469,7 +470,7 @@ pub mod paths {
 			}
 		);
 		// - 20
-		assert!(path.step_position_by_world_units(&mut pos, -20.0, None));
+		assert!(path.step_position_by_world_units(&mut pos, -20.0, None, None).0);
 		assert_eq!(
 			pos,
 			PathPosition {
@@ -478,7 +479,7 @@ pub mod paths {
 			}
 		);
 		// + 40
-		assert!(path.step_position_by_world_units(&mut pos, 40.0, None));
+		assert!(path.step_position_by_world_units(&mut pos, 40.0, None, None).0);
 		assert_eq!(
 			pos,
 			PathPosition {
@@ -494,7 +495,7 @@ pub mod paths {
 		path.loop_ = false;
 		let mut pos: PathPosition = PathPosition::default();// 0
 		// + 15
-		assert!(!path.step_position_by_world_units(&mut pos, 15.0, None));
+		assert!(!path.step_position_by_world_units(&mut pos, 15.0, None, None).0);
 		assert_eq!(
 			pos,
 			PathPosition {
@@ -503,7 +504,7 @@ pub mod paths {
 			}
 		);
 		// + 30
-		assert!(path.step_position_by_world_units(&mut pos, 30.0, None));
+		assert!(path.step_position_by_world_units(&mut pos, 30.0, None, None).0);
 		assert_eq!(
 			pos,
 			PathPosition {
@@ -512,7 +513,7 @@ pub mod paths {
 			}
 		);
 		// - 45
-		assert!(path.step_position_by_world_units(&mut pos, -45.0, None));
+		assert!(path.step_position_by_world_units(&mut pos, -45.0, None, None).0);
 		assert_eq!(
 			pos,
 			PathPosition {
@@ -520,6 +521,52 @@ pub mod paths {
 				t: 0.0
 			}
 		);
+	}
+	#[test]
+	fn intersections() {
+		// Initial stuff
+		let path = square_loop_non_unit_edges();
+		let mut paths = HashMap::<PathRef, Path>::new();
+		paths.insert(0, path.clone());
+		paths.insert(1, path);
+		let mut intersections = HashMap::<IntersectionId, Intersection>::from([
+			(
+				0,
+				Intersection {
+					path_points: vec![
+						(0, PathPosition::new(0, 0.5)),
+						(1, PathPosition::new(2, 0.5)),
+					]
+				}
+			),
+			(
+				1,
+				Intersection {
+					path_points: vec![
+						(0, PathPosition::new(1, 0.5)),
+						(1, PathPosition::new(3, 0.5)),
+					]
+				}
+			)
+		]);
+		let mut routes = HashMap::<RouteId, Route>::new();
+		let path_set = PathSet {
+			paths,
+			query_grid_scale: 0,
+			query_grid: HashMap::new(),
+			intersections,
+			routes
+		};
+		// Next intersection finding
+		assert_eq!(
+			path_set.next_intersection_on_path(0, &PathPosition::new(0, 0.0), true),
+			Some((0u64, path_set.intersections.get(&0).expect("expected Intersection"), 5.0 as Float))
+		);
+		// TODO
+		/*assert_eq!(
+			path_set.next_intersection_on_path(1, &PathPosition::new(2, 0.75), false),
+			Some((0u64, path_set.intersections.get(&0).expect("expected Intersection"), 25.0 as Float))
+		);*/
 	}
 }
 

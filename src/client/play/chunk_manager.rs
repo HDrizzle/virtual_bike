@@ -26,7 +26,7 @@ pub enum ChunkLoadStatus{
 pub struct RenderDistance {
 	pub load: Float,// Minimum distance for chunk to be unloaded
 	pub unload: Float,// Maximum distance for chunk to be loaded
-	pub pos: P2
+	pub pos: V2
 }
 
 impl RenderDistance {
@@ -51,7 +51,7 @@ impl RenderDistance {
 		// 2: List all chunks that must be loaded
 		let mut chunks_to_load: Vec<ChunkRef> = {
 			let mut out = Vec::<ChunkRef>::new();
-			let center_chunk = ChunkRef::from_world_point(p2_to_p3(self.pos.clone()), map.chunk_size);
+			let center_chunk = ChunkRef::from_world_point(self.pos.clone(), map.chunk_size);
 			// Test, only requests to load occupied and adjacent chunks
 			/*for ref_ in center_chunk.adjacent_chunks(map.chunk_size, false) {
 				out.push(ref_);
@@ -101,7 +101,7 @@ impl RenderDistance {
 			}
 		};
 	}
-	pub fn set_position(&mut self, pos: P2) {
+	pub fn set_position(&mut self, pos: V2) {
 		self.pos = pos;
 	}
 }
@@ -167,7 +167,7 @@ pub struct ChunkManagerPlugin;
 
 impl Plugin for ChunkManagerPlugin {
 	fn build(&self, app: &mut App) {
-		app.insert_resource(RenderDistance{load: 300.0, unload: 2000.0, pos: P2::new(0.0, 0.0)});// TODO: fix hardcoded values
+		app.insert_resource(RenderDistance{load: 300.0, unload: 2000.0, pos: V2::new(0.0, 0.0)});// TODO: fix hardcoded values
 		app.insert_resource(RequestedChunks::new(5.0));
 		app.add_systems(Update, update_chunks_system);
 	}

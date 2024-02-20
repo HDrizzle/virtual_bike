@@ -197,12 +197,12 @@ pub struct ChunkRef {// A deterministic reference to a chunk in the world
 }
 
 impl ChunkRef {
-	pub fn from_world_point(p: P3, chunk_size_u: UInt) -> Self {
+	pub fn from_world_point(p: V2, chunk_size_u: UInt) -> Self {
 		let chunk_size_f = chunk_size_u as Float;
 		let chunk_size_int = chunk_size_u as Int;
 		//println!("Chunk size: {}", chunk_size_f);
 		let x = (p[0] / chunk_size_f).floor() as Int * chunk_size_int;
-		let y = (p[2] / chunk_size_f).floor() as Int * chunk_size_int;
+		let y = (p[1] / chunk_size_f).floor() as Int * chunk_size_int;
 		Self {
 			position: IntV2(x, y)
 		}
@@ -397,7 +397,7 @@ impl Chunk {
 		if let Some(_) = self.collider_handle {
 			panic!("init_rapier() called when self.collider_handle is not None, meaning it has been called more than once");
 		}
-		let collider = self.elevation.rapier_collider(&v2_to_v3(self.ref_.to_v2()));
+		let collider = self.elevation.rapier_collider(&v2_to_v3(&self.ref_.to_v2()));
 		//collider.set_position(Iso{rotation: UnitQuaternion::identity(), translation: matrix_to_opoint(self.position).into()});
 		self.collider_handle = Some(rapier_data.colliders.insert_with_parent(collider, parent_body_handle, &mut rapier_data.bodies));
 	}
@@ -441,7 +441,7 @@ impl Chunk {
 			unlit: true,
 			..default()
 		});
-		let mesh = self.elevation.bevy_mesh(self.grid_size, &v2_to_v3(self.ref_.to_v2()));
+		let mesh = self.elevation.bevy_mesh(self.grid_size, &v2_to_v3(&self.ref_.to_v2()));
 		// Add mesh to meshes and get handle
 		let mesh_handle: Handle<Mesh> = meshes.add(mesh);
 		self.asset_id_opt = Some(mesh_handle.id());
@@ -455,8 +455,7 @@ impl Chunk {
 			}
 		));
 	}
-	pub fn distance_to_point(&self, point: &P2) -> Float {
-		let v = point.coords;
+	pub fn distance_to_point(&self, v: &V2) -> Float {
 		let self_pos = self.ref_.to_v2();
 		/*let mut within_coords: [bool; 2] = [false; 2];
 		let mut perpindicular_dists: [Float; 2] = [0.0; 2];
