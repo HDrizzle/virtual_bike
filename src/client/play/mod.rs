@@ -106,7 +106,13 @@ impl CameraController {
 	}
 	pub fn get_pos(&self, vehicles: &HashMap<String, VehicleSend>) -> Iso {
 		match self {
-			Self::Spectator{pos} => pos.to_iso(),
+			Self::Spectator{pos} => {
+				let og_iso = pos.to_iso();
+				Iso {
+					rotation: og_iso.rotation,// * UnitQuaternion::from_axis_angle(&V3::y_axis(), PI/2.0),
+					translation: og_iso.translation
+				}//add_isometries(&Iso::rotation(V3::new(PI/2.0, 0.0, 0.0)), &pos.to_iso()),
+			}
 			Self::Vehicle{username, rel_rot, radius} => match vehicles.get(&*username) {
 				Some(v) => {
 					let rel_translation = rel_rot.to_quat().transform_vector(&V3::new(0.0, 0.0, *radius));

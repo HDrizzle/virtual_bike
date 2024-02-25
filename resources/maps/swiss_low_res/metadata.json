@@ -1,0 +1,26 @@
+{
+	"generic": {
+		"name": "swiss_low_res",
+		"path_set": {
+			"paths": {},
+			"query_grid_scale": 0,
+			"intersections": {},
+			"routes": {}
+		},
+		"chunk_size": 1000,
+		"chunk_grid_size": 9,
+		"landmarks": {},
+		"background_color": [0, 128, 0],
+		"auto_gen_chunks": true
+	},
+	"gen": {
+		"RealTerrainGen": {
+			"location": {
+				"lat": 46.598477,
+				"lon": 9.670922
+			}
+		}
+	},
+	"chunk_creation_rate_limit": 5,
+	"active_chunk_creators_limit": 5
+}

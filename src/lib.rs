@@ -49,6 +49,7 @@ use dialoguer;
 use rand::Rng;
 #[cfg(feature = "client")]
 use bevy::prelude::*;
+use approx::{AbsDiffEq, RelativeEq};
 
 //#[macro_use] extern crate rocket;
 
@@ -294,11 +295,11 @@ pub mod prelude {
 	}
 	/// Computes angle (in Radians) from its cos and whether the sin is + or -. If the angle is 0 or 180, the `sin_sign` arg doesn't matter
 	/// ```
-	/// use virtual_bike::prelude::{PI, angle_from_cos_sign_sign};
-	/// assert_eq!(angle_from_cos_sign_sign(0.0, 1), PI/2.0);
-	/// assert_eq!(angle_from_cos_sign_sign(0.7071067811, -1), (7.0*PI)/4.0);
+	/// use virtual_bike::prelude::{PI, angle_from_cos_sin_sign};
+	/// assert_eq!(angle_from_cos_sin_sign(0.0, 1), PI/2.0);
+	/// assert_eq!(angle_from_cos_sin_sign(0.7071067811, -1), (7.0*PI)/4.0);
 	/// ```
-	pub fn angle_from_cos_sign_sign(cos: Float, sin_sign: Int) -> Float {
+	pub fn angle_from_cos_sin_sign(cos: Float, sin_sign: Int) -> Float {
 		let angle_og = cos.acos();
 		match sin_sign {
 			1 => angle_og,
@@ -581,28 +582,29 @@ impl SimpleRotation {
 			pitch
 		}
 	}
+	/// To quaternion
+	/// ```
+	/// use virtual_bike::{SimpleRotation, prelude::{PI, Float, V3, EPSILON}};
+	/// use nalgebra::UnitQuaternion;
+	/// use approx::assert_relative_eq;
+	/// assert_relative_eq!(SimpleRotation::new(-PI/2.0, 0.0).to_quat(), UnitQuaternion::<Float>::identity(), epsilon = EPSILON)
+	/// ```
 	pub fn to_quat(&self) -> UnitQuaternion<Float> {
-		UnitQuaternion::from_axis_angle(&V3::y_axis(), self.yaw) * UnitQuaternion::from_axis_angle(&V3::x_axis(), self.pitch)
+		UnitQuaternion::from_axis_angle(&V3::x_axis(), self.pitch)// * UnitQuaternion::from_axis_angle(&V3::y_axis(), self.yaw)// TODO: use yaw
+		//UnitQuaternion::look_at_lh(&self.to_v3(), &V3::new(0.0, 1.0, 0.0))
 	}
+	/// From quaternion representing the transformation of a unit-vector on the Z-axis
+	/// ```
+	/// use virtual_bike::{SimpleRotation, prelude::{PI, Float, V3, EPSILON}};
+	/// use nalgebra::UnitQuaternion;
+	/// use approx::assert_relative_eq;
+	/// let quat = UnitQuaternion::<Float>::identity();
+	/// assert_eq!(SimpleRotation::from_quat(&quat), SimpleRotation{yaw: PI/2.0, pitch: 0.0});
+	/// let quat = UnitQuaternion::<Float>::from_axis_angle(&V3::x_axis(), PI/4.0) * UnitQuaternion::<Float>::from_axis_angle(&V3::y_axis(), -PI);
+	/// assert_relative_eq!(SimpleRotation::from_quat(&quat), SimpleRotation{yaw: PI*1.5, pitch: PI/4.0}, epsilon = EPSILON);
+	/// ```
 	pub fn from_quat(quat: &UnitQuaternion<Float>) -> Self {
-		// Pitch
-		let y = quat.transform_vector(&V3::new(0.0, 0.0, 1.0)).y;
-		let pitch = if y - 1.0 < EPSILON {// TODO: fix
-			PI/2.0
-		}
-		else {
-			if y + 1.0 < EPSILON {
-				-PI/2.0
-			}
-			else {
-				y.asin()
-			}
-		} - PI/2.0;
-		let (_roll, _pitch, yaw) = quat.euler_angles();// https://docs.rs/nalgebra/latest/nalgebra/geometry/type.UnitQuaternion.html#method.euler_angles
-		Self {
-			yaw,
-			pitch
-		}
+		Self::from_v3(quat.transform_vector(&V3::new(0.0, 0.0, 1.0)))
 	}
 	/// Computes direction from origin towards `v`, which does not have to be normalized.
 	/// ```
@@ -627,13 +629,47 @@ impl SimpleRotation {
 		else {
 			let slope = v3.y / xz_plane_radius;
 			Self::new(
-				angle_from_cos_sign_sign(
+				angle_from_cos_sin_sign(
 					v2.x / xz_plane_radius,
 					bool_sign(v2.y >= 0.0)
 				),
 				slope.atan()
 			)
 		}
+	}
+	/// Creates unit vector-3 in this direction from origin
+	/// ```
+	/// use virtual_bike::{SimpleRotation, prelude::{PI, Float, V3, EPSILON}};
+	/// use approx::assert_relative_eq;
+	/// assert_relative_eq!(SimpleRotation::new(0.0, -PI/4.0).to_v3(), V3::new(-0.7071067811, -0.7071067811, 0.0));
+	/// assert_relative_eq!(SimpleRotation::new(PI*0.75, PI/3.0).to_v3(), V3::new(0.7071067811/2.0, 3.0_f32.sqrt()/2.0, 0.7071067811/2.0));
+	/// ```
+	pub fn to_v3(&self) -> V3 {
+		// Create V2
+		let v2 = V2::new(self.yaw.cos(), self.yaw.sin());
+		let v2_radius = self.pitch.cos();
+		let height = self.pitch.sin();
+		// Done
+		v2_to_v3(&(v2 * v2_radius)) + V3::new(0.0, height, 0.0)
+	}
+}
+
+impl AbsDiffEq for SimpleRotation {
+	type Epsilon = Float;
+	fn default_epsilon() -> Self::Epsilon {
+		EPSILON
+	}
+	fn abs_diff_eq(&self, other: &Self, epsilon: Self::Epsilon) -> bool {
+		self.yaw - other.yaw < epsilon && self.pitch - other.pitch < epsilon
+	}
+}
+
+impl RelativeEq for SimpleRotation {
+	fn default_max_relative() -> Self::Epsilon {
+		Self::default_epsilon()
+	}
+	fn relative_eq(&self, other: &Self, epsilon: Self::Epsilon, max_relative: Self::Epsilon) -> bool {
+		self.abs_diff_eq(other, epsilon)
 	}
 }
 

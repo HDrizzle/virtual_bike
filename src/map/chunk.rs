@@ -288,17 +288,6 @@ impl ChunkRef {
 	}
 }
 
-#[cfg(feature = "server")]
-#[derive(Clone)]
-pub struct ChunkCreationArgs {
-	pub ref_: ChunkRef,
-	pub size: u64,
-	pub grid_size: u64,
-	pub gen: MapGenerator,
-	pub background_color: [u8; 3], 
-	pub map_name: String
-}
-
 #[derive(Serialize, Deserialize, Clone)]
 pub struct ChunkTexture {
 	chunk_ref: ChunkRef,
@@ -336,6 +325,17 @@ impl CacheableBevyAsset for ChunkTexture {
 	fn write_to_file(&self, file: &mut std::fs::File) -> Result<(), String> {
 		to_string_err(file.write_all(&self.raw_data))
 	}
+}
+
+#[cfg(feature = "server")]
+#[derive(Clone)]
+pub struct ChunkCreationArgs {
+	pub ref_: ChunkRef,
+	pub size: u64,
+	pub grid_size: u64,
+	pub gen: MapGenerator,
+	pub background_color: [u8; 3], 
+	pub map_name: String
 }
 
 #[derive(Serialize, Deserialize, Clone)]

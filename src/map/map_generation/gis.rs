@@ -53,10 +53,10 @@ impl GenericElevationResponse {
 	pub fn to_elev_mesh(&self, precision: Float, grid_matrix_size: UInt) -> RegularElevationMesh {
 		assert_eq!(self.elevations.len(), grid_matrix_size.pow(2) as usize);
 		let mut grid = Vec::<Vec<Float>>::new();
-		for y in 0..grid_matrix_size {
+		for y in (0..grid_matrix_size).rev() {
 			let mut row = Vec::<Float>::new();
-			for x in 0..grid_matrix_size {
-				row.push(self.elevations[((x * grid_matrix_size) + y) as usize]);// I swapped X and Y and now it works
+			for x in (0..grid_matrix_size).rev() {
+				row.push(self.elevations[(((grid_matrix_size - (x+1)) * grid_matrix_size) + y) as usize]);// I swapped X and Y and now it works
 			}
 			grid.push(row);
 		}
@@ -293,4 +293,40 @@ pub fn meters_to_degrees(m: Int) -> Float {
 pub fn degrees_to_meters(deg: Float) -> Int {
 	let rev = deg / 360.0;
 	(rev * EARTH_CIRC) as Int
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use approx::assert_relative_eq;
+	#[test]
+	fn conversion() {
+		assert_relative_eq!(meters_to_degrees((EARTH_RADIUS * 2.0 * (PI as Float)) as Int), 360.0, epsilon = EPSILON);
+		assert_eq!(degrees_to_meters(180.0), (EARTH_RADIUS * (PI as Float)) as Int);
+	}
+	#[test]
+	fn composition() {
+		assert_eq!(degrees_to_meters(meters_to_degrees(1000)), 1000);
+		assert_relative_eq!(meters_to_degrees(degrees_to_meters(1.0)), 1.0, epsilon = EPSILON);
+		assert_relative_eq!(meters_to_degrees(degrees_to_meters(180.0)), 180.0, epsilon = EPSILON);
+	}
+	#[test]
+	fn chunk_edge_alignment() {
+		let map_anchor = WorldLocation{lat: 60.0, lon: -69.0};
+		assert_eq!(
+			chunk_local_location(&map_anchor, &ChunkRef{position: IntV2(0, 0)}, IntV2(1000, 1000)),
+			chunk_local_location(&map_anchor, &ChunkRef{position: IntV2(1000, 1000)}, IntV2(0, 0))
+		)
+	}
+	#[test]
+	fn longitude_scaling() {
+		assert_eq!(
+			chunk_local_location(&WorldLocation{lat: 0.0, lon: 0.0}, &ChunkRef::origin(), IntV2(1000, 1000)),
+			((meters_to_degrees(1000), meters_to_degrees(1000)), 1.0)
+		);
+		assert_eq!(
+			chunk_local_location(&WorldLocation{lat: 60.0, lon: 10.0}, &ChunkRef::origin(), IntV2(1000, 1000)),
+			((10.0 + meters_to_degrees(500), 60.0 + meters_to_degrees(1000)), 0.49999997)
+		);
+	}
 }

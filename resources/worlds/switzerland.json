@@ -1,5 +1,5 @@
 {
-	"map": "switzerland",
+	"map": "swiss_low_res",
 	"vehicles": {
 		"admin": {
 			"type_": "test-bike",

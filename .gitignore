@@ -16,6 +16,7 @@ Cargo.lock
 
 # Don't upload maps because they can be large
 resources/maps/*/chunks/
+resources/maps/switzerland/chunks_backup/
 
 # Client cache
 client/assets/client_cache/

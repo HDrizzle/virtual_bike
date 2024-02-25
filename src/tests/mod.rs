@@ -190,42 +190,6 @@ pub mod gen {
 	}*/
 }
 
-#[cfg(feature = "server")]
-pub mod gis {
-	use super::*;
-	use crate::map::map_generation::gis::*;
-	#[test]
-	fn conversion() {
-		assert_relative_eq!(meters_to_degrees((EARTH_RADIUS * 2.0 * (PI as Float)) as Int), 360.0, epsilon = EPSILON);
-		assert_eq!(degrees_to_meters(180.0), (EARTH_RADIUS * (PI as Float)) as Int);
-	}
-	#[test]
-	fn composition() {
-		assert_eq!(degrees_to_meters(meters_to_degrees(1000)), 1000);
-		assert_relative_eq!(meters_to_degrees(degrees_to_meters(1.0)), 1.0, epsilon = EPSILON);
-		assert_relative_eq!(meters_to_degrees(degrees_to_meters(180.0)), 180.0, epsilon = EPSILON);
-	}
-	#[test]
-	fn chunk_edge_alignment() {
-		let map_anchor = WorldLocation{lat: 60.0, lon: -69.0};
-		assert_eq!(
-			chunk_local_location(&map_anchor, &ChunkRef{position: IntV2(0, 0)}, IntV2(1000, 1000)),
-			chunk_local_location(&map_anchor, &ChunkRef{position: IntV2(1000, 1000)}, IntV2(0, 0))
-		)
-	}
-	#[test]
-	fn longitude_scaling() {
-		assert_eq!(
-			chunk_local_location(&WorldLocation{lat: 0.0, lon: 0.0}, &ChunkRef::origin(), IntV2(1000, 1000)),
-			((meters_to_degrees(1000), meters_to_degrees(1000)), 1.0)
-		);
-		assert_eq!(
-			chunk_local_location(&WorldLocation{lat: 60.0, lon: 10.0}, &ChunkRef::origin(), IntV2(1000, 1000)),
-			((10.0 + meters_to_degrees(500), 60.0 + meters_to_degrees(1000)), 0.49999997)
-		);
-	}
-}
-
 pub mod paths {
 	use crate::map::path::{PathType, PathRef, Intersection, Route, IntersectionId, RouteId};
 	use super::*;
@@ -600,12 +564,7 @@ mod misc {
 	// TODO
 	/*#[test]
 	fn simple_rotation_composition() {
-		let quat = UnitQuaternion::<Float>::from_axis_angle(&V3::x_axis(), PI/4.0);// Quat must not have roll
-		assert_relative_eq!(SimpleRotation::from_quat(quat).to_quat(), quat);
-	}
-	#[test]
-	fn simple_rotation_conversion() {
-		let quat = UnitQuaternion::<Float>::identity();
-		assert_eq!(SimpleRotation::from_quat(quat), SimpleRotation{yaw: 0.0, pitch: 0.0});
+		let quat = UnitQuaternion::<Float>::from_axis_angle(&V3::y_axis(), PI/4.0);// Quat must not have roll
+		assert_relative_eq!(SimpleRotation::from_quat(&quat).to_quat(), quat);
 	}*/
 }

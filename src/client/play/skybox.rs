@@ -140,7 +140,7 @@ impl Sky {
 			0 => V3::new(1.0, image_pos.y, image_pos.x),
 			1 => V3::new(-1.0, image_pos.y, -image_pos.x),
 			2 => V3::new(image_pos.x, 1.0, image_pos.y),
-			3 => V3::new(image_pos.x, -1.0, image_pos.y),
+			3 => V3::new(image_pos.x, -1.0, -image_pos.y),
 			4 => V3::new(image_pos.x, image_pos.y, -1.0),
 			5 => V3::new(-image_pos.x, image_pos.y, 1.0),
 			_ => panic!("Image index should be < 6, something is wrong with the code in this function")
