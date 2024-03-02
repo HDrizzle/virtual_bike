@@ -261,7 +261,7 @@ pub fn all_tests() {
 		}
 	}
 	// Paths
-	test_ui(ResourceExistanceChecker::new(resource_interface::PATHS_DIR.to_owned(), false));
+	test_ui(ResourceDeserializationChecker::<PathType>::new(resource_interface::PATH_TYPES_DIR.to_owned()));
 	// Server's users file
 	test_ui(ResourceDeserializationChecker::<HashMap<String, String>>::new(resource_interface::USERS_FILE.to_owned()));
 	// Client's login file

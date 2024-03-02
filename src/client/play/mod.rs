@@ -234,7 +234,7 @@ fn vehicle_input_key_event_system(// Only for manual vehicle control should be b
 	let input = {
 		// Drive
 		let power_forward: Float = if keys.pressed(KeyCode::W) {
-			500.0
+			2000.0
 		}
 		else {
 			0.0
@@ -399,7 +399,7 @@ fn update_system(
 						},
 						None => {}//panic!("Server should send chunks with texture data")
 					}
-					static_data.map.insert_chunk_client(chunk, #[cfg(feature = "debug_render_physics")] &mut RapierBodyCreationDeletionContext::from_bevy_rapier_context(&mut rapier_context), &mut commands, &mut meshes, &mut materials, &asset_server, server_addr.0.ip());
+					static_data.map.generic.insert_chunk_client(chunk, #[cfg(feature = "debug_render_physics")] &mut RapierBodyCreationDeletionContext::from_bevy_rapier_context(&mut rapier_context), &mut commands, &mut meshes, &mut materials, &asset_server, server_addr.0.ip());
 				}
 			},
 			Err(e) => error!("Error from asset client: {}", e)

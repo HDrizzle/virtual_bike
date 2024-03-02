@@ -91,7 +91,7 @@ pub mod prelude {
 	// Misc
 	pub use crate::{
 		world::{StaticData, WorldSave, WorldSend},
-		map::{GenericMap, path::{Path, PathSet, PathBoundBodyState, PathPosition, BCurve, BCurveSample, Intersection, IntersectionDecision, IntersectionId, BCURVE_LENGTH_ESTIMATION_SEGMENTS}, chunk::{Chunk, ChunkRef, RegularElevationMesh}},
+		map::{GenericMap, SendMap, path::{PathType, PathTypeRef, Path, SavePath, GenericPath, PathSet, SavePathSet, GenericPathSet, PathBoundBodyState, PathPosition, BCurve, BCurveSample, Intersection, IntersectionDecision, IntersectionId, BCURVE_LENGTH_ESTIMATION_SEGMENTS}, chunk::{Chunk, ChunkRef, RegularElevationMesh}},
 		vehicle::{VehicleStatic, VehicleStaticModel, VehicleSave, VehicleSend, Wheel, WheelStatic, BodyStateSerialize, BodyForces},
 		server::{RenetRequest, RenetResponse, AssetResponse},
 		GenericError,
@@ -590,8 +590,7 @@ impl SimpleRotation {
 	/// assert_relative_eq!(SimpleRotation::new(-PI/2.0, 0.0).to_quat(), UnitQuaternion::<Float>::identity(), epsilon = EPSILON)
 	/// ```
 	pub fn to_quat(&self) -> UnitQuaternion<Float> {
-		UnitQuaternion::from_axis_angle(&V3::x_axis(), self.pitch)// * UnitQuaternion::from_axis_angle(&V3::y_axis(), self.yaw)// TODO: use yaw
-		//UnitQuaternion::look_at_lh(&self.to_v3(), &V3::new(0.0, 1.0, 0.0))
+		UnitQuaternion::from_axis_angle(&V3::y_axis(), self.yaw + PI/2.0) * UnitQuaternion::from_axis_angle(&V3::x_axis(), self.pitch)
 	}
 	/// From quaternion representing the transformation of a unit-vector on the Z-axis
 	/// ```

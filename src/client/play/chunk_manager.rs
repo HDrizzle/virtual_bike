@@ -156,7 +156,7 @@ pub fn update_chunks_system(// TODO get this to only run when main vehicle is mo
 	settings: Res<Settings>
 
 ) {
-	let chunks_to_load: Vec<ChunkRef> = render_distance.load_unload_chunks(&mut static_data.map, #[cfg(feature = "debug_render_physics")] &mut rapier_context_res, &mut meshes, &mut materials);
+	let chunks_to_load: Vec<ChunkRef> = render_distance.load_unload_chunks(&mut static_data.map.generic, #[cfg(feature = "debug_render_physics")] &mut rapier_context_res, &mut meshes, &mut materials);
 	for chunk_ref in chunks_to_load {
 		requested_chunks.add(chunk_ref, &mut asset_client, &*settings);
 	}

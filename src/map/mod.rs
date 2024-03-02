@@ -43,7 +43,6 @@ pub struct GenericMap {// Serialize, Deserialize, Clone, used by client AND serv
 	//#[cfg(not(feature = "server"))] pub gen: ClientDummy,
 	#[serde(skip)]
 	pub loaded_chunks: Vec<Chunk>,
-	pub path_set: PathSet,
 	pub chunk_size: UInt,// length of the side of each chunk, world units (meters)
 	pub chunk_grid_size: UInt,// Number of points along the side of each chunk
 	pub landmarks: HashMap<String, V2>,
@@ -60,7 +59,6 @@ impl GenericMap {
 		Self {
 			name: name.to_owned(),
 			loaded_chunks: Vec::<Chunk>::new(),
-			path_set: PathSet::default(),
 			chunk_size,
 			chunk_grid_size,
 			landmarks: HashMap::<String, V2>::new(),
@@ -194,9 +192,9 @@ impl GenericMap {
 		None
 	}
 	#[cfg(feature = "client")]
-	pub fn init_bevy(&mut self, commands: &mut Commands, meshes:  &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>, asset_server: &AssetServer) {
+	pub fn init_bevy(&mut self, path_set: &PathSet, commands: &mut Commands, meshes:  &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>, asset_server: &AssetServer) {
 		#[cfg(feature = "path_rendering")]
-		for (_, path) in &mut self.path_set.paths.iter_mut() {
+		for (_, path) in &path_set.paths {
 			path.init_bevy(commands, meshes, materials, asset_server);
 		}
 	}
@@ -227,11 +225,25 @@ impl GenericMap {
 	}
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+pub struct SendMap {
+	pub generic: GenericMap,
+	pub path_set: PathSet
+}
+
+impl SendMap {
+	#[cfg(feature = "client")]
+	pub fn init_bevy(&mut self, commands: &mut Commands, meshes:  &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>, asset_server: &AssetServer) {
+		self.generic.init_bevy(&self.path_set, commands, meshes, materials, asset_server);
+	}
+}
+
 #[cfg(feature = "server")]
 #[derive(Serialize, Deserialize)]
 pub struct SaveMap {
 	pub generic: GenericMap,
 	pub gen: MapGenerator,
+	pub path_set: SavePathSet,
 	pub chunk_creation_rate_limit: Float,
 	pub active_chunk_creators_limit: usize
 }
@@ -344,6 +356,7 @@ impl SaveMapAutoFixEnum {
 #[cfg(feature = "server")]
 pub struct ServerMap {
 	pub generic: GenericMap,
+	pub path_set: PathSet,
 	gen: MapGenerator,
 	chunk_creator: ChunkCreationManager
 }
@@ -353,6 +366,7 @@ impl ServerMap {
 	pub fn from_save(save: SaveMap) -> Self {
 		Self {
 			generic: save.generic,
+			path_set: PathSet::from_save(save.path_set).unwrap(),
 			gen: save.gen,
 			chunk_creator: ChunkCreationManager::new(save.chunk_creation_rate_limit, save.active_chunk_creators_limit)
 		}
@@ -365,17 +379,21 @@ impl ServerMap {
 				chunk_grid_size,
 				background_color
 			),
+			path_set: PathSet::default(),
 			gen,
 			chunk_creator: ChunkCreationManager::new(4.0, 20)// TODO: fix arbitrary value
 		}
 	}
-	pub fn send(&self, #[cfg(feature = "debug_render_physics")] physics: &mut PhysicsStateSend) -> GenericMap {
+	pub fn send(&self, #[cfg(feature = "debug_render_physics")] physics: &mut PhysicsStateSend) -> SendMap {
 		// Unloads all chunks from the physics state which will also be sent to the client
-		let mut out = self.generic.clone();
+		let mut out_generic = self.generic.clone();
 		#[cfg(feature = "debug_render_physics")]
-		out.unload_chunks(&Vec::<ChunkRef>::new(), &mut physics.build_body_creation_deletion_context());
+		out_generic.unload_chunks(&Vec::<ChunkRef>::new(), &mut physics.build_body_creation_deletion_context());
 		// Done
-		out
+		SendMap {
+			generic: out_generic,
+			path_set: self.path_set.clone()
+		}
 	}
 	pub fn load_or_create_chunk(&mut self, ref_: &ChunkRef) -> Option<Chunk> {
 		return if ref_.exists(&self.generic.name) {// Chunk already exists on the disk, load it
@@ -413,6 +431,7 @@ impl ServerMap {
 		SaveMap {
 			generic: self.generic.clone(),
 			gen: self.gen.clone(),
+			path_set: self.path_set.save(),
 			active_chunk_creators_limit: self.chunk_creator.active_chunk_creators_limit,
 			chunk_creation_rate_limit: self.chunk_creator.rate_limit
 		}

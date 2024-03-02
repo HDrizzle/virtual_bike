@@ -5,6 +5,7 @@ use std::{error::Error, fs, collections::HashMap};
 use std::io::Error as IoError;
 use serde_json;
 
+use crate::map::path::PathType;
 use crate::{
 	prelude::*,
 	map::chunk::ChunkDirComponent
@@ -17,7 +18,7 @@ pub static RESOURCES_DIR: &str = "../resources";
 pub static VEHICLES_DIR: &str = "../resources/vehicles/";
 pub static MAPS_DIR: &str = "../resources/maps/";
 pub static WORLDS_DIR: &str = "../resources/worlds/";
-pub static PATHS_DIR: &str = "../resources/paths/";
+pub static PATH_TYPES_DIR: &str = "../resources/path_types/";
 pub static MAP_GENERATORS_DIR: &str = "../resources/map_generators/";
 pub static USERS_FILE: &str = "../resources/server_credentials.json";
 pub static CLIENT_LOGIN_FILE: &str = "../resources/client_credentials.json";
@@ -168,6 +169,12 @@ pub fn load_world(name: &str) -> Result<WorldSave, Box<dyn Error>> {
 	let raw_string: String = load_file_with_better_error(&(WORLDS_DIR.to_owned() + name + ".json"))?;
 	let world: WorldSave = serde_json::from_str(&raw_string)?;
 	Ok(world)
+}
+
+pub fn load_path_type(name: &PathTypeRef) -> Result<PathType, Box<dyn Error>> {
+	let raw_string: String = load_file_with_better_error(&(PATH_TYPES_DIR.to_owned() + name + ".json"))?;
+	let path_type: PathType = serde_json::from_str(&raw_string)?;
+	Ok(path_type)
 }
 
 #[cfg(feature = "client")]

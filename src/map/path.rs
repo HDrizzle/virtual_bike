@@ -132,8 +132,9 @@ impl BCurve {
 	}
 }
 
-pub type PathTypeRef = u64;
+pub type PathTypeRef = String;
 
+/// Defines information about any paths of this path type
 #[derive(Serialize, Deserialize, Clone)]
 pub struct PathType {
 	ref_: PathTypeRef,
@@ -144,8 +145,8 @@ pub struct PathType {
 impl Default for PathType {
 	fn default() -> Self {
 		Self {
-			ref_: 0,
-			name: "Default path type".to_string(),
+			ref_: "default-path-type".to_owned(),
+			name: "Default path type".to_owned(),
 			width: 10.0
 		}
 	}
@@ -154,8 +155,33 @@ impl Default for PathType {
 pub type PathRef = u64;
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct Path {// TODO: fix: load the path type from seperate file
-	pub type_: Arc<PathType>,
+pub struct Path {
+	pub generic: GenericPath,
+	pub type_: Arc<PathType>
+}
+
+impl Path {
+	pub fn from_save(save: SavePath, type_: Arc<PathType>) -> Self {
+		assert_eq!(save.type_, type_.ref_);
+		Self {
+			generic: save.generic,
+			type_
+		}
+	}
+	#[cfg(feature = "client")]
+	pub fn init_bevy(&self, commands: &mut Commands, meshes:  &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>, asset_server: &AssetServer) {
+		self.generic.init_bevy(&self.type_, commands, meshes, materials, asset_server)
+	}
+	pub fn save(&self) -> SavePath {
+		SavePath {
+			generic: self.generic.clone(),
+			type_: self.type_.ref_.clone()
+		}
+	}
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct GenericPath {
 	pub ref_: PathRef,
 	pub name: String,// Non-identifying, Example usage: road names
 	pub knot_points: Vec<P3>,// The spline must pass through these
@@ -163,7 +189,7 @@ pub struct Path {// TODO: fix: load the path type from seperate file
 	pub loop_: bool
 }
 
-impl Path {
+impl GenericPath {
 	pub fn create_body_state(&self, path_body_state: PathBoundBodyState) -> BodyStateSerialize {
 		assert_eq!(path_body_state.path_ref, self.ref_);
 		let bcurve: BCurve = self.get_bcurve(path_body_state.pos.latest_point);
@@ -305,7 +331,7 @@ impl Path {
 		v_static.mass * gravity * -SimpleRotation::from_quat(&self.sample(&pos).pos.rotation).pitch.sin()
 	}
 	#[cfg(feature = "client")]
-	pub fn bevy_mesh(&self, texture_len_width_ratio: Float, start: &PathPosition) -> (Mesh, Option<PathPosition>) {
+	pub fn bevy_mesh(&self, type_config: &PathType, texture_len_width_ratio: Float, start: &PathPosition) -> (Mesh, Option<PathPosition>) {
 		/* Crates a mesh with UV mapping. The UV coords are intended for an image with Y starting from the top going down and with the "path travel direction" being vertical.
 		`texture_len_width_ratio` is the ratio of the height / width of the texture image being used.
 		The layout of the mesh will look like:
@@ -327,9 +353,9 @@ impl Path {
 		|<------->| self.type_.width
 		Returns: The mesh and an option for the next position to use, if this is `None`, it means that whatever loop iterating over this can now stop.
 		*/
-		let half_width = self.type_.width / 2.0;
+		let half_width = type_config.width / 2.0;
 		// Get length used by texture
-		let texture_len = self.type_.width * texture_len_width_ratio;
+		let texture_len = type_config.width * texture_len_width_ratio;
 		// Function to get edge positions on the road, TODO: verify
 		let get_edge_pos = |center_pos: &PathPosition, sideways_offset: Float| -> V3 {
 			let center_iso = self.sample(center_pos).pos;
@@ -420,7 +446,7 @@ impl Path {
 		(mesh, next_pos)
 	}
 	#[cfg(feature = "client")]
-	pub fn init_bevy(&self, commands: &mut Commands, meshes:  &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>, asset_server: &AssetServer) {
+	pub fn init_bevy(&self, type_config: &PathType, commands: &mut Commands, meshes:  &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>, asset_server: &AssetServer) {
 		// Loop through entire path until done
 		let mut curr_pos = PathPosition::default();
 		loop {
@@ -433,7 +459,7 @@ impl Path {
 				unlit: true,
 				..default()
 			});
-			let (mesh, next_pos_opt) = self.bevy_mesh(5.0/*220.0/708.0*/, &curr_pos);// TODO: fix hardcoded value
+			let (mesh, next_pos_opt) = self.bevy_mesh(type_config, 5.0/*220.0/708.0*/, &curr_pos);// TODO: fix hardcoded value
 			//dbg!(&next_pos_opt);
 			// Add mesh to meshes and get handle
 			let mesh_handle: Handle<Mesh> = meshes.add(mesh);
@@ -454,6 +480,12 @@ impl Path {
 			}
 		}
 	}
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct SavePath {
+	pub generic: GenericPath,
+	pub type_: PathTypeRef
 }
 
 pub type RouteId = u64;
@@ -553,17 +585,43 @@ impl Intersection {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
+pub struct SavePathSet {
+	pub generic: GenericPathSet,
+	pub paths: HashMap<PathRef, SavePath>
+}
+
+#[derive(Serialize, Deserialize, Clone)]
 pub struct PathSet {
-	pub paths: HashMap<PathRef, Path>,
-	pub query_grid_scale: UInt,// 0 means no query grid
-	#[serde(skip)]
+	pub generic: GenericPathSet,
 	pub query_grid: HashMap<IntV2, Vec<PathRef>>,
-	pub intersections: HashMap<IntersectionId, Intersection>,
-	pub routes: HashMap<RouteId, Route>
+	pub paths: HashMap<PathRef, Path>
 }
 
 impl PathSet {
-	pub fn get_with_ref(&self, ref_: &PathRef) -> Option<&Path> {
+	/// Creates a new instance of `Self` from a `SavePathSet`
+	/// Because a `Path` requires an `Arc<PathType>` and a `SavePath` only has a reference to that path type (the name of a file in resources/), this function may fail if that path type config file can't be loaded.
+	pub fn from_save(save: SavePathSet) -> Result<Self, String> {
+		// Load path types
+		let mut path_types = HashMap::<PathTypeRef, Arc<PathType>>::new();
+		let mut paths = HashMap::<PathRef, Path>::new();
+		for (path_id, save_path) in save.paths.iter() {
+			// get path type config
+			let path_type: Arc<PathType> = if let Some(type_arc) = path_types.get(&save_path.type_) {
+				Ok(type_arc.clone())
+			}
+			else {
+				to_string_err(resource_interface::load_path_type(&save_path.type_)).map(|og_path_type| Arc::new(og_path_type))
+			}?;
+			paths.insert(*path_id, Path::from_save(save_path.clone(), path_type));
+		}
+		// Done
+		Ok(Self {
+			generic: save.generic,
+			query_grid: HashMap::new(),
+			paths
+		})
+	}
+	pub fn get_path_with_ref(&self, ref_: &PathRef) -> Option<&Path> {
 		self.paths.get(ref_)
 	}
 	/// Gets next intersection on given path in given direction if there is one
@@ -574,12 +632,12 @@ impl PathSet {
 	/// )>
 	pub fn next_intersection_on_path(&self, path_ref: PathRef, path_pos: &PathPosition, forward: bool) -> Option<(IntersectionId, &Intersection, Float)> {
 		// Get path
-		let path: &Path = self.get_with_ref(&path_ref).expect("Invalid path reference");
+		let path: &Path = self.get_path_with_ref(&path_ref).expect("Invalid path reference");
 		// Get distance along path
-		let dist_along_path = path.estimate_distance_to_position(path_pos, BCURVE_LENGTH_ESTIMATION_SEGMENTS);
+		let dist_along_path = path.generic.estimate_distance_to_position(path_pos, BCURVE_LENGTH_ESTIMATION_SEGMENTS);
 		// Get all intersection points on given path
 		let mut intersection_points = Vec::<(IntersectionId, PathPosition)>::new();// (IntersectionId, intersection pos - `path_pos`)
-		for (id, intersection) in &self.intersections {
+		for (id, intersection) in &self.generic.intersections {
 			let points: Vec<PathPosition> = intersection.path_points_on_specific_path(&path_ref);
 			for point in points {
 				intersection_points.push((*id, point));
@@ -593,13 +651,13 @@ impl PathSet {
 		// Get closest one in correct direction (use `forward`)
 		let mut out: Option<(IntersectionId, &Intersection, Float)> = None;
 		for (id, curr_pos) in intersection_points {
-			let curr_dist = path.estimate_distance_to_position(&curr_pos, BCURVE_LENGTH_ESTIMATION_SEGMENTS);
+			let curr_dist = path.generic.estimate_distance_to_position(&curr_pos, BCURVE_LENGTH_ESTIMATION_SEGMENTS);
 			let diff_raw = curr_dist - dist_along_path;// From given `path_pos` to curr pos
 			let diff_corrected = diff_raw * bool_sign(forward) as Float;
 			// Logic to get possible new closest intersection
 			let mut use_this_one = match &out {
 				Some(t) => t.2 >= 0.0 && diff_corrected < t.2,
-				None => if path.loop_ {
+				None => if path.generic.loop_ {
 					true
 				}
 				else {
@@ -608,20 +666,53 @@ impl PathSet {
 			};
 			// Update `out` if `new_out` is Some(_)
 			if use_this_one {
-				out = Some((id, self.intersections.get(&id).expect("This shouldn't happen"), diff_corrected));
+				out = Some((id, self.generic.intersections.get(&id).expect("This shouldn't happen"), diff_corrected));
 			}
 		}
 		// Done
 		out
+	}
+	/// Creates save path set
+	/// ```
+	/// use virtual_bike::prelude::*;
+	/// let mut paths = PathSet::default();
+	/// // TODO
+	/// ```
+	pub fn save(&self) -> SavePathSet {
+		// Create `SavePath`s
+		let mut paths = HashMap::<PathRef, SavePath>::new();
+		for (path_ref, path) in &self.paths {
+			paths.insert(*path_ref, path.save());
+		}
+		// Done
+		SavePathSet {
+			generic: self.generic.clone(),
+			paths
+		}
 	}
 }
 
 impl Default for PathSet {
 	fn default() -> Self {
 		Self {
-			paths: HashMap::new(),
-			query_grid_scale: 0,
+			generic: GenericPathSet::default(),
 			query_grid: HashMap::new(),
+			paths: HashMap::new()
+		}
+	}
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct GenericPathSet {
+	pub query_grid_scale: UInt,// 0 means no query grid
+	pub intersections: HashMap<IntersectionId, Intersection>,
+	pub routes: HashMap<RouteId, Route>
+}
+
+impl Default for GenericPathSet {
+	fn default() -> Self {
+		Self {
+			query_grid_scale: 0,
 			intersections: HashMap::new(),
 			routes: HashMap::new()
 		}
@@ -673,15 +764,15 @@ impl PathBoundBodyState {
 		loop {
 			let next_intersection_opt: Option<(IntersectionId, &Intersection, Float)> = paths.next_intersection_on_path(self.path_ref, &self.pos, self.forward);
 			//let next_intersection_opt: Option<&Intersection> = next_intersection_id_opt.map(|id| paths.intersections.get(&id).expect("Invalid intersection ID"));
-			let path: &Path = paths.get_with_ref(&self.path_ref).unwrap();
-			let step_remaining_opt: Option<f32> = path.update_body(dt, &forces, v_static, self, next_intersection_opt.map(|t| t.2));
+			let path: &Path = paths.get_path_with_ref(&self.path_ref).unwrap();
+			let step_remaining_opt: Option<f32> = path.generic.update_body(dt, &forces, v_static, self, next_intersection_opt.map(|t| t.2));
 			step_remaining = match next_intersection_opt {
 				Some((next_intersection_id, next_intersection, _)) => match step_remaining_opt {
 					Some(step_remaining) => {// There is still distance remaining after the intersection
 						// Intersection decision
 						let decision: IntersectionDecision = match match &self.route_opt {
 							Some(route_id) => {
-								let route: &Route = paths.routes.get(route_id).expect("This PathBoundBodyState has an invalid route ID");
+								let route: &Route = paths.generic.routes.get(route_id).expect("This PathBoundBodyState has an invalid route ID");
 								route.decision_opt(next_intersection_id)
 							},
 							None => None

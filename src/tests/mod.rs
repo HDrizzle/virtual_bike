@@ -197,22 +197,24 @@ pub mod paths {
 	// Initial states
 	fn square_loop_non_unit_edges() -> Path {// 10 x 10 square loop
 		Path {
-			type_: Arc::new(PathType::default()),
-			ref_: 0,
-			name: "test".to_owned(),
-			knot_points: vec![
-				P3::new( 0.0, 0.0,  0.0),// >
-				P3::new(10.0, 0.0,  0.0),// ^
-				P3::new(10.0, 0.0, 10.0),// <
-				P3::new( 0.0, 0.0, 10.0)//  v
-			],
-			tangent_offsets: vec![
-				V3::new(0.0, 0.0, 0.0),
-				V3::new(0.0, 0.0, 0.0),
-				V3::new(0.0, 0.0, 0.0),
-				V3::new(0.0, 0.0, 0.0)
-			],
-			loop_: true
+			generic: GenericPath {
+				ref_: 0,
+				name: "test".to_owned(),
+				knot_points: vec![
+					P3::new( 0.0, 0.0,  0.0),// >
+					P3::new(10.0, 0.0,  0.0),// ^
+					P3::new(10.0, 0.0, 10.0),// <
+					P3::new( 0.0, 0.0, 10.0)//  v
+				],
+				tangent_offsets: vec![
+					V3::new(0.0, 0.0, 0.0),
+					V3::new(0.0, 0.0, 0.0),
+					V3::new(0.0, 0.0, 0.0),
+					V3::new(0.0, 0.0, 0.0)
+				],
+				loop_: true
+			},
+			type_: Arc::new(PathType::default())
 		}
 	}
 	fn initial_path_bound_body_state() -> PathBoundBodyState {
@@ -259,7 +261,7 @@ pub mod paths {
 		// Update
 		let dt = 1.0;
 		let mut forces = BodyForces::default();
-		path.update_body(dt, &mut forces, &v_static, &mut state, None);
+		path.generic.update_body(dt, &mut forces, &v_static, &mut state, None);
 		// Compare
 		let ideal_new_state = PathBoundBodyState {
 			path_ref: 0,
@@ -283,7 +285,7 @@ pub mod paths {
 		let mut forces = BodyForces::default();
 		// 1
 		state.velocity = -5.0;
-		path.update_body(dt, &mut forces, &v_static, &mut state, None);
+		path.generic.update_body(dt, &mut forces, &v_static, &mut state, None);
 		// Compare
 		assert_eq!(
 			state,
@@ -300,7 +302,7 @@ pub mod paths {
 		);
 		// 2
 		state.velocity = -7.0;
-		path.update_body(dt, &mut forces, &v_static, &mut state, None);
+		path.generic.update_body(dt, &mut forces, &v_static, &mut state, None);
 		// Compare
 		assert_eq!(
 			state,
@@ -321,7 +323,7 @@ pub mod paths {
 		let path = square_loop_non_unit_edges();
 		// 0 - 1
 		assert_eq!(
-			path.get_bcurve(initial_path_bound_body_state().pos.latest_point),
+			path.generic.get_bcurve(initial_path_bound_body_state().pos.latest_point),
 			BCurve {
 				offsets: [V3::zeros(); 2],
 				knots: [
@@ -332,7 +334,7 @@ pub mod paths {
 		);
 		// 3 - 0
 		assert_eq!(
-			path.get_bcurve(initial_path_bound_body_state_past_end().pos.latest_point),
+			path.generic.get_bcurve(initial_path_bound_body_state_past_end().pos.latest_point),
 			BCurve {
 				offsets: [V3::zeros(); 2],
 				knots: [
@@ -345,24 +347,26 @@ pub mod paths {
 	#[test]
 	fn get_bcurve() {
 		let path = Path {
-			type_: Arc::new(PathType::default()),
-			ref_: 0,
-			name: "test".to_owned(),
-			knot_points: vec![
-				P3::new( 0.0, 10.0, -100.0),
-				P3::new( 0.0, 10.0,    0.0),
-				P3::new(50.0, 1.00,  100.0)
-			],
-			tangent_offsets: vec![
-				V3::new( 0.0, 0.0, 0.0),
-				V3::new(20.0, 0.0, 0.0),
-				V3::new( 0.0, 0.0, 0.0)
-			],
-			loop_: true
+			generic: GenericPath {
+				ref_: 0,
+				name: "test".to_owned(),
+				knot_points: vec![
+					P3::new( 0.0, 10.0, -100.0),
+					P3::new( 0.0, 10.0,    0.0),
+					P3::new(50.0, 1.00,  100.0)
+				],
+				tangent_offsets: vec![
+					V3::new( 0.0, 0.0, 0.0),
+					V3::new(20.0, 0.0, 0.0),
+					V3::new( 0.0, 0.0, 0.0)
+				],
+				loop_: true
+			},
+			type_: Arc::new(PathType::default())
 		};
 		// 1st bcurve
 		assert_eq!(
-			path.get_bcurve(0),
+			path.generic.get_bcurve(0),
 			BCurve {
 				knots: [
 					V3::new( 0.0, 10.0, -100.0),
@@ -376,7 +380,7 @@ pub mod paths {
 		);
 		// 2nd bcurve
 		assert_eq!(
-			path.get_bcurve(1),
+			path.generic.get_bcurve(1),
 			BCurve {
 				knots: [
 					V3::new( 0.0, 10.0,   0.0),
@@ -425,7 +429,7 @@ pub mod paths {
 		let path: Path = square_loop_non_unit_edges();
 		let mut pos: PathPosition = PathPosition::default();
 		// + 15
-		assert!(!path.step_position_by_world_units(&mut pos, 15.0, None, None).0);
+		assert!(!path.generic.step_position_by_world_units(&mut pos, 15.0, None, None).0);
 		assert_eq!(
 			pos,
 			PathPosition {
@@ -434,7 +438,7 @@ pub mod paths {
 			}
 		);
 		// - 20
-		assert!(path.step_position_by_world_units(&mut pos, -20.0, None, None).0);
+		assert!(path.generic.step_position_by_world_units(&mut pos, -20.0, None, None).0);
 		assert_eq!(
 			pos,
 			PathPosition {
@@ -443,7 +447,7 @@ pub mod paths {
 			}
 		);
 		// + 40
-		assert!(path.step_position_by_world_units(&mut pos, 40.0, None, None).0);
+		assert!(path.generic.step_position_by_world_units(&mut pos, 40.0, None, None).0);
 		assert_eq!(
 			pos,
 			PathPosition {
@@ -456,10 +460,10 @@ pub mod paths {
 	fn step_position_by_world_units_non_looping() {
 		// Setup
 		let mut path: Path = square_loop_non_unit_edges();
-		path.loop_ = false;
+		path.generic.loop_ = false;
 		let mut pos: PathPosition = PathPosition::default();// 0
 		// + 15
-		assert!(!path.step_position_by_world_units(&mut pos, 15.0, None, None).0);
+		assert!(!path.generic.step_position_by_world_units(&mut pos, 15.0, None, None).0);
 		assert_eq!(
 			pos,
 			PathPosition {
@@ -468,7 +472,7 @@ pub mod paths {
 			}
 		);
 		// + 30
-		assert!(path.step_position_by_world_units(&mut pos, 30.0, None, None).0);
+		assert!(path.generic.step_position_by_world_units(&mut pos, 30.0, None, None).0);
 		assert_eq!(
 			pos,
 			PathPosition {
@@ -477,7 +481,7 @@ pub mod paths {
 			}
 		);
 		// - 45
-		assert!(path.step_position_by_world_units(&mut pos, -45.0, None, None).0);
+		assert!(path.generic.step_position_by_world_units(&mut pos, -45.0, None, None).0);
 		assert_eq!(
 			pos,
 			PathPosition {
@@ -515,16 +519,18 @@ pub mod paths {
 		]);
 		let mut routes = HashMap::<RouteId, Route>::new();
 		let path_set = PathSet {
+			generic: GenericPathSet {
+				query_grid_scale: 0,
+				intersections,
+				routes
+			},
 			paths,
-			query_grid_scale: 0,
-			query_grid: HashMap::new(),
-			intersections,
-			routes
+			query_grid: HashMap::new()
 		};
 		// Next intersection finding
 		assert_eq!(
 			path_set.next_intersection_on_path(0, &PathPosition::new(0, 0.0), true),
-			Some((0u64, path_set.intersections.get(&0).expect("expected Intersection"), 5.0 as Float))
+			Some((0u64, path_set.generic.intersections.get(&0).expect("expected Intersection"), 5.0 as Float))
 		);
 		// TODO
 		/*assert_eq!(

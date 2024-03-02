@@ -499,25 +499,25 @@ impl VehiclePathBoundController {
 #[cfg(feature = "server")]
 impl PhysicsController for VehiclePathBoundController{
 	fn serializable(&self, _: &RigidBodySet, paths: &PathSet) -> BodyStateSerialize {
-		let path: &Path = paths.get_with_ref(&self.state.path_ref).expect("Unable to get path with path body state");
-		path.create_body_state(self.state.clone())
+		let path: &Path = paths.get_path_with_ref(&self.state.path_ref).expect("Unable to get path with path body state");
+		path.generic.create_body_state(self.state.clone())
 	}
 	fn update(&mut self, args: PhysicsUpdateArgs) -> BodyForces {
 		// Forces
 		let mut forces = BodyForces::default();
 		forces += (args.extra_forces_calculator)(V3::new(0.0, 0.0, self.state.velocity), V3::zeros());// TODO
 		// Get path
-		let path: &Path = args.paths.get_with_ref(&self.state.path_ref).unwrap();
+		let path: &Path = args.paths.get_path_with_ref(&self.state.path_ref).unwrap();
 		// User input
 		let (drive_force, brake_force): (Float, Float) = match args.latest_input {
 			Some(input) => {
 				// Power = force * velocity; force = power / velocity
 				let vel_raw = self.state.velocity;
 				let vel_corrected = if vel_raw >= 0.0 {// Make sure it cannot == 0
-					vel_raw + 1e-2
+					vel_raw + 1e-3
 				}
 				else {
-					vel_raw - 1e-2
+					vel_raw - 1e-3
 				};
 				let force_limit = self.v_static.mass * STATIONARY_DRIVE_ACC_LIMIT;// F = ma
 				let drive_force = (input.power as Float / vel_corrected).clamp(-force_limit, force_limit);
@@ -528,7 +528,7 @@ impl PhysicsController for VehiclePathBoundController{
 			},
 			None => (0.0, 0.0)
 		};
-		forces.lin += V3::new(0.0, 0.0, drive_force + brake_force);
+		forces.lin += V3::new(0.0, 0.0, drive_force + brake_force + (path.generic.sideways_gravity_force_component(&self.state.pos, &*self.v_static, args.gravity) * bool_sign(self.state.forward) as Float));
 		// Update
 		self.state.update(args.dt, &forces, &self.v_static, &args.paths);
 		//path.update_body(args.dt, &forces, &self.v_static, &mut self.state);

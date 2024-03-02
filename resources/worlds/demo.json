@@ -34,5 +34,5 @@
 	},
 	"age": 0.0,
 	"playing": false,
-	"gravity": -3
+	"gravity": -9.81
 }

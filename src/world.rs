@@ -27,7 +27,7 @@ use nalgebra::vector;
 #[derive(Serialize, Deserialize, Clone)]
 #[cfg_attr(feature = "client", derive(Resource))]
 pub struct StaticData {
-	pub map: GenericMap,
+	pub map: SendMap,
 	pub static_vehicles: HashMap<String, VehicleStatic>,// Vehicle type: VehicleStatic
 	#[cfg(feature = "debug_render_physics")]
 	pub partial_physics: PhysicsStateSend
@@ -269,7 +269,7 @@ impl World {
 		let mut vehicles: HashMap<String, Vehicle> = HashMap::new();
 		for (user, v_save) in save.vehicles.iter() {
 			let v_static: VehicleStatic = load_static_vehicle(&v_save.type_)?;
-			vehicles.insert(user.clone(), Vehicle::build(v_save, Rc::new(v_static), &mut physics_state.bodies, &mut physics_state.colliders, &mut physics_state.impulse_joints, &map.generic.path_set)?);
+			vehicles.insert(user.clone(), Vehicle::build(v_save, Rc::new(v_static), &mut physics_state.bodies, &mut physics_state.colliders, &mut physics_state.impulse_joints, &map.path_set)?);
 		}
 		// Create world
 		let mut out = Self {
@@ -296,7 +296,7 @@ impl World {
 		}
 		Ok(out)
 	}
-	pub fn new(map: &str) -> Result<Self, Box<dyn Error>> {
+	pub fn from_map_name(map: &str) -> Result<Self, Box<dyn Error>> {
 		Ok(Self {
 			map: ServerMap::from_save(load_map_metadata(map)?),
 			vehicles: HashMap::<String, Vehicle>::new(),
@@ -305,6 +305,21 @@ impl World {
 			gravity: -9.81,
 			physics_state: PhysicsState::new(-9.81)
 		})
+	}
+	pub fn new(
+		map: ServerMap,
+		vehicles: HashMap::<String, Vehicle>,
+		playing: bool,
+		gravity: Float
+	) -> Self {
+		Self {
+			map,
+			vehicles,
+			age: Duration::new(0, 0),
+			playing,
+			gravity,
+			physics_state: PhysicsState::new(gravity)
+		}
 	}
 	pub fn main_loop(&mut self, rx: mpsc::Receiver<async_messages::ToWorld>, tx: mpsc::Sender<async_messages::FromWorld>) {
 		// Init timing
@@ -363,7 +378,7 @@ impl World {
 			if self.playing {
 				// All vehicle physics controllers
 				for (_, v) in self.vehicles.iter_mut() {
-					v.update_physics(dt_f64 as Float, 1.225, &mut self.physics_state, &self.map.generic.path_set, self.gravity);
+					v.update_physics(dt_f64 as Float, 1.225, &mut self.physics_state, &self.map.path_set, self.gravity);
 				}
 				// Rapier
 				self.physics_state.step();
@@ -396,7 +411,7 @@ impl World {
 		// Get list of occupied chunks
 		let mut needed_chunks = Vec::<ChunkRef>::new();
 		for (_, v) in self.vehicles.iter() {
-			let v_body_state = v.create_serialize_state(&self.physics_state.bodies, &self.map.generic.path_set);
+			let v_body_state = v.create_serialize_state(&self.physics_state.bodies, &self.map.path_set);
 			needed_chunks.push(ChunkRef::from_world_point(v3_to_v2(&v_body_state.position.translation.vector), self.map.generic.chunk_size));
 		}
 		// Get adjacent chunks
@@ -412,7 +427,7 @@ impl World {
 		// save vehicles
 		let mut save_vehicles = HashMap::new();
 		for (user, vehicle) in self.vehicles.iter() {
-			save_vehicles.insert(user.to_owned(), vehicle.save(&self.physics_state.bodies, &self.map.generic.path_set));
+			save_vehicles.insert(user.to_owned(), vehicle.save(&self.physics_state.bodies, &self.map.path_set));
 		}
 		WorldSave {
 			map: self.map.generic.name.clone(),
@@ -426,7 +441,7 @@ impl World {
 		// save vehicles
 		let mut send_vehicles = HashMap::new();
 		for (user, vehicle) in self.vehicles.iter() {
-			send_vehicles.insert(user.to_owned(), vehicle.send(&self.physics_state.bodies, &self.map.generic.path_set));
+			send_vehicles.insert(user.to_owned(), vehicle.send(&self.physics_state.bodies, &self.map.path_set));
 		}
 		WorldSend {
 			vehicles: send_vehicles,
@@ -453,5 +468,29 @@ impl World {
 			#[cfg(feature = "debug_render_physics")]
 			partial_physics
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	#[test]
+	fn physics() {
+		// TODO
+		/*let mut generic_map = GenericMap::new("test-map", 100, 1, [0; 3]);
+		generic_map.path_set = PathSet {
+			paths: vec![
+				Path {
+
+				}// TODO
+			]
+		};
+		let map = ServerMap::from_save(SaveMap{
+			generic: (),
+			gen: (),
+			chunk_creation_rate_limit: (),
+			active_chunk_creators_limit: ()
+		});
+		let world = World::new(map, vehicles, playing, gravity)*/
 	}
 }
