@@ -39,6 +39,7 @@ local-ip-address = "0.5.6"
 dialoguer = "0.11.0"
 rand = "0.8.5"
 reqwest = {version = "0.11.22", features = ["blocking", "json"]}
+colored = "2.1.0"
 
 # Server-only
 easy-gltf = {version = "1.1.1", optional = true}

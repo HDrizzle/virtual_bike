@@ -1,12 +1,6 @@
 {
 	"generic": {
 		"name": "switzerland",
-		"path_set": {
-			"paths": {},
-			"query_grid_scale": 0,
-			"intersections": {},
-			"routes": {}
-		},
 		"chunk_size": 100,
 		"chunk_grid_size": 9,
 		"landmarks": {},
@@ -20,6 +14,14 @@
 				"lon": 9.670922
 			}
 		}
+	},
+	"path_set": {
+		"generic": {
+			"query_grid_scale": 0,
+			"intersections": {},
+			"routes": {}
+		},
+		"paths": {}
 	},
 	"chunk_creation_rate_limit": 5,
 	"active_chunk_creators_limit": 5

@@ -197,6 +197,9 @@ pub struct ChunkRef {// A deterministic reference to a chunk in the world
 }
 
 impl ChunkRef {
+	pub fn new(position: IntV2) -> Self {
+		Self {position}
+	}
 	pub fn from_world_point(p: V2, chunk_size_u: UInt) -> Self {
 		let chunk_size_f = chunk_size_u as Float;
 		let chunk_size_int = chunk_size_u as Int;
@@ -215,6 +218,13 @@ impl ChunkRef {
 	pub fn resource_dir_name(&self) -> String {
 		format!("{}_{}", self.position.0, self.position.1)
 	}
+	/// Creates a new `Self` from an entry name in a map's chunks directory
+	/// ```
+	/// use virtual_bike::prelude::{ChunkRef, IntV2};
+	/// assert_eq!(ChunkRef::from_resource_dir_name("123_456"), Ok(ChunkRef::new(IntV2(123, 456))));
+	/// assert_eq!(ChunkRef::from_resource_dir_name("123_-456"), Ok(ChunkRef::new(IntV2(123, -456))));
+	/// assert!(ChunkRef::from_resource_dir_name("123_-456abc").is_err());
+	/// ```
 	pub fn from_resource_dir_name(name: &str) -> Result<Self, String> {
 		let parts: Vec<&str> = name.split("_").collect();
 		if parts.len() != 2 {

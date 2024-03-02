@@ -461,6 +461,17 @@ impl ops::Sub<IntV2> for IntV2 {
 	}
 }
 
+impl ops::Index<usize> for IntV2 {
+	type Output = Int;
+	fn index(&self, index: usize) -> &Self::Output {
+		match index {
+			0 => &self.0,
+			1 => &self.1,
+			n => panic!("IntV2 index must be 0 or 1, not {}", n)
+		}
+	}
+}
+
 pub struct BasicTriMesh {
 	pub vertices: Vec<P3>,
 	pub indices: Vec<[u32; 3]>
@@ -497,6 +508,7 @@ impl BasicTriMesh {
 		// Done
 		Ok(())
 	}
+	/// Flattens and reverses triangles
 	pub fn flatten_and_reverse_indices(&self) -> Vec<u32> {
 		let mut out = Vec::<u32>::new();
 		for set in &self.indices {

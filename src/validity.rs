@@ -1,6 +1,7 @@
 // Use for checking whether the `resources` directory is valid
 // Only available under `server` feature
 use std::{fs, any::type_name, marker::PhantomData, collections::HashMap};
+use colored::Colorize;
 use serde_json;
 use serde::Deserialize;
 
@@ -75,13 +76,64 @@ pub enum ProblemType {
 impl ProblemType {
 	pub fn to_string(&self) -> String {
 		match self {
-			Self::Warning => "Warning".to_owned(),
-			Self::Error => "Error".to_owned()
+			Self::Warning => "Warning".bright_yellow().to_string(),
+			Self::Error => "Error".red().to_string()
 		}
 	}
 }
 
 // ---------------------------------------------------- Useful stuff ----------------------------------------------------
+
+pub struct GenericValidityTest<T, E, F> where F: AutoFix + Clone{
+	pub condition_description: String,
+	pub result: Result<T, E>,
+	pub fix_opt: Option<F>// AutoFix type
+}
+
+impl<T, E, F> GenericValidityTest<T, E, F> where E: ToString, F: AutoFix + Clone {
+	pub fn new(
+		condition_description: String,
+		result: Result<T, E>,
+		fix_opt: Option<F>
+	) -> Self {
+		Self {
+			condition_description,
+			result,
+			fix_opt
+		}
+	}
+}
+
+impl<T, E, F> ValidityTest for GenericValidityTest<T, E, F> where E: ToString, F: AutoFix + Clone {
+	type AutoFixT = F;
+	fn condition_description(&self) -> String {
+		self.condition_description.clone()
+	}
+	fn check(&self) -> Vec<ValidityTestResult<Self::AutoFixT>> {
+		vec![
+			match &self.result {
+				Ok(t) => ValidityTestResult::Ok,
+				Err(e) => ValidityTestResult::Problem{type_: ProblemType::Error, message: e.to_string(), auto_fix_opt: self.fix_opt.clone()}
+			}
+		]
+	}
+}
+
+impl<T, E> ValidityTest for Result<T, E> where T: ValidityTest, E: ToString {
+	type AutoFixT = T::AutoFixT;
+	fn condition_description(&self) -> String {
+		match &self {
+			Ok(tester) => format!("This Result::Ok(_): {}", tester.condition_description()),
+			Err(e) => "This Result<_, _> is Ok(_)".to_owned()
+		}
+	}
+	fn check(&self) -> Vec<ValidityTestResult<Self::AutoFixT>> {
+		match &self {
+			Ok(tester) => tester.check(),
+			Err(e) => vec![ValidityTestResult::Problem{type_: ProblemType::Error, message: e.to_string(), auto_fix_opt: None}]
+		}
+	}
+}
 
 pub struct ResourceExistanceChecker {
 	path: String,
@@ -235,9 +287,37 @@ fn test_ui<T: ValidityTest>(tester: T) -> bool {
 	out
 }
 
+fn vec_test_ui<T: ValidityTest>(testers: Vec<T>) -> bool {
+	let mut out = true;
+	for tester in testers {
+		if !test_ui(tester) {
+			out = false;
+		}
+	}
+	// Done
+	out
+}
+
 pub fn all_tests() {
 	// Resource dir
 	test_ui(ResourceExistanceChecker::new(resource_interface::RESOURCES_DIR.to_owned(), false));
+	// Paths
+	test_ui(ResourceExistanceChecker::new(resource_interface::PATH_TYPES_DIR.to_owned(), false));
+	for entry_res in fs::read_dir(resource_interface::PATH_TYPES_DIR).unwrap() {
+		let entry = entry_res.unwrap();
+		if entry.metadata().unwrap().is_file() {
+			let path = entry.path().to_str().expect("Could not get &str from path").to_owned();
+			test_ui(ResourceDeserializationChecker::<PathType>::new(path));
+		}
+	}
+	// Server's users file
+	test_ui(ResourceDeserializationChecker::<HashMap<String, String>>::new(resource_interface::USERS_FILE.to_owned()));
+	// Client's login file
+	test_ui(ResourceDeserializationChecker::<HashMap<String, String>>::new(resource_interface::CLIENT_LOGIN_FILE.to_owned()));
+	// Client's hardware calibration file
+	test_ui(ResourceDeserializationChecker::<client::hardware_controller::Calibration>::new(resource_interface::CALIBRATION_FILE.to_owned()));
+	// Client's settings file
+	test_ui(ResourceDeserializationChecker::<client::Settings>::new(resource_interface::CLIENT_SETTINGS_FILE.to_owned()));
 	// Vehicles
 	test_ui(ResourceExistanceChecker::new(resource_interface::VEHICLES_DIR.to_owned(), false));
 	// Maps
@@ -247,7 +327,7 @@ pub fn all_tests() {
 		if entry.metadata().unwrap().is_dir() {
 			let path = entry.path().to_str().expect("Could not get &str from path").to_owned() + "/metadata.json";
 			test_ui(ResourceDeserializationChecker::<SaveMap>::new(path.clone()));
-			test_ui(resource_interface::load_map_metadata(entry.path().file_name().expect(&format!("Couldn't get filename for map path \"{}\"", &path)).to_str().unwrap()).unwrap());
+			test_ui(resource_interface::load_map_metadata(entry.path().file_name().expect(&format!("Couldn't get filename for map path \"{}\"", &path)).to_str().unwrap()));
 			// TODO: map.generic.name == path filename
 		}
 	}
@@ -257,19 +337,14 @@ pub fn all_tests() {
 		let entry = entry_res.unwrap();
 		if entry.metadata().unwrap().is_file() {
 			let path = entry.path().to_str().expect("Could not get &str from path").to_owned();
-			test_ui(ResourceDeserializationChecker::<WorldSave>::new(path));
+			// Test world load
+			test_ui(GenericValidityTest::new(
+				format!("World at {} can be loaded", &path),
+				World::load(entry.file_name().to_str().expect("Could not get &str from path").strip_suffix(".json").expect("world filename didn't end with \".json\"")),
+				None::<()>
+			));
 		}
 	}
-	// Paths
-	test_ui(ResourceDeserializationChecker::<PathType>::new(resource_interface::PATH_TYPES_DIR.to_owned()));
-	// Server's users file
-	test_ui(ResourceDeserializationChecker::<HashMap<String, String>>::new(resource_interface::USERS_FILE.to_owned()));
-	// Client's login file
-	test_ui(ResourceDeserializationChecker::<HashMap<String, String>>::new(resource_interface::CLIENT_LOGIN_FILE.to_owned()));
-	// Client's hardware calibration file
-	test_ui(ResourceDeserializationChecker::<client::hardware_controller::Calibration>::new(resource_interface::CALIBRATION_FILE.to_owned()));
-	// Client's settings file
-	test_ui(ResourceDeserializationChecker::<client::Settings>::new(resource_interface::CLIENT_SETTINGS_FILE.to_owned()));
 }
 
 pub fn main_ui() {

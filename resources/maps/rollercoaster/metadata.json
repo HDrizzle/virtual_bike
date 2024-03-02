@@ -1,14 +1,31 @@
 {
 	"generic": {
 		"name": "rollercoaster",
-		"path_set": {
-			"paths": {
-				"0": {
-					"type_": {
-						"ref_": 0,
-						"name": "Generic path",
-						"width": 5
-					},
+		"chunk_size": 100,
+		"chunk_grid_size": 10,
+		"landmarks": {},
+		"background_color": [0, 128, 0],
+		"auto_gen_chunks": true
+	},
+	"gen": {
+		"RandomGen": {
+			"seed": 1,
+			"max_slope": 10,
+			"rand_multiplier": 0,
+			"first_sum_multiplier": 0,
+			"second_sum_multiplier": 0,
+			"elev_abs_limit": 20
+		}
+	},
+	"path_set": {
+		"generic": {
+			"query_grid_scale": 0,
+			"intersections": {},
+			"routes": {}
+		},
+		"paths": {
+			"0": {
+				"generic": {
 					"ref_": 0,
 					"name": "square",
 					"knot_points": [
@@ -75,12 +92,10 @@
 					],
 					"loop_": true
 				},
-				"1": {
-					"type_": {
-						"ref_": 0,
-						"name": "Generic path",
-						"width": 5
-					},
+				"type_": "generic_road"
+			},
+			"1": {
+				"generic": {
 					"ref_": 1,
 					"name": "square",
 					"knot_points": [
@@ -96,26 +111,9 @@
 						[0,0,-55.3]
 					],
 					"loop_": true
-				}
-			},
-			"query_grid_scale": 0,
-			"intersections": {},
-			"routes": {}
-		},
-		"chunk_size": 100,
-		"chunk_grid_size": 10,
-		"landmarks": {},
-		"background_color": [0, 128, 0],
-		"auto_gen_chunks": true
-	},
-	"gen": {
-		"RandomGen": {
-			"seed": 1,
-			"max_slope": 10,
-			"rand_multiplier": 0,
-			"first_sum_multiplier": 0,
-			"second_sum_multiplier": 0,
-			"elev_abs_limit": 20
+				},
+				"type_": "generic_road"
+			}
 		}
 	},
 	"chunk_creation_rate_limit": 20,

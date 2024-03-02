@@ -259,17 +259,17 @@ pub struct World {// Main game simulation
 
 #[cfg(feature = "server")]
 impl World {
-	pub fn load(name: &str) -> Result<Self, Box<dyn Error>> {
+	pub fn load(name: &str) -> Result<Self, String> {
 		// name: name of world file
-		let save = load_world(name)?;
-		let map: ServerMap = ServerMap::from_save(load_map_metadata(&save.map).expect(&format!("Could not load map for world \"{name}\"")));
+		let save = to_string_err(load_world(name))?;
+		let map: ServerMap = ServerMap::from_save(to_string_err_with_message(load_map_metadata(&save.map), &format!("Could not load SaveMap for world \"{name}\""))?)?;
 		// Create blank physics state
 		let mut physics_state: PhysicsState = PhysicsState::new(save.gravity);
 		// Load vehicles
 		let mut vehicles: HashMap<String, Vehicle> = HashMap::new();
 		for (user, v_save) in save.vehicles.iter() {
-			let v_static: VehicleStatic = load_static_vehicle(&v_save.type_)?;
-			vehicles.insert(user.clone(), Vehicle::build(v_save, Rc::new(v_static), &mut physics_state.bodies, &mut physics_state.colliders, &mut physics_state.impulse_joints, &map.path_set)?);
+			let v_static: VehicleStatic = to_string_err(load_static_vehicle(&v_save.type_))?;
+			vehicles.insert(user.clone(), to_string_err(Vehicle::build(v_save, Rc::new(v_static), &mut physics_state.bodies, &mut physics_state.colliders, &mut physics_state.impulse_joints, &map.path_set))?);
 		}
 		// Create world
 		let mut out = Self {
@@ -285,7 +285,7 @@ impl World {
 		// Load all necessary chunks
 		out.load_unload_chunks();
 		// debug
-		{
+		/*{
 			let serialized = bincode::serialize(&out.send(60.0)).unwrap();
 			println!("Length of serialized WorldSend: {}", serialized.len());// 496
 		}
@@ -293,12 +293,12 @@ impl World {
 			let serialized = bincode::serialize(&out.build_static_data()).unwrap();
 			println!("Length of serialized StaticData: {}", serialized.len());// 15798550 :( renet doesn't like
 			//out.build_static_data().debug_print_sizes();
-		}
+		}*/
 		Ok(out)
 	}
-	pub fn from_map_name(map: &str) -> Result<Self, Box<dyn Error>> {
+	pub fn from_map_name(map: &str) -> Result<Self, String> {
 		Ok(Self {
-			map: ServerMap::from_save(load_map_metadata(map)?),
+			map: ServerMap::from_save(to_string_err(load_map_metadata(map))?)?,
 			vehicles: HashMap::<String, Vehicle>::new(),
 			age: Duration::new(0, 0),
 			playing: false,

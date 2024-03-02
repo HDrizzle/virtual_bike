@@ -260,31 +260,70 @@ impl validity::ValidityTest for SaveMap {
 		let mut abort = false;
 		// Existance of chunks folder
 		let chunks_dir = format!("{}{}/chunks", resource_interface::MAPS_DIR, &self.generic.name);
-		if fs::read_dir(&chunks_dir).is_err() {
-			abort = true;
-			out.push(ValidityTestResult::Problem {
-				type_: validity::ProblemType::Error,
-				message: format!("Chunks directory (\"{}\") doesn't exist", chunks_dir),
-				auto_fix_opt: Some(
-					SaveMapAutoFix::new(
-						&self.generic.name,
-						self.generic.chunk_size,
-						SaveMapAutoFixEnum::CreateChunksFolder(validity::DirectoryExistanceAutoFix::new(chunks_dir))
+		match fs::read_dir(&chunks_dir) {
+			Ok(dir_reader) => {// All folders in chunks dir have valid names and are on the chunk size grid
+				for entry_res in dir_reader{
+					let entry = entry_res.unwrap();
+					let entry_path_binding = entry.path();
+					let entry_path_str: &str = entry_path_binding.to_str().expect("couldn't convert from os string");
+					if entry.metadata().unwrap().is_dir() {
+						let entry_file_binding = entry.file_name();
+						let entry_dir_name: &str = entry_file_binding.to_str().expect("couldn't convert from os string");
+						match ChunkRef::from_resource_dir_name(entry_dir_name) {
+							Ok(chunk_ref) => {
+								// Check that the chunk ref is on the chunk size grid
+								let mut on_grid = true;
+								for ci in 0..2_usize {
+									if chunk_ref.position[ci] % (self.generic.chunk_size as Int) != 0 {
+										on_grid = false;
+									}
+								}
+								if on_grid {
+									// Check that the chunk's reference is the same as the one derived from the name of it's directory
+									// TODO
+								}
+								else {
+									out.push(ValidityTestResult::problem(
+										validity::ProblemType::Error,
+										format!("The chunk reference ({:?}) corresponding to \"{}\" does not lay on the chunk size grid ({})", &chunk_ref, entry_path_str, self.generic.chunk_size),
+										None
+									));
+								}
+							},
+							Err(e) => out.push(ValidityTestResult::problem(
+								validity::ProblemType::Error,
+								format!("Could not decode chunk position from entry \"{}\": {}", entry_dir_name, e),
+								None
+							))
+						}
+					}
+					else {
+						out.push(ValidityTestResult::problem(
+							validity::ProblemType::Warning,
+							format!("There is a non-directory entry \"{}\" in a chunks folder", entry_path_str),
+							None
+						))
+					}
+				}
+			},
+			Err(e) => {
+				abort = true;
+				out.push(ValidityTestResult::Problem {
+					type_: validity::ProblemType::Error,
+					message: format!("Chunks directory (\"{}\") doesn't exist", chunks_dir),
+					auto_fix_opt: Some(
+						SaveMapAutoFix::new(
+							&self.generic.name,
+							self.generic.chunk_size,
+							SaveMapAutoFixEnum::CreateChunksFolder(validity::DirectoryExistanceAutoFix::new(chunks_dir))
+						)
 					)
-				)
-			});
-		}
-		// Generic chunk
-		let generic_chunk_dir = format!("{}{}/generic_chunk", resource_interface::MAPS_DIR, &self.generic.name);
-		if fs::read_dir(&generic_chunk_dir).is_ok() {
-			out.push(self.generic.validate_chunk(&(generic_chunk_dir + "/data.json")));
-		}
-		if abort {
-			return out;
+				});
+			}
 		}
 		// Stage 2
-		// All folders in chunks dir have valid names
-		// TODO
+		
+		
 		// Done
 		out
 	}
@@ -363,13 +402,13 @@ pub struct ServerMap {
 
 #[cfg(feature = "server")]
 impl ServerMap {
-	pub fn from_save(save: SaveMap) -> Self {
-		Self {
+	pub fn from_save(save: SaveMap) -> Result<Self, String> {
+		Ok(Self {
 			generic: save.generic,
-			path_set: PathSet::from_save(save.path_set).unwrap(),
+			path_set: PathSet::from_save(save.path_set)?,
 			gen: save.gen,
 			chunk_creator: ChunkCreationManager::new(save.chunk_creation_rate_limit, save.active_chunk_creators_limit)
-		}
+		})
 	}
 	pub fn new(name: &str, chunk_size: UInt, chunk_grid_size: UInt, gen: MapGenerator, background_color: [u8; 3]) -> Self {
 		Self {
