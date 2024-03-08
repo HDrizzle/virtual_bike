@@ -21,9 +21,6 @@ def get_elev(x, y) -> float:
 	return ((x - half_size)**2 + (y - half_size)**2)**0.5 * bank_slope
 	if y < size/2:# Inside track section
 		dist = abs(y - size/4)
-		# TODO
-		#if not (size*0.25 < x < size*0.75):
-		#	dist = 
 		return elev_distance_from_track_center(dist)
 	else:
 		return 0

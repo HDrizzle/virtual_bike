@@ -1,4 +1,4 @@
-// World simulation
+//! World simulation
 
 use std::{thread, error::Error, sync::mpsc, rc::Rc, collections::HashMap, time::{Duration, Instant}, net::IpAddr};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
@@ -40,7 +40,7 @@ impl StaticData {
 		// Debug feature
 		self.partial_physics.init_bevy_rapier_context(context);// very important that this is the first thing that acts on the rapier context, NOT the map
 		// Map
-		self.map.init_rapier(&mut context.bodies);
+		self.map.generic.init_rapier(&mut context.bodies);
 	}
 	#[cfg(feature = "client")]
 	pub fn vehicle_models_to_load(&self, server_addr: IpAddr) -> Vec<String> {
@@ -359,7 +359,7 @@ impl World {
 							async_messages::ToWorld::RecoverVehicleFromFlip(auth) => {
 								match self.vehicles.get_mut(&auth.name) {
 									Some(v) => v.recover_from_flip(&mut self.physics_state),
-									None => {}// TODO
+									None => {}
 								}
 							}
 						}

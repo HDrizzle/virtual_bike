@@ -1,8 +1,7 @@
-/* Defines a vehicle in the game
-Potentially usefull https://www.sheldonbrown.com/rinard/aero/formulas.html
-Any vehicle can be in one of two states: normal physics and path-bound. Normal physics means it will simply be controlled by the physics engine (Rapier 3D).
-when path-bound it will be controlled by the specific Path it is bound to. it's velocity will be a single scalar value whose sign indicates which direction it is travelling on the path wrt itself.
-*/
+//! Defines a vehicle in the game
+//! Potentially usefull https://www.sheldonbrown.com/rinard/aero/formulas.html
+//! Any vehicle can be in one of two states: normal physics and path-bound. Normal physics means it will simply be controlled by the physics engine (Rapier 3D).
+//! when path-bound it will be controlled by the specific Path it is bound to. it's velocity will be a single scalar value whose sign indicates which direction it is travelling on the path wrt itself.
 
 use std::{error::Error, rc::Rc, ops::AddAssign, io::Write, net::IpAddr};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
@@ -360,19 +359,23 @@ impl Vehicle {
 pub struct BodyStateSerialize {// This is saved/sent over the network to the client. It will NOT be used inside the server game logic.
 	pub position: Iso,
 	pub lin_vel: V3,
+	pub ang_vel: V3,
 	pub path_bound_opt: Option<PathBoundBodyState>
 }
 
 impl BodyStateSerialize {
 	#[cfg(any(feature = "server", feature = "debug_render_physics"))]
 	pub fn init_rapier_body(&self, body: &mut RigidBody) {
-		body.set_position(self.position, true);// TODO: velocity
+		body.set_position(self.position, true);
+		body.set_linvel(self.lin_vel, true);
+		body.set_angvel(self.ang_vel, true);
 	}
 	#[cfg(feature = "server")]
 	pub fn from_rapier_body(body: &RigidBody, path_bound_opt: Option<PathBoundBodyState>) -> Self {
 		Self {
 			position: *body.position(),
 			lin_vel: *body.linvel(),
+			ang_vel: *body.angvel(),
 			path_bound_opt
 		}
 	}
@@ -563,6 +566,6 @@ impl AddAssign for BodyForces {
 		// Linear
 		self.lin += rhs.lin;
 		// Angular
-		self.ang += rhs.ang;// TODO: I'm pretty sure this is correct for summing torques, but not certain
+		self.ang += rhs.ang;
 	}
 }

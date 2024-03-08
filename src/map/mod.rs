@@ -1,4 +1,4 @@
-// Map main module file
+//! Map main module file
 
 use std::{collections::HashMap, mem, thread, sync::{Arc, Mutex}, time::{Instant, Duration}, ops::Index, net::IpAddr};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
@@ -36,6 +36,8 @@ use rapier3d::prelude::*;
 /*#[cfg_attr(feature = "frontend", derive(Resource))]
 struct_subset!(Map, MapSend, name, loaded_chunks, path_set, chunk_size, chunkgrid_size, landmarks, background_color, auto_gen_chunks, body_handle_opt);// Simple for now*/
 
+/// Generic map struct which is Serialize/Deserialize-able and also is used during runtime, contains most of the map functionality
+/// This struct can't have things such as handles for async tasks to create chunks since those can't be serialized / deserialized
 #[derive(Serialize, Deserialize, Clone)]
 #[cfg_attr(feature = "frontend", derive(Resource))]
 pub struct GenericMap {// Serialize, Deserialize, Clone, used by client AND server
@@ -238,6 +240,7 @@ impl SendMap {
 	}
 }
 
+/// Serialize/Deserialize-able struct which is loaded from and saved to the disk
 #[cfg(feature = "server")]
 #[derive(Serialize, Deserialize)]
 pub struct SaveMap {
@@ -392,6 +395,7 @@ impl SaveMapAutoFixEnum {
 	}
 }
 
+/// Map struct used by the server, has non-Serialize/Deserialize-able fields
 #[cfg(feature = "server")]
 pub struct ServerMap {
 	pub generic: GenericMap,
@@ -402,6 +406,7 @@ pub struct ServerMap {
 
 #[cfg(feature = "server")]
 impl ServerMap {
+	/// Creates a new `Self` from a save map. It will return an error if the path set cannot be created from save.
 	pub fn from_save(save: SaveMap) -> Result<Self, String> {
 		Ok(Self {
 			generic: save.generic,

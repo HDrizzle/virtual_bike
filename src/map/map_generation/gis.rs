@@ -1,5 +1,5 @@
-// For generating elevation meshes from real-world data
-// TODO: use https://www.opentopodata.org/datasets/aster
+//! For generating elevation meshes from real-world data
+//! Currently uses https://www.opentopodata.org/datasets/aster
 // Something interesting: https://e4ftl01.cr.usgs.gov/
 use std::{f64::consts::PI, default::Default};
 use serde::{Serialize, Deserialize};

@@ -1,11 +1,10 @@
-/* Added 2023-11-6
-Paths will represent stuff like roads and trails. Each path wil be defined by a cubic bezier spline.
-
-This uses bezier splines (wiki: https://en.wikipedia.org/wiki/Composite_B%C3%A9zier_curve, cool video: https://youtu.be/jvPPXbo87ds?si=iO_3PqdXF1xfLaTZ&t=874), with the tangent points mirrored
-Technically there are two tangent points for each knot point on a spline, but the tangent points are mirrored so only 1 per knot point is needed
-
-There are `Route`s which represent a loop and can use multiple paths/parts of paths. A `Path` is a series of cubic bezier curves (`BCurve`).
-*/
+//! Added 2023-11-6
+//! Paths will represent stuff like roads and trails. Each path wil be defined by a cubic bezier spline.
+//! 
+//! This uses bezier splines (wiki: https://en.wikipedia.org/wiki/Composite_B%C3%A9zier_curve, cool video: https://youtu.be/jvPPXbo87ds?si=iO_3PqdXF1xfLaTZ&t=874), with the tangent points mirrored
+//! Technically there are two tangent points for each knot point on a spline, but the tangent points are mirrored so only 1 per knot point is needed
+//! 
+//! There are `Route`s which represent a loop and can use multiple paths/parts of paths. A `Path` is a series of cubic bezier curves (`BCurve`).
 
 use std::{collections::HashMap, sync::Arc, f32::consts::PI};
 use bevy::math;
@@ -86,7 +85,7 @@ impl BCurve {
 	
 			let v0 = self.sample_translation(t0);
 			let v1 = self.sample_translation(t1);
-			length += v3_dist(v0, v1);
+			length += (v1 - v0).magnitude();
 		}
 	
 		length
@@ -137,8 +136,11 @@ pub type PathTypeRef = String;
 /// Defines information about any paths of this path type
 #[derive(Serialize, Deserialize, Clone)]
 pub struct PathType {
+	/// Reference to this path type
 	ref_: PathTypeRef,
-	name: String,// Non-identifying, example usage: "Dirt path", "Road", or "Highway"
+	/// Non-identifying, example usage: "Dirt path", "Road", or "Highway"
+	name: String,
+	/// Width of path
 	width: Float
 }
 
@@ -154,44 +156,22 @@ impl Default for PathType {
 
 pub type PathRef = u64;
 
-#[derive(Serialize, Deserialize, Clone)]
-pub struct Path {
-	pub generic: GenericPath,
-	pub type_: Arc<PathType>
-}
-
-impl Path {
-	pub fn from_save(save: SavePath, type_: Arc<PathType>) -> Self {
-		assert_eq!(save.type_, type_.ref_);
-		Self {
-			generic: save.generic,
-			type_
-		}
-	}
-	#[cfg(feature = "client")]
-	pub fn init_bevy(&self, commands: &mut Commands, meshes:  &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>, asset_server: &AssetServer) {
-		self.generic.init_bevy(&self.type_, commands, meshes, materials, asset_server)
-	}
-	pub fn save(&self) -> SavePath {
-		SavePath {
-			generic: self.generic.clone(),
-			type_: self.type_.ref_.clone()
-		}
-	}
-}
-
+/// Generic path is Serialize/Deserialize-able and used during runtime, has most of the functionality.
+/// Has data which representes a series of cubic beier curves.
 #[derive(Serialize, Deserialize, Clone)]
 pub struct GenericPath {
-	pub ref_: PathRef,
-	pub name: String,// Non-identifying, Example usage: road names
-	pub knot_points: Vec<P3>,// The spline must pass through these
-	pub tangent_offsets: Vec<V3>,// wrt each knot point
+	/// Non-identifying, Example usage: road names
+	pub name: String,
+	/// The spline must pass through these points
+	pub knot_points: Vec<P3>,
+	/// wrt each knot point
+	pub tangent_offsets: Vec<V3>,
+	/// Whether the end of this path is meant to meet up with the beginning
 	pub loop_: bool
 }
 
 impl GenericPath {
 	pub fn create_body_state(&self, path_body_state: PathBoundBodyState) -> BodyStateSerialize {
-		assert_eq!(path_body_state.path_ref, self.ref_);
 		let bcurve: BCurve = self.get_bcurve(path_body_state.pos.latest_point);
 		let mut sample: BCurveSample = bcurve.sample(path_body_state.pos.t);
 		if !path_body_state.forward {// If backwards, reverse orientation
@@ -203,6 +183,7 @@ impl GenericPath {
 		BodyStateSerialize {
 			position: sample.pos,
 			lin_vel,
+			ang_vel: V3::zeros(),// TODO
 			path_bound_opt: Some(path_body_state)
 		}
 	}
@@ -482,6 +463,34 @@ impl GenericPath {
 	}
 }
 
+/// This is not loaded/saved but it implements Serialize / Deserialize so it can be sent over to the client
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Path {
+	pub generic: GenericPath,
+	pub type_: Arc<PathType>
+}
+
+impl Path {
+	pub fn from_save(save: SavePath, type_: Arc<PathType>) -> Self {
+		assert_eq!(save.type_, type_.ref_);
+		Self {
+			generic: save.generic,
+			type_
+		}
+	}
+	#[cfg(feature = "client")]
+	pub fn init_bevy(&self, commands: &mut Commands, meshes:  &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>, asset_server: &AssetServer) {
+		self.generic.init_bevy(&self.type_, commands, meshes, materials, asset_server)
+	}
+	pub fn save(&self) -> SavePath {
+		SavePath {
+			generic: self.generic.clone(),
+			type_: self.type_.ref_.clone()
+		}
+	}
+}
+
+/// Loaded / saved, this struct is different from `Path` because this only has a reference to it's type (string representing name of resource JSON file) and `Path` has an Arc of the actual data.
 #[derive(Serialize, Deserialize, Clone)]
 pub struct SavePath {
 	pub generic: GenericPath,

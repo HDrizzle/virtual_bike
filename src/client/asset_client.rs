@@ -1,4 +1,4 @@
-// For loading assets/big files from the server's HTTP asset server
+//! For loading assets/big files from the server's HTTP asset server
 
 use std::{sync::{Arc, Mutex}, time::{Instant, Duration}, net::SocketAddr, thread, mem};
 use bevy::{prelude::*, render::settings};
@@ -9,7 +9,7 @@ use reqwest;
 use crate::prelude::*;
 
 #[derive(Resource)]
-pub struct AssetLoaderManager {// TODO: this can replace the chunk loader thingy
+pub struct AssetLoaderManager {
 	loaders: Vec<HttpAssetLoader>,
 	retry_time: Duration,
 	server_addr: SocketAddr

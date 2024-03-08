@@ -139,7 +139,7 @@ impl eframe::App for App {
 					renet_client.update(dt);
     				renet_transport.update(dt, renet_client).unwrap();
 					// Ui
-					ui.label("Waiting for server...");// TODO: loading wheel
+					ui.label("Waiting for server...");
 					// Handle messages
 					if !renet_client.is_disconnected() {
 						while let Some(message) = renet_client.receive_message(DefaultChannel::ReliableOrdered) {

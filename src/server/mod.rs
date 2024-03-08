@@ -1,5 +1,5 @@
-// Created 2023-7-29, some things copied from `web_server`
-// see README on https://github.com/lucaspoffo/renet
+//! Created 2023-7-29
+//! see README on https://github.com/lucaspoffo/renet
 use std::{net::{SocketAddr, UdpSocket, IpAddr, Ipv4Addr}, time::{SystemTime, Duration, Instant, UNIX_EPOCH}, thread, sync::{mpsc, Arc}, mem};
 use renet::{RenetServer, ServerEvent, ConnectionConfig, SendType, ChannelConfig, transport::{ServerAuthentication, ServerConfig}, transport::NetcodeServerTransport, DefaultChannel};
 use serde::{Serialize, Deserialize};
@@ -7,11 +7,15 @@ use bincode;
 use local_ip_address::local_ip;
 #[cfg(feature = "server")]
 use rouille;// Simple HTTP Server
-//use rocket::{State, Rocket};
-//use futures::executor::block_on;
+use bytes::Bytes;
 
 use crate::{prelude::*, world::async_messages, resource_interface};
 
+// mods
+pub mod message_log;
+use message_log::{Message, MessageEnum, Log};
+
+// CONSTS
 pub const BIG_DATA_SEND_UNRELIABLE: ChannelConfig = ChannelConfig {
 	channel_id: 3,// first 3 are the unreliable and reliable(un)ordered channels
     max_memory_usage_bytes: 500_000_000,// Arbitrary
@@ -27,14 +31,16 @@ pub enum RenetRequest {// All possible requests
 	NewUser {
 		name: String,
 		psswd: String
-	}
+	},
+	Chat(ClientAuth, String)
 }
 
 #[derive(Serialize, Deserialize)]
 pub enum RenetResponse {// All possible responses
 	InitState(StaticData),
 	WorldState(WorldSend),
-	Err(String)
+	Err(String),
+	Message(Message)
 }
 
 // Not actually serialized and sent to the server, just a way to represent asset HTTP requests
@@ -77,7 +83,8 @@ struct NetworkRuntimeManager {
 	pub server: RenetServer,
 	pub addr: SocketAddr,
 	pub transport: NetcodeServerTransport,
-	pub static_data: StaticData
+	pub static_data: StaticData,
+	pub message_log: Log
 }
 
 #[cfg(feature = "server")]
@@ -113,7 +120,17 @@ impl NetworkRuntimeManager {
 			// Receive messages from server
 			for client_id in self.server.clients_id().iter() {
 				// The enum DefaultChannel describe the channels used by the default configuration
+				let mut messages = Vec::<Bytes>::new();
 				while let Some(message) = self.server.receive_message(*client_id, DefaultChannel::ReliableOrdered) {
+					messages.push(message);
+				}
+				while let Some(message) = self.server.receive_message(*client_id, DefaultChannel::ReliableUnordered) {
+					messages.push(message);
+				}
+				while let Some(message) = self.server.receive_message(*client_id, DefaultChannel::Unreliable) {
+					messages.push(message);
+				}
+				for message in messages {
 					let decoded_result: Result<RenetRequest, Box<bincode::ErrorKind>> = bincode::deserialize(&message[..]);
 					match decoded_result {
 						Ok(decoded) => match decoded {
@@ -121,35 +138,10 @@ impl NetworkRuntimeManager {
 								println!("Received init request");
 								self.server.send_message(*client_id, DefaultChannel::ReliableOrdered, bincode::serialize(&RenetResponse::InitState(self.static_data.clone())).expect("Unable to serialize static data with bincode"));
 							},
-							/*RenetRequest::VehicleRawGltfData(name) => {
-								println!("Recieved vehicle model request for: {}", &name);
-								let load_result: Result<Vec<u8>, String> = resource_interface::load_static_vehicle_gltf(&name);
-								self.server.send_message(*client_id, BIG_DATA_SEND_UNRELIABLE.channel_id, bincode::serialize(&match load_result {
-									Ok(data) => RenetResponse::VehicleRawGltfData(VehicleStaticModel::new(name.clone(), data)),
-									Err(e) => RenetResponse::Err(e)
-								}).expect("Unable to serialize vehicle raw GLTF file data with bincode"));
-							},*/
 							RenetRequest::ClientUpdate(update) => {
 								// TODO: authenticate client
 								tx.send(async_messages::ToWorld::ClientUpdate(update)).expect("Unable to send client update to world");
 							},
-							/*RenetRequest::Chunk{chunk_ref} => {
-								//println!("Recieved chunk request: {:?}", &chunk_ref);
-								//self.server.send_message(*client_id, BIG_DATA_SEND_UNRELIABLE.channel_id, bincode::serialize(&Response::Err("Test error sent over BIG_DATA_SEND_UNRELIABLE".to_owned())).unwrap());
-								match Chunk::load(&chunk_ref, &self.static_data.map.name) {
-									Ok(mut chunk) => {
-										//chunk.set_texture_opt(with_texture, &self.static_data.map.name).unwrap();
-										let res = RenetResponse::Chunk(chunk);
-										//println!("Sending chunk: {:?}", &chunk_ref);
-										self.server.send_message(*client_id, BIG_DATA_SEND_UNRELIABLE.channel_id, bincode::serialize(&res).expect("Unable to serialize chunk with bincode"));
-									},
-									Err(e) => {
-										println!("Error loading chunk {:?}: {:?}", &chunk_ref, e);
-										tx.send(async_messages::ToWorld::CreateChunk(chunk_ref)).expect("Unable to send chunk creation request to world");
-										//Response::Err(format!("Error loading chunk: {}", e.to_string()))
-									}
-								}
-							},*/
 							RenetRequest::TogglePlaying => {
 								// TODO: authenticate client
 								tx.send(async_messages::ToWorld::TogglePlaying).expect("Unable to send client update to world");
@@ -161,6 +153,10 @@ impl NetworkRuntimeManager {
 							RenetRequest::NewUser{name, psswd} => {
 								todo!();// TODO
 							}
+							RenetRequest::Chat(auth, chat) => {
+								// TODO: authenticate client
+								self.new_message(MessageEnum::UserChat{name: auth.name, chat});
+							}
 						},
 						Err(e) => {
 							let err_string = format!("Error decoding request with bincode: {}", e.to_string());
@@ -171,18 +167,19 @@ impl NetworkRuntimeManager {
 			}
 			// Check for client connections/disconnections, TODO more usefull
 			while let Some(event) = self.server.get_event() {
-				match event {
-					ServerEvent::ClientConnected { client_id } => {
-						println!("Client {client_id} connected");
-					}
-					ServerEvent::ClientDisconnected { client_id, reason } => {
-						println!("Client {client_id} disconnected: {reason}");
-					}
-				}
+				self.new_message(match event {
+					ServerEvent::ClientConnected{client_id} => MessageEnum::ClientConnected(client_id.to_string()),// TODO: client name
+					ServerEvent::ClientDisconnected{client_id, reason} => MessageEnum::ClientDisconnected(client_id.to_string(), reason.to_string())// TODO: client name
+				});
 			}
 			// Send packets to clients
 			self.transport.send_packets(&mut self.server);
 		}
+	}
+	fn new_message(&mut self, msg_enum: MessageEnum) {
+		let msg = Message::new(msg_enum);
+		self.message_log.add(msg.clone());
+		self.server.broadcast_message(DefaultChannel::ReliableOrdered, bincode::serialize(&RenetResponse::Message(msg)).unwrap());
 	}
 }
 
@@ -230,7 +227,8 @@ impl WorldServer {
 				server,
 				addr,
 				transport,
-				static_data
+				static_data,
+				message_log: Log::new()
 			}),
 			asset_server_addr: SocketAddr::new(ip_addr, renet_port + 1)
 			//asset_server_thread_handle
@@ -363,14 +361,3 @@ impl AssetServer {
 		}
 	}
 }
-
-/*
-#[get("/chunks/<id>")]
-fn get_chunk(state: &State<HttpServerStaticState>, id: String) -> String {
-	format!("Request for chunk: \"{}\"", id)
-}
-
-#[get("/")]
-fn get_base() -> String {
-	format!("{} HTTP Server", APP_NAME)
-}*/

@@ -1,5 +1,5 @@
-// Use for checking whether the `resources` directory is valid
-// Only available under `server` feature
+//! Use for checking whether the `resources` directory is valid
+//! Only available under `server` feature
 use std::{fs, any::type_name, marker::PhantomData, collections::HashMap};
 use colored::Colorize;
 use serde_json;

@@ -1,7 +1,7 @@
-/* At 2023-11-21 I moved all currently existing bevy-based code into mod 'play'
-This module contains the bevy-based module `play` and sign-in screen logic using egui and eframe
-Template for using `eframe` copied from https://github.com/appcove/egui.info/blob/master/examples/egui-101-basic/src/main.rsc
-*/
+//! At 2023-11-21 I moved all currently existing bevy-based code into mod 'play'
+//! This module contains the bevy-based module `play` and sign-in screen logic using egui and eframe
+//! Template for using `eframe` copied from https://github.com/appcove/egui.info/blob/master/examples/egui-101-basic/src/main.rsc
+
 use std::{net, time::SystemTime};
 use bevy::ecs::system::Resource;
 use bevy_renet::renet::{RenetClient, ConnectionConfig, transport::{NetcodeClientTransport, ClientAuthentication}};

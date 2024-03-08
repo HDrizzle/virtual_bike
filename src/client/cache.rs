@@ -1,6 +1,6 @@
-/* For dealing with cached assets for the client
-Caches corresponding to each server will be stored in CACHE_DIR/<IP addr>:<port #>/
-*/
+//! For dealing with cached assets for the client
+//! Caches corresponding to each server will be stored in CACHE_DIR/<IP addr>:<port #>/
+
 pub const CACHE_DIR: &str = "assets/client_cache/";
 #[deprecated]
 const VEHICLE_MODEL_FILE_NAME: &str = "model.glb";

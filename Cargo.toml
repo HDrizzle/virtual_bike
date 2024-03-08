@@ -40,25 +40,17 @@ dialoguer = "0.11.0"
 rand = "0.8.5"
 reqwest = {version = "0.11.22", features = ["blocking", "json"]}
 colored = "2.1.0"
+bytes = "1.4.0"
 
 # Server-only
 easy-gltf = {version = "1.1.1", optional = true}
 rouille = {version = "3.6.2", optional = true}
 
 # Client-only
-#serialport = {version = "4.2.1", optional = true}
-#bevy = {version = "0.11.0", features = [], optional = true}# 2023-8-19: changed from latest (0.11.0) to 0.9 which is what the latest version of bevy-inspector-egui-rapier uses
-#bevy_rapier3d = {version = "0.22.0", features = ["debug-render"], optional = true}
-#bevy-inspector-egui = {version = "0.20.0", optional = true}# was 0.19.0, changed to 0.20.0 on 2023-10-12 TODO: change to 0.21.0 because that is the latest version as of 2023-11-21 and it uses the same egui version (^0.23.0) as eframe-0.23.0
-#bevy-inspector-egui-rapier = {version = "0.9.0", features = ["rapier3d"], optional = true}
-#bevy_renet = {version = "0.0.9", optional = true}# bevy compatibility table: https://crates.io/crates/bevy_renet
-#image = {version = "^0.24", optional = true}
-#eframe = {version = "0.23.0", optional = true}
-
 # 2023-12-2: Upgrading to bevy-^0.12
 serialport = {version = "4.2.1", optional = true}
 bevy = {version = "^0.12", optional = true}# 2023-8-19: changed from latest (0.11.0) to 0.9 which is what the latest version of bevy-inspector-egui-rapier uses
-bevy-inspector-egui = {version = "0.21.0", optional = true}# was 0.19.0, changed to 0.20.0 on 2023-10-12 TODO: change to 0.21.0 because that is the latest version as of 2023-11-21 and it uses the same egui version (^0.23.0) as eframe-0.23.0
+bevy-inspector-egui = {version = "0.21.0", optional = true}
 bevy_renet = {version = "0.0.10", optional = true}# bevy compatibility table: https://crates.io/crates/bevy_renet
 image = {version = "^0.24", optional = true}
 eframe = {version = "0.23.0", optional = true}

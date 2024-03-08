@@ -1,40 +1,6 @@
-/*
-Stationary bike-controlled video game / training program
-Created by Hadrian Ward, 2023-6-8
+//! Stationary bike-controlled video game / training program
+//! Created by Hadrian Ward, 2023-6-8
 
-2023-7-29: Major design change: Not using the web at all. Instead using bevy, and renet to send data back and forth
-	The `frontend` feature is for anything only used by the client GUI and `backend` is only for the server/world simulation
-
-2023-9-21: Just to clear things up, when the client connects to the game server, it is sent a bincode::serialize()ed instance of world::StaticData.
-	After that only WorldSend is sent to the client as often as possible. Major change: A partial copy of the server's physics state will be sent upon initial
-	connection (world::PhysicsStateSend) which means that RigidBodyHandles can be sent with body state information attached (world::BodyStates), and
-	they will work with the client's rapier context (2023-12-9: All of this will be behind the `debug_render_physics` feature)
-
-2023-9-23: The previous change will now be behind the `#[cfg(feature = "debug_render_physics")]` feature
-
-2023-9-29: I'm bored and I have decided to implement a new feature: Chunks, like in Minecraft. This allows the game world to be gigantic,
-	but not use too much memory in either the client or server.
-
-2023-10-7: There is a problem. The chunk system is incompatible with sending all of the body handles and positions over, as the server's loaded chunks
-	may be different from the client's. Solution: have the "debug_render_physics" feature only send the states of vehicles, wheel mounts and wheels.
-
-2023-11-3: changed tachometer time units to microseconds because I am now using an optical sensor with the trainer flywheel which
-	is really fast and millisecs are just not precise enough
-
-2023-11-6: I have temporarily given up on world gen, so I have created the new module: crate::map::path
-
-2023-11-21: Major design change for the client: due to the difficulty of having different "states" in the bevy app requiring only certain systems to be used,
-	Bevy will now only be used while actually playing the game. A plain egui app using eframe will be used for the login screen.
-
-2023-11-25: Started work on generic chunks, meaning that a map can be configured so that newly explored chunks will be be copied from a template and not saved,
-	this will save disk space for, for example, flat or repeating terrain.
-
-2023-12-2: I will attempt to upgrade to the latest version of Bevy (bevy-^0.12) as well as everything that uses it.
-
-2023-12-9: I decided to not use rapier in the client except when `debug_render_physics` is enabled
-
-2023-2-3: Renet doesn't handle very large pieces of data well, so I will now use a simple HTTP server to serve 3D assets and other such chunky files
-*/
 #![allow(warnings)]// TODO: remove when I have a lot of free-time
 use std::{fmt, env, ops, error::Error, collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, time::{SystemTime, UNIX_EPOCH}, fs, path, net::IpAddr};
 #[cfg(any(feature = "server", feature = "debug_render_physics"))]
@@ -50,8 +16,6 @@ use rand::Rng;
 #[cfg(feature = "client")]
 use bevy::prelude::*;
 use approx::{AbsDiffEq, RelativeEq};
-
-//#[macro_use] extern crate rocket;
 
 // Modules
 mod world;
@@ -136,10 +100,6 @@ pub mod prelude {
 	pub fn opoint_to_matrix(point: OPoint<Float, Const<3>>) -> Translation<Float, 3> {
 		Translation::<Float, 3>::new(point.coords[0], point.coords[1], point.coords[2])
 	}
-	pub fn v3_dist(v0: V3, v1: V3) -> Float {
-		let diff = v1 - v0;
-		(diff[0].powi(2) + diff[1].powi(2) + diff[2].powi(2)).powf(0.5)
-	}
 	// Convertions between 2D and 3D, important to note that the Y-value in 2D corresponds to the Z-value in 3D
 	/// Converts V3 as used in bevy (https://bevy-cheatbook.github.io/fundamentals/coords.html) to V2 on 2D X-Y plane perpindicular to 3D Y-axis
 	/// X => -X
@@ -160,7 +120,7 @@ pub mod prelude {
 	/// use virtual_bike::prelude::{V2, V3, v2_to_v3};
 	/// assert_eq!(v2_to_v3(&V2::new(-1.0, 3.0)), V3::new(1.0, 0.0, 3.0));
 	/// ```
-	pub fn v2_to_v3(v: &V2) -> V3 {// TODO: find and fix all uses of this, it used to be `V3::new(v[0], 0.0, v[1])`
+	pub fn v2_to_v3(v: &V2) -> V3 {
 		V3::new(-v[0], 0.0, v[1])
 	}
 	// Convert between nalgebra and bevy
@@ -478,6 +438,15 @@ pub struct BasicTriMesh {
 }
 
 impl BasicTriMesh {
+	pub fn new(
+		vertices: Vec<P3>,
+		indices: Vec<[u32; 3]>
+	) -> Self {
+		Self {
+			vertices,
+			indices
+		}
+	}
 	#[cfg(feature = "client")]
 	pub fn build_bevy_mesh(&self) -> Mesh {
 		// Check if valid
@@ -509,6 +478,27 @@ impl BasicTriMesh {
 		Ok(())
 	}
 	/// Flattens and reverses triangles
+	/// ```
+	/// use virtual_bike::prelude::{BasicTriMesh, P3};
+	/// let mesh = BasicTriMesh::new(
+	/// 	vec![
+	/// 		P3::new(1.0, 2.0, 3.0),
+	/// 		P3::new(2.0, 3.0, 4.0),
+	/// 		P3::new(3.0, 4.0, 5.0),
+	/// 		P3::new(4.0, 5.0, 6.0),
+	/// 		P3::new(5.0, 6.0, 7.0),
+	/// 		P3::new(6.0, 7.0, 8.0)
+	/// 	],
+	/// 	vec![
+	/// 		[0, 1, 2],
+	/// 		[3, 4, 5]
+	/// 	]
+	/// );
+	/// assert_eq!(
+	/// 	mesh.flatten_and_reverse_indices(),
+	/// 	vec![0, 2, 1, 3, 5, 4]
+	/// );
+	/// ```
 	pub fn flatten_and_reverse_indices(&self) -> Vec<u32> {
 		let mut out = Vec::<u32>::new();
 		for set in &self.indices {

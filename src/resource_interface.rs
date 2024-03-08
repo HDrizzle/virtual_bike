@@ -1,5 +1,4 @@
-// For loading & saving resources
-// Mr Ballen's medical mysteries #1: ashes to ashes
+//! For loading & saving resources
 
 use std::{error::Error, fs, collections::HashMap};
 use std::io::Error as IoError;
@@ -153,17 +152,6 @@ pub fn load_client_settings() -> Result<crate::client::Settings, Box<dyn Error>>
 	let settings: crate::client::Settings = serde_json::from_str(&raw_string)?;
 	Ok(settings)
 }
-
-// Is now part of map metadata
-/*pub fn load_map_gen(name: &str) -> Result<Gen, Box<dyn Error>> {
-	let raw_string: String = load_file_with_better_error(&(MAP_GENERATORS_DIR.to_owned() + name + ".json"))?;
-	let map_gen: Gen = serde_json::from_str(&raw_string)?;
-	Ok(map_gen)
-}
-
-pub fn choose_map_gen() -> Result<Gen, Box<dyn Error>> {
-	load_map_gen(&extras::prompt("Map gen"))// TODO: picklist
-}*/
 
 pub fn load_world(name: &str) -> Result<WorldSave, Box<dyn Error>> {
 	let raw_string: String = load_file_with_better_error(&(WORLDS_DIR.to_owned() + name + ".json"))?;

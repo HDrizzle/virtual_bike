@@ -1,6 +1,6 @@
-// For having different weather in bevy
-// Example: https://github.com/bevyengine/bevy/blob/main/examples/3d/skybox.rs
-// wgpu error: https://www.reddit.com/r/bevy/comments/1588577/how_to_skybox/
+//! For having different weather in bevy
+//! Example: https://github.com/bevyengine/bevy/blob/main/examples/3d/skybox.rs
+//! wgpu error: https://www.reddit.com/r/bevy/comments/1588577/how_to_skybox/
 
 use std::fs;
 use nalgebra::SimdValue;

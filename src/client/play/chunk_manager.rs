@@ -1,4 +1,4 @@
-// Plugin for loading/unloading chunks
+//! Plugin for loading/unloading chunks
 
 use std::{time::{SystemTime, Duration}, collections::HashMap};
 use bevy::prelude::*;
@@ -144,7 +144,7 @@ impl RequestedChunks {
 }
 
 // Systems
-pub fn update_chunks_system(// TODO get this to only run when main vehicle is moved
+pub fn update_chunks_system(// TODO get this to only run when the camera is moved
 	mut meshes: ResMut<Assets<Mesh>>,
 	mut materials: ResMut<Assets<StandardMaterial>>,
 	render_distance: Res<RenderDistance>,

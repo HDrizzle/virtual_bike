@@ -1,6 +1,5 @@
-/* Created 2023-11-24
-Replacing the egui signin window
-*/
+//! Created 2023-11-24
+//! Replacing the egui signin window
 
 use std::{time::Duration, thread, sync::{Arc, Mutex}, mem, net};
 use bevy_renet::renet::DefaultChannel;

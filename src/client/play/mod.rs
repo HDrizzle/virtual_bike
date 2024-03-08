@@ -1,11 +1,10 @@
-/* Bevy-based client app
-Rapier plugin example (2D but similar enough): https://www.youtube.com/watch?v=GwlZ5EPu8l0
-Rapier inspector (old version because current version failed build): https://docs.rs/crate/bevy-inspector-egui-rapier/latest
-TODO: sometime when this gets more developed use states: https://bevy-cheatbook.github.io/programming/states.html
-Bevy 3D rendering simple example: https://bevyengine.org/examples/3D%20Rendering/3d-scene/
-
-Major change 2023-11-21: this module will only be used when the game is signed-in and being played
-*/
+//!  Bevy-based client app
+//! Rapier plugin example (2D but similar enough): https://www.youtube.com/watch?v=GwlZ5EPu8l0
+//! Rapier inspector (old version because current version failed build): https://docs.rs/crate/bevy-inspector-egui-rapier/latest
+//! TODO: sometime when this gets more developed use states: https://bevy-cheatbook.github.io/programming/states.html
+//! Bevy 3D rendering simple example: https://bevyengine.org/examples/3D%20Rendering/3d-scene/
+//! 
+//! Major change 2023-11-21: this module will only be used when the game is signed-in and being played
 
 use std::{collections::{HashMap, HashSet}, net, f32::consts::PI, os::unix::net::SocketAddr};
 use bevy::{
@@ -201,7 +200,7 @@ impl InitInfo {
 			let mut rapier_context = rapier_context_res.into_inner();
 			static_data.init_bevy_rapier_context(&mut rapier_context);
 			// Save map body handle
-			commands.insert_resource(MapBodyHandle(static_data.map.body_handle_opt.expect("Could not get map body handle")));
+			commands.insert_resource(MapBodyHandle(static_data.map.generic.body_handle_opt.expect("Could not get map body handle")));
 		}
 	}
 }
@@ -266,7 +265,7 @@ fn vehicle_input_key_event_system(// Only for manual vehicle control should be b
 		auth: auth.into_inner().clone(),
 		input
 	};
-	renet_client.send_message(DefaultChannel::ReliableOrdered, bincode::serialize(&RenetRequest::ClientUpdate(client_update)).unwrap());
+	renet_client.send_message(DefaultChannel::Unreliable, bincode::serialize(&RenetRequest::ClientUpdate(client_update)).unwrap());
 }
 
 fn misc_key_event_system(
@@ -377,6 +376,9 @@ fn update_system(
 			},
 			RenetResponse::Err(err_string) => {
 				panic!("Server sent following error message: {}", err_string);
+			},
+			RenetResponse::Message(msg) => {
+				bevy::prelude::info!("Message: {}", msg.to_string());// TODO
 			}
 		}
 	}

@@ -198,7 +198,6 @@ pub mod paths {
 	fn square_loop_non_unit_edges() -> Path {// 10 x 10 square loop
 		Path {
 			generic: GenericPath {
-				ref_: 0,
 				name: "test".to_owned(),
 				knot_points: vec![
 					P3::new( 0.0, 0.0,  0.0),// >
@@ -348,7 +347,6 @@ pub mod paths {
 	fn get_bcurve() {
 		let path = Path {
 			generic: GenericPath {
-				ref_: 0,
 				name: "test".to_owned(),
 				knot_points: vec![
 					P3::new( 0.0, 10.0, -100.0),

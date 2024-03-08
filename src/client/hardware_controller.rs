@@ -1,5 +1,4 @@
-// Gets raw data from the hardware on the bike and sends it to the server
-// TODO: This was originally written to update to the web server, which is depreciated, must integrate with Bevy client app
+//! Gets raw data from the hardware on the bike (Arduino board) and sends it to the server
 use std::{error::Error, time::{Duration, Instant}, sync::{Arc, Mutex}};
 use serde::{Serialize, Deserialize};
 //use extras;
@@ -138,7 +137,7 @@ fn update_system(
 							auth: auth.into_inner().clone(),
 							input: input_data
 						};
-						renet_client.send_message(DefaultChannel::ReliableOrdered, bincode::serialize(&Request::ClientUpdate(client_update)).unwrap());// TODO: change to Unreliable
+						renet_client.send_message(DefaultChannel::Unreliable, bincode::serialize(&Request::ClientUpdate(client_update)).unwrap());// TODO: change to Unreliable
 					}
 					out
 				},
