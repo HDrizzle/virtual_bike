@@ -351,9 +351,9 @@ impl AssetServer {
 			},
 			"vehicle_static_models" => match url_parts.len() >= 2 {
 				true => {
-					match resource_interface::load_static_vehicle_gltf(url_parts[1]) {
+					match resource_interface::load_static_vehicle_gltf(url_parts[1].strip_suffix(".glb").unwrap_or(url_parts[1])) {// Will work with or wthout extension
 						Ok(raw_file) => rouille::Response::from_data("application/octet-stream", raw_file),//bincode::serialize(&AssetResponse::VehicleRawGltfData(VehicleStaticModel::new(url_parts[1].to_owned(), raw_file))).expect("Unable to serialize vehicle static model")),
-						Err(e) => response_code_and_message(400, format!("Error loading vehicle static model: {}", e))
+						Err(e) => response_code_and_message(404, format!("Error loading vehicle static model: {}", e))
 					}
 				},
 				false => {

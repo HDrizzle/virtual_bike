@@ -14,7 +14,7 @@ use bevy_rapier3d::plugin::RapierContext;
 use dialoguer;
 use rand::Rng;
 #[cfg(feature = "client")]
-use bevy::prelude::*;
+use bevy::{prelude::*, render::render_asset::RenderAssetUsages};
 use approx::{AbsDiffEq, RelativeEq};
 
 // Modules
@@ -145,7 +145,7 @@ pub mod prelude {
 		}
 	}
 	#[cfg(feature = "client")]
-	pub fn image_to_bevy_image(in_: &image::RgbImage) -> bevy::prelude::Image {
+	pub fn image_to_bevy_image(in_: &image::RgbImage, render_asset_usages: RenderAssetUsages) -> bevy::prelude::Image {
     	use bevy::render::render_resource::{Extent3d, TextureDimension};
 		// Create data
 		let mut data = Vec::<u8>::new();
@@ -177,7 +177,8 @@ pub mod prelude {
 			},
 			TextureDimension::D2,
 			data,
-			bevy::render::render_resource::TextureFormat::Rgba32Float//Rgba8Uint
+			bevy::render::render_resource::TextureFormat::Rgba32Float,//Rgba8Uint
+			render_asset_usages
 		)
 	}
 	// Round float towards -inf
@@ -448,11 +449,11 @@ impl BasicTriMesh {
 		}
 	}
 	#[cfg(feature = "client")]
-	pub fn build_bevy_mesh(&self) -> Mesh {
+	pub fn build_bevy_mesh(&self, render_asset_usages: RenderAssetUsages) -> Mesh {
 		// Check if valid
 		self.is_valid().unwrap();
 		// Start with "blank" mesh
-		let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
+		let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, render_asset_usages);
 		let mut vertex_arrays = Vec::<[f32; 3]>::new();
 		for v in &self.vertices {
 			vertex_arrays.push([v[0], v[1], v[2]]);
@@ -461,7 +462,7 @@ impl BasicTriMesh {
 			Mesh::ATTRIBUTE_POSITION,
 			vertex_arrays,
 		);
-		mesh.set_indices(Some(Indices::U32(self.flatten_and_reverse_indices())));
+		mesh.insert_indices(Indices::U32(self.flatten_and_reverse_indices()));
 		// Done
 		mesh
 	}

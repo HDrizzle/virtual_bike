@@ -11,7 +11,7 @@ use bevy::math;
 use nalgebra::UnitQuaternion;
 use serde::{Serialize, Deserialize};
 #[cfg(feature = "client")]
-use bevy::prelude::*;
+use bevy::{prelude::*, render::render_asset::RenderAssetUsages};
 
 use crate::prelude::*;
 
@@ -422,7 +422,7 @@ impl GenericPath {
 			}
 		};
 		// Done
-		let mut mesh = basic_mesh.build_bevy_mesh();
+		let mut mesh = basic_mesh.build_bevy_mesh(RenderAssetUsages::all());// TODO: confirm
 		mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uv_coords);
 		(mesh, next_pos)
 	}

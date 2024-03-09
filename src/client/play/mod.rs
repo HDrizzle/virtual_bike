@@ -190,7 +190,7 @@ impl InitInfo {
 			dbg!(&asset_path);
 			let handle = asset_server.load(asset_path);*/
 			//let handle = VehicleStaticModel::load_to_bevy(&v_model.name(), server_addr.0.ip(), &*asset_server).unwrap();
-			let handle = asset_server.load("http://127.0.0.1:62063/vehicle_static_models/toilet.glb");// TODO: fix
+			let handle = asset_server.load(&format!("http://127.0.0.1:62063/vehicle_static_models/{}.glb#Scene0", &v_type));// TODO: use cache
 			//let handle = asset_server.add();// TODO
 			static_v_asset_handles.0.insert(v_type.clone(), handle);
 		}
@@ -232,7 +232,7 @@ pub struct VehicleNameComponent(pub String);*/
 
 // Systems
 fn vehicle_input_key_event_system(// Only for manual vehicle control should be behind the `debug_vehicle_input` feature
-	keys: Res<Input<KeyCode>>,
+	keys: Res<ButtonInput<KeyCode>>,
 	mut renet_client: ResMut<RenetClient>,
 	auth: Res<ClientAuth>,
 ) {
@@ -240,14 +240,14 @@ fn vehicle_input_key_event_system(// Only for manual vehicle control should be b
 	// Key state polling
 	let input = {
 		// Drive
-		let power_forward: Float = if keys.pressed(KeyCode::W) {
+		let power_forward: Float = if keys.pressed(KeyCode::KeyW) {
 			2000.0
 		}
 		else {
 			0.0
 		};
 		// Braking
-		let brake = if keys.pressed(KeyCode::S) {
+		let brake = if keys.pressed(KeyCode::KeyS) {
 			1.0
 		}
 		else {
@@ -255,10 +255,10 @@ fn vehicle_input_key_event_system(// Only for manual vehicle control should be b
 		};
 		// Rotation/Steering
 		let mut steering = 0.0;
-		if keys.pressed(KeyCode::A) {
+		if keys.pressed(KeyCode::KeyA) {
 			steering += 1.0;
 		}
-		if keys.pressed(KeyCode::D) {
+		if keys.pressed(KeyCode::KeyD) {
 			steering -= 1.0;
 		}
 		// Create input
@@ -287,12 +287,9 @@ fn misc_key_event_system(
 		match ev.state {
 			ButtonState::Pressed => {
 				match ev.key_code {
-					Some(key_code) => match key_code {
-						KeyCode::P => renet_client.send_message(DefaultChannel::ReliableOrdered, bincode::serialize(&RenetRequest::TogglePlaying).unwrap()),
-						KeyCode::E => renet_client.send_message(DefaultChannel::ReliableOrdered, bincode::serialize(&RenetRequest::RecoverVehicleFromFlip(auth.clone())).unwrap()),
-						_ => {}
-					}
-					None => {}
+					KeyCode::KeyP => renet_client.send_message(DefaultChannel::ReliableOrdered, bincode::serialize(&RenetRequest::TogglePlaying).unwrap()),
+					KeyCode::KeyE => renet_client.send_message(DefaultChannel::ReliableOrdered, bincode::serialize(&RenetRequest::RecoverVehicleFromFlip(auth.clone())).unwrap()),
+					_ => {}
 				}
 			}
 			ButtonState::Released => {
@@ -430,7 +427,7 @@ fn update_system(
 
 fn camera_update_system(
 	mut key_events: EventReader<KeyboardInput>,
-	keys: Res<Input<KeyCode>>,
+	keys: Res<ButtonInput<KeyCode>>,
 	mut camera_controller: ResMut<CameraController>,
 	mut camera_query: Query<(&mut CameraComponent, &mut Transform, &Projection)>,
 	world_state: Res<WorldSend>,
@@ -442,17 +439,17 @@ fn camera_update_system(
 		// Translation
 		let mut translation = V3::zeros();
 		// Z
-		if keys.pressed(KeyCode::T) {
+		if keys.pressed(KeyCode::KeyT) {
 			translation.z -= 1.0;
 		}
-		if keys.pressed(KeyCode::G) {
+		if keys.pressed(KeyCode::KeyG) {
 			translation.z += 1.0;
 		}
 		// X
-		if keys.pressed(KeyCode::F) {
+		if keys.pressed(KeyCode::KeyF) {
 			translation.x -= 1.0;
 		}
-		if keys.pressed(KeyCode::H) {
+		if keys.pressed(KeyCode::KeyH) {
 			translation.x += 1.0;
 		}
 		// Y
@@ -464,16 +461,16 @@ fn camera_update_system(
 		}
 		// Rotation
 		let mut rotation = V2::zeros();// yaw, pitch
-		if keys.pressed(KeyCode::Left) {
+		if keys.pressed(KeyCode::ArrowLeft) {
 			rotation.x += 1.0;
 		}
-		if keys.pressed(KeyCode::Right) {
+		if keys.pressed(KeyCode::ArrowRight) {
 			rotation.x -= 1.0;
 		}
-		if keys.pressed(KeyCode::Up) {
+		if keys.pressed(KeyCode::ArrowUp) {
 			rotation.y += 1.0;
 		}
-		if keys.pressed(KeyCode::Down) {
+		if keys.pressed(KeyCode::ArrowDown) {
 			rotation.y -= 1.0;
 		}
 		// Update camera controller
@@ -482,11 +479,8 @@ fn camera_update_system(
 			match ev.state {
 				ButtonState::Pressed => {
 					match ev.key_code {
-						Some(key_code) => match key_code {
-							KeyCode::C => camera_controller.toggle(&world_state.vehicles, auth.name.clone()),
-							_ => {}
-						}
-						None => {}
+						KeyCode::KeyC => camera_controller.toggle(&world_state.vehicles, auth.name.clone()),
+						_ => {}
 					}
 				}
 				ButtonState::Released => {
@@ -577,6 +571,7 @@ impl Plugin for MainClientPlugin {
 
 pub fn start(init_info: InitInfo) {
 	let mut app = App::new();
+	//app.add_plugins(bevy_web_asset::WebAssetPlugin);
 	app.add_plugins((
 		bevy_web_asset::WebAssetPlugin,
 		DefaultPlugins.set(WindowPlugin {

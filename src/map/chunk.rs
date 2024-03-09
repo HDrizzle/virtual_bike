@@ -3,7 +3,7 @@
 use std::{rc::Rc, error::Error, collections::HashMap, sync::{Arc, Mutex}, io::Write, net::IpAddr, fs};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 #[cfg(feature = "client")]
-use bevy::{prelude::*, render::texture::{ImageType, CompressedImageFormats, ImageSampler, ImageFormat}};
+use bevy::{prelude::*, render::{texture::{ImageType, CompressedImageFormats, ImageSampler, ImageFormat}, render_asset::RenderAssetUsages}};
 // Rapier 3D physics
 #[cfg(any(feature = "server", feature = "debug_render_physics"))]
 use rapier3d::prelude::*;
@@ -183,7 +183,7 @@ impl RegularElevationMesh {
 	pub fn bevy_mesh(&self, size: u64, offset: &V3) -> Mesh {// With help from: https://stackoverflow.com/questions/66677098/how-can-i-manually-create-meshes-in-bevy-with-vertices
 		// If BasicTriMesh::build_bevy_mesh() works, this whole thing can be deleted
 		let tri_mesh = self.build_trimesh(offset);
-		let mut mesh = tri_mesh.build_bevy_mesh();
+		let mut mesh = tri_mesh.build_bevy_mesh(RenderAssetUsages::all());// TODO: confirm
 		mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, self.build_uv_coords(size, &tri_mesh.vertices, offset));
 		// Done
 		mesh
@@ -419,10 +419,19 @@ impl Chunk {
 	#[cfg(feature = "client")]
 	pub fn bevy_pbr_bundle(&mut self, commands: &mut Commands, meshes:  &mut ResMut<Assets<Mesh>>, materials: &mut ResMut<Assets<StandardMaterial>>, asset_server: &AssetServer, server_addr: IpAddr) {// See https://stackoverflow.com/questions/66677098/how-can-i-manually-create-meshes-in-bevy-with-vertices
 		// With help from https://github.com/bevyengine/bevy/blob/main/examples/3d/texture.rs
+
+use bevy::render::render_asset::RenderAssetUsages;
 		let texture_handle_opt: Option<Handle<Image>> = match &self.texture_opt {
 			Some(texture) => {
 				//println!("Chunk {:?} has texture", &self.ref_);
-				Some(asset_server.add(Image::from_buffer(&texture.raw_data[..], ImageType::Format(ImageFormat::Png), CompressedImageFormats::NONE, true, ImageSampler::Default).unwrap()))
+				Some(asset_server.add(Image::from_buffer(
+					&texture.raw_data[..],
+					ImageType::Format(ImageFormat::Png),
+					CompressedImageFormats::NONE,
+					true,
+					ImageSampler::Default,
+					RenderAssetUsages::RENDER_WORLD// TODO: make sure this is correct
+				).unwrap()))
 			},
 			None => match ChunkTexture::load_to_bevy("generic", server_addr, asset_server) {
 				Ok(handle) => Some(handle),

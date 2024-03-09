@@ -9,7 +9,7 @@ use bevy::{
 	prelude::*,
 	asset::LoadState,
     core_pipeline::Skybox,
-	render::{render_resource::{TextureViewDescriptor, TextureViewDimension}, texture::{ImageType, CompressedImageFormats, ImageSampler}}
+	render::{render_resource::{TextureViewDescriptor, TextureViewDimension}, texture::{ImageType, CompressedImageFormats, ImageSampler}, render_asset::RenderAssetUsages}
 };
 use image::{Rgb, RgbImage};
 
@@ -96,7 +96,7 @@ impl Sky {
 					..default()
 				},
 				CameraComponent,
-				Skybox(cubemap.image_handle.clone())
+				Skybox{image: cubemap.image_handle.clone(), brightness: 1000.0}
 			));
 			cubemap.is_loaded = true;
 		}
@@ -111,7 +111,7 @@ impl Sky {
 			}
 		}
 		//image_to_bevy_image(image::open("assets/Ryfjallet_cubemap.png").unwrap().as_rgb8().expect("Expected image"))
-		image_to_bevy_image(&compiled_image)
+		image_to_bevy_image(&compiled_image, RenderAssetUsages::all())
 		//Image::from_buffer(&fs::read("assets/Ryfjallet_cubemap.png").unwrap()[..], ImageType::Extension("png"), CompressedImageFormats::NONE, true, ImageSampler::Default).unwrap()
 	}
 	/// Converts coords on image used for bevy skybox to a SimpleRotation representing where it is relative to the camera
