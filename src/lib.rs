@@ -57,7 +57,7 @@ pub mod prelude {
 		world::{StaticData, WorldSave, WorldSend},
 		map::{GenericMap, SendMap, path::{PathType, PathTypeRef, Path, SavePath, GenericPath, PathSet, SavePathSet, GenericPathSet, PathBoundBodyState, PathPosition, BCurve, BCurveSample, Intersection, IntersectionDecision, IntersectionId, BCURVE_LENGTH_ESTIMATION_SEGMENTS}, chunk::{Chunk, ChunkRef, RegularElevationMesh}},
 		vehicle::{VehicleStatic, VehicleStaticModel, VehicleSave, VehicleSend, Wheel, WheelStatic, BodyStateSerialize, BodyForces},
-		server::{RenetRequest, RenetResponse, AssetResponse},
+		server::{RenetRequest, RenetResponse, AssetResponse, message_log},
 		GenericError,
 		InputData,
 		ClientAuth,

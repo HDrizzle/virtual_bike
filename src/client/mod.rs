@@ -2,9 +2,9 @@
 //! This module contains the bevy-based module `play` and sign-in screen logic using egui and eframe
 //! Template for using `eframe` copied from https://github.com/appcove/egui.info/blob/master/examples/egui-101-basic/src/main.rsc
 
-use std::{net, time::SystemTime};
+use std::{net, thread, time::{Duration, SystemTime}};
 use bevy::ecs::system::Resource;
-use bevy_renet::renet::{RenetClient, ConnectionConfig, transport::{NetcodeClientTransport, ClientAuthentication}};
+use bevy_renet::renet::{DefaultChannel, RenetClient, ConnectionConfig, transport::{NetcodeClientTransport, ClientAuthentication}};
 use local_ip_address::local_ip;
 use serde::{Serialize, Deserialize};
 
@@ -20,6 +20,7 @@ pub mod hardware_controller;
 mod network;
 pub mod cache;
 pub mod asset_client;
+use asset_client::AssetLoaderManager;
 
 #[derive(Serialize, Deserialize, Resource)]
 pub struct Settings {
@@ -83,6 +84,67 @@ impl Default for SigninEntryState {
 			port: "62062".to_string()
 		}
 	}
+}
+
+/// Loads the static data from the renet server
+fn load_static_data(network_init_info: &mut play::NetworkInitInfo) -> Result<StaticData, String> {
+	// Send static data request
+	network_init_info.renet_client.send_message(DefaultChannel::ReliableUnordered, bincode::serialize(&RenetRequest::Init).unwrap());
+	loop {
+		// Renet example in README: https://crates.io/crates/renet
+		let dt = Duration::from_millis(10);
+		thread::sleep(dt);
+		network_init_info.renet_client.update(dt);
+		network_init_info.renet_transport.update(dt, &mut network_init_info.renet_client).unwrap();
+		// Handle messages
+		if !network_init_info.renet_client.is_disconnected() {
+			// Check if static data has been recieved
+			let mut done = false;// Can't break from inside while loop, use this flag instead
+			while let Some(message) = network_init_info.renet_client.receive_message(DefaultChannel::ReliableOrdered) {
+				let res = bincode::deserialize::<RenetResponse>(&message).unwrap();
+				match res {
+					RenetResponse::InitState(static_data) => {
+						return Ok(static_data);
+					},
+					RenetResponse::Err(e) => {return Err(format!("Server sent following error message: {}", e));},
+					_ => {}
+				}
+			}
+		}
+		network_init_info.renet_transport.send_packets(&mut network_init_info.renet_client);// Don't unwrap this, it will cause errors and it turns out that just ignoring them works
+		thread::sleep(Duration::from_millis(100));// Don't waste CPU
+	};
+}
+
+/// Gets all of the static vehicle binary GLB 3D models from the asset server
+#[deprecated]// Bevy web asset means this is no longer needed
+fn load_vehicle_models(asset_client: &mut AssetLoaderManager, static_data: &StaticData, settings: &Settings, network_init_info: &play::NetworkInitInfo) -> Result<Vec<VehicleStaticModel>, String> {
+	// Request vehicle models
+	let mut static_vehicles_requested: usize = 0;
+	for v_type in static_data.all_vehicle_types() {
+		asset_client.request(AssetRequest::VehicleRawGltfData(v_type));
+		static_vehicles_requested += 1;
+	}
+	println!("Requested vehicle models");
+	// Wait for responses
+	let mut out = Vec::<VehicleStaticModel>::new();
+	while static_vehicles_requested > 0 {
+		for asset_response_result in asset_client.update() {
+			match asset_response_result {
+				Ok(asset_response) => if let AssetResponse::VehicleRawGltfData(v_static_model) = asset_response {
+					static_vehicles_requested -= 1;
+					println!("Recieved model for vehicle type {}", &v_static_model.name());
+					if settings.cache {
+						v_static_model.save(network_init_info.renet_server_addr.ip()).unwrap();
+					}
+				},
+				Err(e) => {return Err(format!("Error from asset client: {}", e));}
+			}
+		}
+		thread::sleep(Duration::from_millis(100));// Don't waste CPU
+	}
+	// Done
+	Ok(out)
 }
 
 fn get_play_init_info() -> Option<play::InitInfo> {

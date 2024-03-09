@@ -43,7 +43,7 @@ pub enum RenetResponse {// All possible responses
 	Message(Message)
 }
 
-// Not actually serialized and sent to the server, just a way to represent asset HTTP requests
+/// Not actually serialized and sent to the server, just a way to represent asset HTTP requests
 #[cfg(feature = "client")]
 #[derive(Hash)]
 pub enum AssetRequest {
@@ -330,17 +330,20 @@ impl AssetServer {
 			"" => rouille::Response::text(format!("{} Asset Server", APP_NAME)),
 			"hello" => rouille::Response::text("Hello World"),
 			"chunks" => match url_parts.len() >= 2 {
-				true => match ChunkRef::from_resource_dir_name(url_parts[1]) {
-					Ok(chunk_ref) => {
-						match Chunk::load(&chunk_ref, &self.map_name, true) {
-							Ok(chunk) => rouille::Response::from_data("application/octet-stream", bincode::serialize(&AssetResponse::Chunk(chunk)).expect("Unable to serialize chunk")),
-							Err(e) => {
-								self.tx.send(async_messages::ToWorld::CreateChunk(chunk_ref)).expect("Unable to send chunk creation request to world");
-								response_code_and_message(400, format!("Error loading chunk: {}, request to create chunk was sent to the world server", e))
+				true => {
+					let with_texture: bool = true;// TODO
+					match ChunkRef::from_resource_dir_name(url_parts[1]) {
+						Ok(chunk_ref) => {
+							match Chunk::load(&chunk_ref, &self.map_name, with_texture) {
+								Ok(chunk) => rouille::Response::from_data("application/octet-stream", bincode::serialize(&AssetResponse::Chunk(chunk)).expect("Unable to serialize chunk")),
+								Err(e) => {
+									self.tx.send(async_messages::ToWorld::CreateChunk(chunk_ref)).expect("Unable to send chunk creation request to world");
+									response_code_and_message(400, format!("Error loading chunk: {}, request to create chunk was sent to the world server", e))
+								}
 							}
-						}
-					},
-					Err(e) => response_code_and_message(400, e)
+						},
+						Err(e) => response_code_and_message(400, e)
+					}
 				},
 				false => {
 					rouille::Response::text("Chunks")
@@ -349,7 +352,7 @@ impl AssetServer {
 			"vehicle_static_models" => match url_parts.len() >= 2 {
 				true => {
 					match resource_interface::load_static_vehicle_gltf(url_parts[1]) {
-						Ok(raw_file) => rouille::Response::from_data("application/octet-stream", bincode::serialize(&AssetResponse::VehicleRawGltfData(VehicleStaticModel::new(url_parts[1].to_owned(), raw_file))).expect("Unable to serialize vehicle static model")),
+						Ok(raw_file) => rouille::Response::from_data("application/octet-stream", raw_file),//bincode::serialize(&AssetResponse::VehicleRawGltfData(VehicleStaticModel::new(url_parts[1].to_owned(), raw_file))).expect("Unable to serialize vehicle static model")),
 						Err(e) => response_code_and_message(400, format!("Error loading vehicle static model: {}", e))
 					}
 				},

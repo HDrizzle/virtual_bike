@@ -42,12 +42,25 @@ impl StaticData {
 		// Map
 		self.map.generic.init_rapier(&mut context.bodies);
 	}
-	#[cfg(feature = "client")]
+	/*#[cfg(feature = "client")]
+	// Probably outdated
 	pub fn vehicle_models_to_load(&self, server_addr: IpAddr) -> Vec<String> {
 		let mut out: Vec<String> = Vec::<String>::new();
 		for (_, v) in self.static_vehicles.iter() {
 			if !VehicleStaticModel::new(v.name.clone(), Vec::new()).is_already_cached(server_addr) {
 				out.push(v.name.clone());
+			}
+		}
+		// Done
+		out
+	}*/
+	/// Compiles Vec of all vehicle types (static vehicle type names) being used
+	#[cfg(feature = "client")]
+	pub fn all_vehicle_types(&self) -> Vec<String> {
+		let mut out: Vec<String> = Vec::<String>::new();
+		for (_, v) in self.static_vehicles.iter() {
+			if !out.contains(&v.type_name) {
+				out.push(v.type_name.clone());
 			}
 		}
 		// Done
@@ -456,7 +469,7 @@ impl World {
 		// build static vehicles
 		let mut static_vehicles: HashMap<String, VehicleStatic> = HashMap::new();
 		for (_, vehicle) in self.vehicles.iter() {
-			static_vehicles.insert(vehicle.static_.name.clone(), (*vehicle.static_).clone());
+			static_vehicles.insert(vehicle.static_.type_name.clone(), (*vehicle.static_).clone());
 		}
 		// Physics send
 		#[cfg(feature = "debug_render_physics")]

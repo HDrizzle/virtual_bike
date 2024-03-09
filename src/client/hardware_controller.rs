@@ -4,10 +4,9 @@ use serde::{Serialize, Deserialize};
 //use extras;
 use serialport::SerialPortInfo;
 use bevy::prelude::*;
-use egui::Ui;
 use bevy_renet::renet::*;
 use bevy_inspector_egui::{
-	bevy_egui::{egui, EguiContexts}// Importing from re-export to prevent conflicting versions of bevy_egui
+	bevy_egui::{egui::{Ui, Window}, EguiContexts}// Importing from re-export to prevent conflicting versions of bevy_egui
 };
 
 use crate::prelude::*;
@@ -143,12 +142,12 @@ fn update_system(
 				},
 				Err(e) => e.to_string()
 			};
-			egui::Window::new("Input").show(egui_contexts.ctx_mut(), |ui: &mut Ui| {
+			Window::new("Input").show(egui_contexts.ctx_mut(), |ui: &mut Ui| {
 				ui.label(perf_string);
 			});
 		},
 		None => {// If None, prompt user for serial port
-			egui::Window::new("Input").show(egui_contexts.ctx_mut(), |ui: &mut Ui| {
+			Window::new("Input").show(egui_contexts.ctx_mut(), |ui: &mut Ui| {
 				ui.label("Select serialport");
 				let ports = serialport::available_ports().expect("No ports found!");
 				for (i, p) in ports.iter().enumerate() {

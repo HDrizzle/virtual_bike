@@ -6,7 +6,7 @@ use bevy_renet::renet::DefaultChannel;
 //use extras::prompt;
 
 use crate::prelude::*;
-use super::{SigninEntryState, play, cache, asset_client::{AssetLoaderManager, self}};
+use super::{SigninEntryState, play, cache, asset_client::{AssetLoaderManager, self}, load_static_data, load_vehicle_models};
 
 const BACKSPACE: char = 8u8 as char;
 
@@ -65,7 +65,7 @@ pub fn get_play_init_info() -> Option<play::InitInfo> {
 	let go_mutex_clone = go_mutex.clone();
 	let thread_handle = thread::spawn(move || loading_screen(go_mutex_clone));
 	// Wait for server to respond
-	let mut static_data_opt: Option<StaticData> = None;
+	/*let mut static_data_opt: Option<StaticData> = None;
 	let mut requested_static_data = false;
 	let mut requested_vehicle_models = false;
 	let out: play::InitInfo = loop {
@@ -93,36 +93,11 @@ pub fn get_play_init_info() -> Option<play::InitInfo> {
 						None => {
 							if let RenetResponse::InitState(static_data) = res {// Static data has been recieved from server
 								println!("\nRecieved static data");
-								// Request vehicle models
-								if settings.cache && !requested_vehicle_models {
-									for v_type in static_data.vehicle_models_to_load(network_init_info.renet_server_addr.ip()) {
-										asset_client.request(AssetRequest::VehicleRawGltfData(v_type));
-									}
-									requested_vehicle_models = true;
-									println!("Requested vehicle models");
-								}
 								// Save static data
 								static_data_opt = Some(static_data);
 							}
 						}
 					}
-				}
-			}
-			// Loop over asset client results
-			if let Some(static_data) = &static_data_opt {
-				for asset_response_result in asset_client.update() {
-					match asset_response_result {
-						Ok(asset_response) => if let AssetResponse::VehicleRawGltfData(v_static_model) = asset_response {
-							println!("Recieved model for vehicle type {}", &v_static_model.name());
-							//cache::save_static_vehicle_model(network_init_info.addr, &v_type, data).unwrap();
-							v_static_model.save(network_init_info.renet_server_addr.ip()).unwrap();
-						},
-						Err(e) => println!("Error from asset client: {}", e)
-					}
-				}
-				if static_data.vehicle_models_to_load(network_init_info.renet_server_addr.ip()).len() == 0 || !settings.cache {// Whether all vehicle models have been loaded
-					done = true;
-					println!("No more vehicle models to load, loop should exit now");
 				}
 			}
 			if done {
@@ -142,6 +117,17 @@ pub fn get_play_init_info() -> Option<play::InitInfo> {
 			}
 		}
 		network_init_info.renet_transport.send_packets(&mut network_init_info.renet_client);// Don't unwrap this, it will cause errors and it turns out that just ignoring them works
+	};*/
+	let out: play::InitInfo = {
+		let static_data = load_static_data(&mut network_init_info).unwrap();
+		//let vehicle_static_models = load_vehicle_models(&mut asset_client, &static_data, &settings, &network_init_info).unwrap();
+		play::InitInfo {
+			network: network_init_info,
+			static_data,
+			settings,
+			asset_client,
+			//vehicle_static_models
+		}
 	};
 	// Done
 	*go_mutex.lock().unwrap() = false;

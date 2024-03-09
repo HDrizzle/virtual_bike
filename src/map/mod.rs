@@ -39,7 +39,6 @@ struct_subset!(Map, MapSend, name, loaded_chunks, path_set, chunk_size, chunkgri
 /// Generic map struct which is Serialize/Deserialize-able and also is used during runtime, contains most of the map functionality
 /// This struct can't have things such as handles for async tasks to create chunks since those can't be serialized / deserialized
 #[derive(Serialize, Deserialize, Clone)]
-#[cfg_attr(feature = "frontend", derive(Resource))]
 pub struct GenericMap {// Serialize, Deserialize, Clone, used by client AND server
 	pub name: String,
 	//#[cfg(not(feature = "server"))] pub gen: ClientDummy,

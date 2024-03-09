@@ -1,6 +1,5 @@
 {
-    "name": "toilet",
-    "type_": "",
+    "type_name": "toilet",
     "mass": 100,
     "ctr_g_hight": 1,
     "drag": [0, 0],

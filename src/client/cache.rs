@@ -11,10 +11,14 @@ use bevy::prelude::*;
 use reqwest;
 
 pub trait CacheableBevyAsset: Sized {
-	const CACHE_SUB_DIR: &'static str;// Ex: "static_vehicles/"
-	type BevyAssetType: Asset;// Ex: `Scene` for GLTF / GLB
-	fn name(&self) -> String;// Ex: "test-bike"
-	fn cache_path(name: &str) -> String;// Ex: "test-bike/model.glb"
+	/// Ex: "static_vehicles/"
+	const CACHE_SUB_DIR: &'static str;
+	/// Ex: `Scene` for GLTF / GLB
+	type BevyAssetType: Asset;
+	/// Ex: "test-bike"
+	fn name(&self) -> String;
+	/// Ex: "test-bike/model.glb"
+	fn cache_path(name: &str) -> String;
 	fn write_to_file(&self, file: &mut std::fs::File) -> Result<(), String>;
 	fn save(&self, server_addr: IpAddr) -> Result<(), String> {
 		let path = Self::get_path(&self.name(), server_addr);

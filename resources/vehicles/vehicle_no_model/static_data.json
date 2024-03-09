@@ -1,6 +1,5 @@
 {
-    "name": "vehicle_no_model",
-    "type_": "",
+    "type_name": "vehicle_no_model",
     "mass": 100,
     "ctr_g_hight": 1,
     "drag": [0, 0],

@@ -242,8 +242,7 @@ pub mod paths {
 	}
 	fn vehicle_static() -> VehicleStatic {
 		VehicleStatic {
-			name: "vehicle static name".to_owned(),
-			type_: "vehicle static type".to_owned(),
+			type_name: "vehicle static name".to_owned(),
 			mass: 200.0,
 			ctr_g_hight: 0.0,
 			drag: V2::zeros(),

@@ -5,6 +5,8 @@ use std::time::{Instant, Duration, SystemTime, UNIX_EPOCH};
 use serde::{Serialize, Deserialize};
 
 use crate::prelude::*;
+#[cfg(feature = "client")]
+use bevy::prelude::Resource;
 
 /// Types of message
 #[derive(Serialize, Deserialize, Clone)]
@@ -52,6 +54,7 @@ impl Message {
     }
 }
 
+#[cfg_attr(feature = "client", derive(Resource))]
 pub struct Log {
     pub messages: Vec<Message>
 }

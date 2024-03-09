@@ -1,6 +1,5 @@
 {
-    "name": "car_1",
-    "type_": "",
+    "type_name": "car_1",
     "mass": 100,
     "ctr_g_hight": 1,
     "drag": [0, 0],

@@ -20,6 +20,7 @@ use nalgebra::{UnitQuaternion, Translation, Isometry};
 use rapier3d::dynamics::RigidBodyHandle;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bincode;
+use bevy_web_asset;
 
 use crate::{
 	prelude::*,
@@ -31,9 +32,8 @@ use super::{hardware_controller::HardwareControllerPlugin, network::CustomRenetP
 // Mods
 mod chunk_manager;
 use chunk_manager::{ChunkManagerPlugin, RenderDistance, RequestedChunks};
-mod gui;
-use gui::GuiPlugin;
 mod skybox;
+mod chat;
 
 // Custom resources
 #[derive(Resource)]
@@ -45,6 +45,9 @@ pub struct ServerAddr(pub net::SocketAddr);
 
 #[derive(Resource, Default, Debug)]
 struct StaticVehicleAssetHandles(pub HashMap<String, Handle<Scene>>);// Vehicle type, scene handle
+
+/*#[derive(Resource)]
+struct VehicleStaticModelsResource(pub Vec<VehicleStaticModel>);*/
 
 #[derive(Resource)]
 enum CameraController {
@@ -83,7 +86,7 @@ impl CameraController {
 				let trans_input_scaled = trans_input * lin_speed * dt;
 				// Find yaw angle
 				// Rotate translation vector by yaw angle about vertical (Y) axis
-				let trans_input_rotated = UnitQuaternion::from_axis_angle(&V3::y_axis(), pos.rotation.yaw).transform_vector(&trans_input_scaled);
+				let trans_input_rotated = UnitQuaternion::from_axis_angle(&V3::y_axis(), pos.rotation.yaw + PI/2.0).transform_vector(&trans_input_scaled);
 				pos.translation = pos.translation + trans_input_rotated;
 				// Delta-yaw
 				let delta_yaw = rot_input.x * ang_speed * dt;
@@ -148,7 +151,8 @@ pub struct InitInfo {// Provided by the sign-in window
 	pub network: NetworkInitInfo,
 	pub static_data: StaticData,
 	pub settings: Settings,
-	pub asset_client: AssetLoaderManager
+	pub asset_client: AssetLoaderManager,
+	//pub vehicle_static_models: Vec<VehicleStaticModel>
 }
 
 impl InitInfo {
@@ -163,6 +167,7 @@ impl InitInfo {
 		app.insert_resource(WorldSend::default());
 		app.insert_resource(init_info.settings);
 		app.insert_resource(init_info.asset_client);
+		//app.insert_resource(VehicleStaticModelsResource(init_info.vehicle_static_models));
 	}
 	pub fn setup_system(
 		mut commands: Commands,
@@ -171,21 +176,24 @@ impl InitInfo {
 		mut meshes: ResMut<Assets<Mesh>>,
 		mut materials: ResMut<Assets<StandardMaterial>>,
 		asset_server: Res<AssetServer>,
-		server_addr: Res<ServerAddr>
+		server_addr: Res<ServerAddr>,
+		//vehicle_static_models: Res<VehicleStaticModelsResource>
 	) {
 		// Map init bevy
 		static_data.map.init_bevy(&mut commands, meshes.as_mut(), materials.as_mut(), &*asset_server);
 		// Load static vehicle gltf model files. This is just to have the asset handles for each vehicle type, not to display anything
 		// https://bevy-cheatbook.github.io/3d/gltf.html, https://bevy-cheatbook.github.io/assets/assetserver.html
 		let mut static_v_asset_handles = StaticVehicleAssetHandles::default();
-		for (v_type, v) in static_data.static_vehicles.iter() {
+		// Static vehicle models
+		for v_type in static_data.all_vehicle_types() {
 			/*let asset_path = cache::get_static_vehicle_model_path(server_addr.0, &v.name).strip_prefix("assets/").unwrap_or("<Error: vehicle model path does not start with correct dir ('assets/')>").to_owned() + "#Scene0";
 			dbg!(&asset_path);
 			let handle = asset_server.load(asset_path);*/
-			let handle = VehicleStaticModel::load_to_bevy(&v_type, server_addr.0.ip(), &*asset_server).unwrap();
+			//let handle = VehicleStaticModel::load_to_bevy(&v_model.name(), server_addr.0.ip(), &*asset_server).unwrap();
+			let handle = asset_server.load("http://127.0.0.1:62063/vehicle_static_models/toilet.glb");// TODO: fix
+			//let handle = asset_server.add();// TODO
 			static_v_asset_handles.0.insert(v_type.clone(), handle);
 		}
-		//dbg!(&static_v_asset_handles);
 		commands.insert_resource(static_v_asset_handles);
 		// GLTF render test, https://bevy-cheatbook.github.io/3d/gltf.html
 		/*let scene0 = asset_server.load("test_asset.glb#Scene0");
@@ -345,7 +353,8 @@ fn update_system(
 	auth: Res<ClientAuth>,
 	server_addr: Res<ServerAddr>,
 	mut world_state_res: ResMut<WorldSend>,
-	settings: Res<Settings>
+	settings: Res<Settings>,
+	mut msg_log: ResMut<message_log::Log>
 ) {
 	// How to move a camera: https://bevy-cheatbook.github.io/cookbook/pan-orbit-camera.html
 	#[cfg(feature = "debug_render_physics")]
@@ -378,7 +387,7 @@ fn update_system(
 				panic!("Server sent following error message: {}", err_string);
 			},
 			RenetResponse::Message(msg) => {
-				bevy::prelude::info!("Message: {}", msg.to_string());// TODO
+				msg_log.add(msg);
 			}
 		}
 	}
@@ -569,6 +578,7 @@ impl Plugin for MainClientPlugin {
 pub fn start(init_info: InitInfo) {
 	let mut app = App::new();
 	app.add_plugins((
+		bevy_web_asset::WebAssetPlugin,
 		DefaultPlugins.set(WindowPlugin {
 			primary_window: Some(Window {
 				title: APP_NAME.to_string(),
@@ -586,9 +596,9 @@ pub fn start(init_info: InitInfo) {
 		WireframePlugin*/,
 		CustomRenetPlugin,
 		ChunkManagerPlugin,
-		GuiPlugin,
 		HardwareControllerPlugin,
 		skybox::Sky{resolution: 1000},
+		chat::ChatGuiPlugin,
 		MainClientPlugin
 	));
 	InitInfo::setup_app(init_info, &mut app);

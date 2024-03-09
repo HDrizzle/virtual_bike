@@ -145,8 +145,8 @@ impl Wheel {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct VehicleStatic {// This is loaded from the resources and is identified by a vehicle name
-	pub name: String,
-	pub type_: String,
+	/// Type of vehicle this represents
+	pub type_name: String,
 	pub mass: Float,
 	pub ctr_g_hight: Float,
 	pub drag: V2,
@@ -197,7 +197,7 @@ impl CacheableBevyAsset for VehicleStaticModel {
 #[cfg(feature = "server")]
 impl VehicleStatic {
 	pub fn build_rapier_collider(&self) -> Collider {
-		let scenes = easy_gltf::load(&(resource_interface::VEHICLES_DIR.to_owned() + &self.name + "/model.glb")).expect("Unable to load gltf for static vehicle model file");
+		let scenes = easy_gltf::load(&(resource_interface::VEHICLES_DIR.to_owned() + &self.type_name + "/model.glb")).expect("Unable to load gltf for static vehicle model file");
 		for scene in scenes {
 			/*println!(
 				"Cameras: #{}  Lights: #{}  Models: #{}",
@@ -216,7 +216,7 @@ impl VehicleStatic {
 				let mut indices = Vec::<[u32; 3]>::new();
 				let mut curr_triangle: [u32; 3] = [0; 3];// Placeholder
 				let mut i = 0;
-				for flat_index in model.indices().expect(&format!("Model for static vehicle {} has no indices", &self.name)) {
+				for flat_index in model.indices().expect(&format!("Model for static vehicle {} has no indices", &self.type_name)) {
 					curr_triangle[i] = *flat_index;
 					i += 1;
 					if i == 3 {
@@ -229,7 +229,7 @@ impl VehicleStatic {
 				return ColliderBuilder::convex_decomposition(&vertices, &indices).restitution(0.2).mass(self.mass).friction(0.2).build();
 			}
 		}
-		panic!("no scenes or nodes with primitives found in model file for vehicle type {}", &self.name);
+		panic!("no scenes or nodes with primitives found in model file for vehicle type {}", &self.type_name);
 	}
 }
 
@@ -336,13 +336,13 @@ impl Vehicle {
 	}
 	pub fn save(&self, body_set: &RigidBodySet, paths: &PathSet) -> VehicleSave {
 		VehicleSave {
-			type_: self.static_.name.clone(),
+			type_: self.static_.type_name.clone(),
 			body_state: self.create_serialize_state(body_set, paths)
 		}
 	}
 	pub fn send(&self, body_set: &RigidBodySet, paths: &PathSet) -> VehicleSend {
 		VehicleSend {
-			type_: self.static_.name.clone(),
+			type_: self.static_.type_name.clone(),
 			latest_forces: self.latest_forces.clone(),
 			body_state: self.create_serialize_state(body_set, paths),
 			input: self.latest_input,
