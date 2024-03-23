@@ -22,10 +22,7 @@ use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bincode;
 use bevy_web_asset;
 
-use crate::{
-	prelude::*,
-	server::BIG_DATA_SEND_UNRELIABLE
-};
+use crate::prelude::*;
 
 use super::{hardware_controller::HardwareControllerPlugin, network::CustomRenetPlugin, cache, Settings, asset_client::AssetLoaderManager};
 
@@ -41,7 +38,7 @@ mod chat;
 struct MapBodyHandle(pub RigidBodyHandle);
 
 #[derive(Resource)]
-pub struct ServerAddr(pub net::SocketAddr);
+pub struct RenetServerAddr(pub net::SocketAddr);
 
 #[derive(Resource, Default, Debug)]
 struct StaticVehicleAssetHandles(pub HashMap<String, Handle<Scene>>);// Vehicle type, scene handle
@@ -162,7 +159,7 @@ impl InitInfo {
 		app.insert_resource(init_info.network.renet_transport);
 		app.insert_resource(init_info.network.renet_client);
 		app.insert_resource(init_info.network.auth);
-		app.insert_resource(ServerAddr(init_info.network.renet_server_addr));
+		app.insert_resource(RenetServerAddr(init_info.network.renet_server_addr));
 		app.add_systems(Startup, Self::setup_system);
 		app.insert_resource(WorldSend::default());
 		app.insert_resource(init_info.settings);
@@ -176,11 +173,12 @@ impl InitInfo {
 		mut meshes: ResMut<Assets<Mesh>>,
 		mut materials: ResMut<Assets<StandardMaterial>>,
 		asset_server: Res<AssetServer>,
-		server_addr: Res<ServerAddr>,
+		renet_server_addr: Res<RenetServerAddr>,
+		asset_client: Res<AssetLoaderManager>
 		//vehicle_static_models: Res<VehicleStaticModelsResource>
 	) {
 		// Map init bevy
-		static_data.map.init_bevy(&mut commands, meshes.as_mut(), materials.as_mut(), &*asset_server);
+		static_data.map.init_bevy(&mut commands, meshes.as_mut(), materials.as_mut(), &*asset_server, &asset_client.server_addr);
 		// Load static vehicle gltf model files. This is just to have the asset handles for each vehicle type, not to display anything
 		// https://bevy-cheatbook.github.io/3d/gltf.html, https://bevy-cheatbook.github.io/assets/assetserver.html
 		let mut static_v_asset_handles = StaticVehicleAssetHandles::default();
@@ -189,8 +187,9 @@ impl InitInfo {
 			/*let asset_path = cache::get_static_vehicle_model_path(server_addr.0, &v.name).strip_prefix("assets/").unwrap_or("<Error: vehicle model path does not start with correct dir ('assets/')>").to_owned() + "#Scene0";
 			dbg!(&asset_path);
 			let handle = asset_server.load(asset_path);*/
-			//let handle = VehicleStaticModel::load_to_bevy(&v_model.name(), server_addr.0.ip(), &*asset_server).unwrap();
-			let handle = asset_server.load(&format!("http://127.0.0.1:62063/vehicle_static_models/{}.glb#Scene0", &v_type));// TODO: use cache
+			//let handle = VehicleStaticModel::load_to_bevy(&v_type, renet_server_addr.0.ip(), &*asset_server).unwrap();
+			let handle = asset_server.load(&format!("http://{:?}/vehicle_static_models/{}.glb#Scene0", asset_client.server_addr, &v_type));// TODO: use cache
+			//let handle = asset_server.load("test-bike.glb#Scene0");
 			//let handle = asset_server.add();// TODO
 			static_v_asset_handles.0.insert(v_type.clone(), handle);
 		}
@@ -348,7 +347,7 @@ fn update_system(
 	#[cfg(feature = "debug_render_physics")] map_body_handle: Res<MapBodyHandle>,
 	mut requested_chunks: ResMut<RequestedChunks>,
 	auth: Res<ClientAuth>,
-	server_addr: Res<ServerAddr>,
+	renet_server_addr: Res<RenetServerAddr>,
 	mut world_state_res: ResMut<WorldSend>,
 	settings: Res<Settings>,
 	mut msg_log: ResMut<message_log::Log>
@@ -366,9 +365,6 @@ fn update_system(
 		messages.push(message.to_vec());
 	}
 	while let Some(message) = renet_client.receive_message(DefaultChannel::Unreliable) {
-		messages.push(message.to_vec());
-	}
-	while let Some(message) = renet_client.receive_message(BIG_DATA_SEND_UNRELIABLE.channel_id) {
 		messages.push(message.to_vec());
 	}
 	for message in messages {
@@ -394,7 +390,7 @@ fn update_system(
 			Ok(asset_response) => match asset_response {
 				AssetResponse::VehicleRawGltfData(v_static_model) => {
 					//cache::save_static_vehicle_model(server_addr.0, &v_type, data).unwrap();
-					v_static_model.save(server_addr.0.ip()).unwrap();
+					v_static_model.save(renet_server_addr.0).unwrap();
 				},
 				AssetResponse::Chunk(chunk) => {
 					//println!("Recieved chunk {:?}", &chunk.ref_);
@@ -402,13 +398,15 @@ fn update_system(
 					match &chunk.texture_opt {
 						Some(data) => {
 							if settings.cache {
-								data.save(server_addr.0.ip()).unwrap();
+								data.save(renet_server_addr.0).unwrap();
 							}
 						},
 						None => {}//panic!("Server should send chunks with texture data")
 					}
-					static_data.map.generic.insert_chunk_client(chunk, #[cfg(feature = "debug_render_physics")] &mut RapierBodyCreationDeletionContext::from_bevy_rapier_context(&mut rapier_context), &mut commands, &mut meshes, &mut materials, &asset_server, server_addr.0.ip());
-				}
+					static_data.map.generic.insert_chunk_client(chunk, #[cfg(feature = "debug_render_physics")] &mut RapierBodyCreationDeletionContext::from_bevy_rapier_context(&mut rapier_context), &mut commands, &mut meshes, &mut materials, &asset_server, renet_server_addr.0);
+				},
+				AssetResponse::Wait => {},
+				AssetResponse::Err(e) => error!("AssetResponse::Err({})", e)
 			},
 			Err(e) => error!("Error from asset client: {}", e)
 		}

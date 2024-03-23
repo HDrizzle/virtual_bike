@@ -19,6 +19,7 @@ pub static MAPS_DIR: &str = "../resources/maps/";
 pub static WORLDS_DIR: &str = "../resources/worlds/";
 pub static PATH_TYPES_DIR: &str = "../resources/path_types/";
 pub static MAP_GENERATORS_DIR: &str = "../resources/map_generators/";
+pub static PATH_TEXTURES_DIR: &str = "../resources/path_textures/";
 pub static USERS_FILE: &str = "../resources/server_credentials.json";
 pub static CLIENT_LOGIN_FILE: &str = "../resources/client_credentials.json";
 pub static CALIBRATION_FILE: &str = "../resources/calibration.json";
@@ -91,7 +92,7 @@ pub fn find_chunk(chunk_ref: &ChunkRef, map_name: &str, required_components: &Ve
         return Ok((path, true));
     }*/
 	// The chunk does not exist
-	Err(format!("Could not find regular or generic chunk for ref: {:?} with requirements: {:?}", chunk_ref, required_components))
+	Err(format!("Could not find regular or generic chunk for map \"{}\" with ref: {:?} with requirements: {:?}", map_name, chunk_ref, required_components))
 }
 
 #[cfg(feature = "server")]
@@ -163,6 +164,11 @@ pub fn load_path_type(name: &PathTypeRef) -> Result<PathType, Box<dyn Error>> {
 	let raw_string: String = load_file_with_better_error(&(PATH_TYPES_DIR.to_owned() + name + ".json"))?;
 	let path_type: PathType = serde_json::from_str(&raw_string)?;
 	Ok(path_type)
+}
+
+pub fn load_path_texture(name: &PathTypeRef) -> Result<Vec<u8>, String> {
+	let path = format!("{}{}.png", PATH_TEXTURES_DIR, name);
+	to_string_err_with_message(fs::read(&path), &format!("Attempt to load \"{}\"", &path))
 }
 
 #[cfg(feature = "client")]

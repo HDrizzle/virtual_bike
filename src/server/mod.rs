@@ -15,13 +15,6 @@ use crate::{prelude::*, world::async_messages, resource_interface};
 pub mod message_log;
 use message_log::{Message, MessageEnum, Log};
 
-// CONSTS
-pub const BIG_DATA_SEND_UNRELIABLE: ChannelConfig = ChannelConfig {
-	channel_id: 3,// first 3 are the unreliable and reliable(un)ordered channels
-    max_memory_usage_bytes: 500_000_000,// Arbitrary
-    send_type: SendType::ReliableUnordered{resend_time: Duration::from_secs(5)}
-};
-
 #[derive(Serialize, Deserialize)]
 pub enum RenetRequest {// All possible requests
 	Init,
@@ -75,7 +68,9 @@ impl AssetRequest {
 #[derive(Serialize, Deserialize)]
 pub enum AssetResponse {
 	VehicleRawGltfData(VehicleStaticModel),// Username, file contents
-	Chunk(Chunk)
+	Chunk(Chunk),
+	Wait,
+	Err(String)
 }
 
 #[cfg(feature = "server")]
@@ -270,7 +265,6 @@ impl WorldServer {
 
 pub fn connection_config() -> ConnectionConfig {
 	let mut channels_config: Vec<ChannelConfig> = DefaultChannel::config();
-	channels_config.push(BIG_DATA_SEND_UNRELIABLE.clone());
 	ConnectionConfig {
 		available_bytes_per_tick: 60_000,
 		server_channels_config: channels_config.clone(),
@@ -310,8 +304,9 @@ impl AssetServer {
 		}
 	}
 	pub fn start(&self, addr: SocketAddr) -> thread::JoinHandle<()> {
+		println!("Asset server listening on {:?}", addr);
 		let self_clone_arc = Arc::new(self.clone());
-		thread::Builder::new().name(format!("{} HTTP Server", APP_NAME)).spawn(
+		thread::Builder::new().name(format!("{} HTTP Asset Server", APP_NAME)).spawn(
 			move || {
 				rouille::start_server(
 					addr,
@@ -329,26 +324,7 @@ impl AssetServer {
 		match url_parts[0] {
 			"" => rouille::Response::text(format!("{} Asset Server", APP_NAME)),
 			"hello" => rouille::Response::text("Hello World"),
-			"chunks" => match url_parts.len() >= 2 {
-				true => {
-					let with_texture: bool = true;// TODO
-					match ChunkRef::from_resource_dir_name(url_parts[1]) {
-						Ok(chunk_ref) => {
-							match Chunk::load(&chunk_ref, &self.map_name, with_texture) {
-								Ok(chunk) => rouille::Response::from_data("application/octet-stream", bincode::serialize(&AssetResponse::Chunk(chunk)).expect("Unable to serialize chunk")),
-								Err(e) => {
-									self.tx.send(async_messages::ToWorld::CreateChunk(chunk_ref)).expect("Unable to send chunk creation request to world");
-									response_code_and_message(400, format!("Error loading chunk: {}, request to create chunk was sent to the world server", e))
-								}
-							}
-						},
-						Err(e) => response_code_and_message(400, e)
-					}
-				},
-				false => {
-					rouille::Response::text("Chunks")
-				}
-			},
+			"chunks" => self.chunk_request_handler(&url_parts),
 			"vehicle_static_models" => match url_parts.len() >= 2 {
 				true => {
 					match resource_interface::load_static_vehicle_gltf(url_parts[1].strip_suffix(".glb").unwrap_or(url_parts[1])) {// Will work with or wthout extension
@@ -356,11 +332,50 @@ impl AssetServer {
 						Err(e) => response_code_and_message(404, format!("Error loading vehicle static model: {}", e))
 					}
 				},
-				false => {
-					rouille::Response::text("Vehicle static models")
-				}
+				false => rouille::Response::text("Vehicle static models")
 			},
+			"path_textures" => match url_parts.len() >= 2 {
+				true => {
+					match resource_interface::load_path_texture(&url_parts[1].strip_suffix(".png").unwrap_or(url_parts[1]).to_owned()) {// Will work with or wthout extension
+						Ok(raw_file) => rouille::Response::from_data("image/png", raw_file),
+						Err(e) => response_code_and_message(404, format!("Error loading path texture: {}", e))
+					}
+				},
+				false => rouille::Response::text("Vehicle static models")
+			}
 			_ => rouille::Response::empty_404()
+		}
+	}
+	/// Chunk request handler
+	fn chunk_request_handler(&self, url_parts: &Vec<&str>) -> rouille::Response {
+		if url_parts.len() >= 2 {
+			let with_texture: bool = false;// TODO
+			match ChunkRef::from_resource_dir_name(url_parts[1]) {
+				Ok(chunk_ref) => {
+					if url_parts.len() >= 3 {// If raw texture is requested
+						match url_parts[2] {
+							"raw_texture.png" => match resource_interface::load_chunk_texture(&chunk_ref, &self.map_name) {
+								Ok((raw_file, generic)) => rouille::Response::from_data("image/png", raw_file),
+								Err(e) => response_code_and_message(400, format!("Could not load raw texture file: {}", e))
+							},
+							_ => rouille::Response::empty_404()
+						}
+					}
+					else {
+						rouille::Response::from_data("application/octet-stream", bincode::serialize(&match Chunk::load(&chunk_ref, &self.map_name, with_texture) {
+							Ok(chunk) => AssetResponse::Chunk(chunk),
+							Err(e) => {
+								self.tx.send(async_messages::ToWorld::CreateChunk(chunk_ref)).expect("Unable to send chunk creation request to world");
+								AssetResponse::Wait//Err(format!("Error loading chunk: {}, request to create chunk was sent to the world server", e))
+							}
+						}).expect("Unable to serialize response"))
+					}
+				},
+				Err(e) => rouille::Response::from_data("application/octet-stream", bincode::serialize(&AssetResponse::Err(format!("Could not parse chunk coordinates from \"{}\" because: {}", url_parts[1], e))).expect("Unable to serialize response"))
+			}
+		}
+		else {
+			rouille::Response::text("Chunks")
 		}
 	}
 }

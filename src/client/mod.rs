@@ -135,7 +135,7 @@ fn load_vehicle_models(asset_client: &mut AssetLoaderManager, static_data: &Stat
 					static_vehicles_requested -= 1;
 					println!("Recieved model for vehicle type {}", &v_static_model.name());
 					if settings.cache {
-						v_static_model.save(network_init_info.renet_server_addr.ip()).unwrap();
+						v_static_model.save(network_init_info.renet_server_addr).unwrap();
 					}
 				},
 				Err(e) => {return Err(format!("Error from asset client: {}", e));}

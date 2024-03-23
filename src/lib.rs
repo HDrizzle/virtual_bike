@@ -2,7 +2,7 @@
 //! Created by Hadrian Ward, 2023-6-8
 
 #![allow(warnings)]// TODO: remove when I have a lot of free-time
-use std::{fmt, env, ops, error::Error, collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, time::{SystemTime, UNIX_EPOCH}, fs, path, net::IpAddr};
+use std::{fmt, env, ops, error::Error, collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, time::{SystemTime, UNIX_EPOCH}, fs, path, net::{SocketAddr, SocketAddrV4, SocketAddrV6, IpAddr, Ipv4Addr, Ipv6Addr}};
 #[cfg(any(feature = "server", feature = "debug_render_physics"))]
 use rapier3d::{dynamics::{RigidBodySet, IslandManager}, geometry::ColliderSet};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
@@ -267,6 +267,13 @@ pub mod prelude {
 			-1 => (PI*2.0) - angle_og,
 			_ => panic!("Sign must be 1 or -1")
 		}
+	}
+	/// Adds 1 to the port number
+	pub fn socket_addr_increment_port(in_: SocketAddr) -> SocketAddr {
+		let mut out = in_;
+		out.set_port(in_.port() + 1);
+		// Done
+		out
 	}
 }
 
@@ -683,7 +690,7 @@ pub trait CacheableBevyAsset: Sized {
 	fn cache_path(name: &str) -> String;// Ex: "test-bike/model.glb"
 	fn write_to_file(&self, file: &mut fs::File) -> Result<(), String>;
 	#[cfg(feature = "client")]
-	fn save(&self, server_addr: IpAddr) -> Result<(), String> {
+	fn save(&self, server_addr: SocketAddr) -> Result<(), String> {
 		let path = Self::get_path(&self.name(), server_addr);
 		let mut path_buf = path::Path::new(&path).to_path_buf();
 		assert!(path_buf.pop());// removes filename https://doc.rust-lang.org/stable/std/path/struct.PathBuf.html#method.pop
@@ -691,11 +698,11 @@ pub trait CacheableBevyAsset: Sized {
 		self.write_to_file(&mut fs::File::create(path).unwrap())
 	}
 	#[cfg(feature = "client")]
-	fn get_path(name: &str, server_addr: IpAddr) -> String {
+	fn get_path(name: &str, server_addr: SocketAddr) -> String {
 		format!("{}{}{}", get_or_create_cache_dir(server_addr), Self::CACHE_SUB_DIR, Self::cache_path(name))
 	}
 	#[cfg(feature = "client")]
-	fn load_to_bevy(name: &str, server_addr: IpAddr, asset_server: &AssetServer) -> Result<Handle<Self::BevyAssetType>, String> {
+	fn load_to_bevy(name: &str, server_addr: SocketAddr, asset_server: &AssetServer) -> Result<Handle<Self::BevyAssetType>, String> {
 		let path_raw = Self::get_path(name, server_addr);
 		match path_raw.strip_prefix("assets/") {
 			Some(path) => Ok(asset_server.load(path.to_owned())),
@@ -703,13 +710,13 @@ pub trait CacheableBevyAsset: Sized {
 		}
 	}
 	#[cfg(feature = "client")]
-	fn is_already_cached(&self, server_addr: IpAddr) -> bool {
+	fn is_already_cached(&self, server_addr: SocketAddr) -> bool {
 		path::Path::new(&Self::get_path(&self.name(), server_addr)).exists()
 	}
 }
 
 #[cfg(feature = "client")]
-fn get_or_create_cache_dir(addr: IpAddr) -> String {
+fn get_or_create_cache_dir(addr: SocketAddr) -> String {
 	format!("{}{:?}/", crate::client::cache::CACHE_DIR, addr)
 }
 

@@ -12,7 +12,7 @@ use crate::prelude::*;
 pub struct AssetLoaderManager {
 	loaders: Vec<HttpAssetLoader>,
 	retry_time: Duration,
-	server_addr: SocketAddr
+	pub server_addr: SocketAddr
 }
 
 impl AssetLoaderManager {
@@ -117,7 +117,7 @@ impl HttpAssetLoader {
 		*result_opt.lock().unwrap() = Some(match response_result {
 			Ok(res) => {
 				let raw_data: Vec<u8> = res.bytes().unwrap().into_iter().collect();
-				match bincode::deserialize(&raw_data) {
+				match bincode::deserialize::<AssetResponse>(&raw_data) {
 					Ok(response) => Ok(response),
 					Err(e) => Err(format!("Bincode deserialization error: {}", e))
 				}

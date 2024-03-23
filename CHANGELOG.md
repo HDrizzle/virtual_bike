@@ -36,3 +36,5 @@
 * 2024-3-3: Moved this from block comment at beginning of lib.rs to CHANGELOG.md
 
 * 2024-3-5: New feature: chat log
+
+* 2024-3-9: Upgrading to bevy ^0.13

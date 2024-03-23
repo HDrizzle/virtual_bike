@@ -1,6 +1,6 @@
 // Created 2023-9-29
 
-use std::{rc::Rc, error::Error, collections::HashMap, sync::{Arc, Mutex}, io::Write, net::IpAddr, fs};
+use std::{rc::Rc, error::Error, collections::HashMap, sync::{Arc, Mutex}, io::Write, net::SocketAddr, fs};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 #[cfg(feature = "client")]
 use bevy::{prelude::*, render::{texture::{ImageType, CompressedImageFormats, ImageSampler, ImageFormat}, render_asset::RenderAssetUsages}};
@@ -417,10 +417,8 @@ impl Chunk {
 		self.collider_handle = None;
 	}
 	#[cfg(feature = "client")]
-	pub fn bevy_pbr_bundle(&mut self, commands: &mut Commands, meshes:  &mut ResMut<Assets<Mesh>>, materials: &mut ResMut<Assets<StandardMaterial>>, asset_server: &AssetServer, server_addr: IpAddr) {// See https://stackoverflow.com/questions/66677098/how-can-i-manually-create-meshes-in-bevy-with-vertices
+	pub fn bevy_pbr_bundle(&mut self, commands: &mut Commands, meshes:  &mut ResMut<Assets<Mesh>>, materials: &mut ResMut<Assets<StandardMaterial>>, asset_server: &AssetServer, server_addr: SocketAddr) {// See https://stackoverflow.com/questions/66677098/how-can-i-manually-create-meshes-in-bevy-with-vertices
 		// With help from https://github.com/bevyengine/bevy/blob/main/examples/3d/texture.rs
-
-use bevy::render::render_asset::RenderAssetUsages;
 		let texture_handle_opt: Option<Handle<Image>> = match &self.texture_opt {
 			Some(texture) => {
 				//println!("Chunk {:?} has texture", &self.ref_);
@@ -433,9 +431,16 @@ use bevy::render::render_asset::RenderAssetUsages;
 					RenderAssetUsages::RENDER_WORLD// TODO: make sure this is correct
 				).unwrap()))
 			},
-			None => match ChunkTexture::load_to_bevy("generic", server_addr, asset_server) {
-				Ok(handle) => Some(handle),
-				Err(e) => panic!("Could not load generic chunk: {}", e)
+			None => {
+				if false {// TODO: whether cache is enabled
+					match ChunkTexture::load_to_bevy("generic", server_addr, asset_server) {
+						Ok(handle) => Some(handle),
+						Err(e) => panic!("Could not load generic chunk: {}", e)
+					}
+				}
+				else {
+					Some(asset_server.load(&format!("http://{:?}/chunks/{}/raw_texture.png", socket_addr_increment_port(server_addr), self.ref_.resource_dir_name())))
+				}
 			}
 		};
 		let base_color = match &texture_handle_opt {

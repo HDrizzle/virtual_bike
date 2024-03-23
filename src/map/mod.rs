@@ -1,6 +1,6 @@
 //! Map main module file
 
-use std::{collections::HashMap, mem, thread, sync::{Arc, Mutex}, time::{Instant, Duration}, ops::Index, net::IpAddr};
+use std::{collections::HashMap, mem, thread, sync::{Arc, Mutex}, time::{Instant, Duration}, ops::Index, net::{IpAddr, SocketAddr}};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 use serde_json;
 #[cfg(feature = "client")]
@@ -143,7 +143,7 @@ impl GenericMap {
 		false
 	}
     #[cfg(feature = "client")]
-	pub fn insert_chunk_client(&mut self, mut chunk: Chunk, #[cfg(feature = "debug_render_physics")] rapier_data: &mut RapierBodyCreationDeletionContext, commands: &mut Commands, meshes:  &mut ResMut<Assets<Mesh>>, materials: &mut ResMut<Assets<StandardMaterial>>, asset_server: &AssetServer, server_addr: IpAddr) {
+	pub fn insert_chunk_client(&mut self, mut chunk: Chunk, #[cfg(feature = "debug_render_physics")] rapier_data: &mut RapierBodyCreationDeletionContext, commands: &mut Commands, meshes:  &mut ResMut<Assets<Mesh>>, materials: &mut ResMut<Assets<StandardMaterial>>, asset_server: &AssetServer, server_addr: SocketAddr) {
 		// Add to bevy rendering world
 		if !self.is_chunk_loaded(&chunk.ref_) {
 			chunk.bevy_pbr_bundle(commands, meshes, materials, asset_server, server_addr);
@@ -193,10 +193,10 @@ impl GenericMap {
 		None
 	}
 	#[cfg(feature = "client")]
-	pub fn init_bevy(&mut self, path_set: &PathSet, commands: &mut Commands, meshes:  &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>, asset_server: &AssetServer) {
+	pub fn init_bevy(&mut self, path_set: &PathSet, commands: &mut Commands, meshes:  &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>, asset_server: &AssetServer, server_addr: &SocketAddr) {
 		#[cfg(feature = "path_rendering")]
 		for (_, path) in &path_set.paths {
-			path.init_bevy(commands, meshes, materials, asset_server);
+			path.init_bevy(commands, meshes, materials, asset_server, server_addr);
 		}
 	}
 	#[cfg(all(feature = "server", feature = "client"))]
@@ -234,8 +234,8 @@ pub struct SendMap {
 
 impl SendMap {
 	#[cfg(feature = "client")]
-	pub fn init_bevy(&mut self, commands: &mut Commands, meshes:  &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>, asset_server: &AssetServer) {
-		self.generic.init_bevy(&self.path_set, commands, meshes, materials, asset_server);
+	pub fn init_bevy(&mut self, commands: &mut Commands, meshes:  &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>, asset_server: &AssetServer, server_addr: &SocketAddr) {
+		self.generic.init_bevy(&self.path_set, commands, meshes, materials, asset_server, server_addr);
 	}
 }
 

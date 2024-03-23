@@ -6,7 +6,7 @@
 //! 
 //! There are `Route`s which represent a loop and can use multiple paths/parts of paths. A `Path` is a series of cubic bezier curves (`BCurve`).
 
-use std::{collections::HashMap, sync::Arc, f32::consts::PI};
+use std::{collections::HashMap, sync::Arc, f32::consts::PI, net::SocketAddr};
 use bevy::math;
 use nalgebra::UnitQuaternion;
 use serde::{Serialize, Deserialize};
@@ -427,12 +427,12 @@ impl GenericPath {
 		(mesh, next_pos)
 	}
 	#[cfg(feature = "client")]
-	pub fn init_bevy(&self, type_config: &PathType, commands: &mut Commands, meshes:  &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>, asset_server: &AssetServer) {
+	pub fn init_bevy(&self, type_config: &PathType, commands: &mut Commands, meshes:  &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>, asset_server: &AssetServer, server_addr: &SocketAddr) {
 		// Loop through entire path until done
 		let mut curr_pos = PathPosition::default();
 		loop {
 			// With help from https://github.com/bevyengine/bevy/blob/main/examples/3d/wireframe.rs
-			let texture_handle: Handle<Image> = asset_server.load("road_us.png");
+			let texture_handle: Handle<Image> = asset_server.load(&format!("http://{:?}/path_textures/{}.png", server_addr, &type_config.ref_));//"road_us.png");
 			let material_handle = materials.add(StandardMaterial {
 				base_color: Color::rgba(0.5, 0.5, 0.5, 1.0),
 				base_color_texture: Some(texture_handle),
@@ -479,8 +479,8 @@ impl Path {
 		}
 	}
 	#[cfg(feature = "client")]
-	pub fn init_bevy(&self, commands: &mut Commands, meshes:  &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>, asset_server: &AssetServer) {
-		self.generic.init_bevy(&self.type_, commands, meshes, materials, asset_server)
+	pub fn init_bevy(&self, commands: &mut Commands, meshes:  &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>, asset_server: &AssetServer, server_addr: &SocketAddr) {
+		self.generic.init_bevy(&self.type_, commands, meshes, materials, asset_server, server_addr)
 	}
 	pub fn save(&self) -> SavePath {
 		SavePath {
