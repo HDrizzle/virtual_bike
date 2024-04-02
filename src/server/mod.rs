@@ -15,8 +15,9 @@ use crate::{prelude::*, world::async_messages, resource_interface};
 pub mod message_log;
 use message_log::{Message, MessageEnum, Log};
 
+/// All possible requests to the Renet server
 #[derive(Serialize, Deserialize)]
-pub enum RenetRequest {// All possible requests
+pub enum RenetRequest {
 	Init,
 	ClientUpdate(ClientUpdate),
 	TogglePlaying,
@@ -28,8 +29,9 @@ pub enum RenetRequest {// All possible requests
 	Chat(ClientAuth, String)
 }
 
+/// All possible responses from the Renet server
 #[derive(Serialize, Deserialize)]
-pub enum RenetResponse {// All possible responses
+pub enum RenetResponse {
 	InitState(StaticData),
 	WorldState(WorldSend),
 	Err(String),
@@ -73,6 +75,7 @@ pub enum AssetResponse {
 	Err(String)
 }
 
+/// For running the Renet server in a seperate thread
 #[cfg(feature = "server")]
 struct NetworkRuntimeManager {
 	pub server: RenetServer,
@@ -178,6 +181,7 @@ impl NetworkRuntimeManager {
 	}
 }
 
+/// Main server
 #[cfg(feature = "server")]
 pub struct WorldServer {
 	world_name: String,
@@ -281,10 +285,11 @@ fn response_code_and_message(code: u16, message: String) -> rouille::Response {
 		upgrade: None
 	}
 }
-
+/// HTTP Server for serving large static files such as game assets
+/// Not to be confused with Bevy's AssetServer
 #[cfg(feature = "server")]
 #[derive(Clone)]
-struct AssetServer {// Nothing to do with Bevy
+struct AssetServer {
 	world_name: String,
 	map_name: String,
 	tx: mpsc::Sender<async_messages::ToWorld>

@@ -198,7 +198,12 @@ pub fn save_chunk_data(chunk: &Chunk, map_name: &str) -> Result<(), Box<dyn Erro
 	// Serialize
 	let raw_string: String = serde_json::to_string(chunk)?;
 	// Save to file
-	fs::write(chunk.ref_.resource_dir(map_name, false) + "data.json", &raw_string)?;
+	let chunk_dir = chunk.ref_.resource_dir(map_name, false);
+	fs::write(chunk_dir.clone() + &ChunkDirComponent::JsonData.file_name(), &raw_string)?;
+	// Also save chunk texture if there is one
+	if let Some(chunk_texture) = &chunk.texture_opt {
+		fs::write(chunk_dir + &ChunkDirComponent::Texture.file_name(), &chunk_texture.raw_data)?;
+	}
 	Ok(())
 }
 

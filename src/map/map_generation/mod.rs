@@ -6,6 +6,7 @@ use crate::prelude::*;
 
 pub mod gis;
 pub mod fractal;
+pub mod textures;
 
 // Enum
 #[derive(Serialize, Deserialize, Clone)]

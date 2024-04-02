@@ -34,7 +34,7 @@ pub mod server;
 #[cfg(test)]
 mod tests;
 
-// Prelude, added 2023-9-9
+/// Prelude, added 2023-9-9
 #[allow(unused)]
 pub mod prelude {
 	use super::*;

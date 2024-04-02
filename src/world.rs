@@ -24,6 +24,8 @@ use crate::client::play::VehicleBodyHandles;*/
 use nalgebra::vector;
 
 // Structs
+
+/// Sent to every client when it first connects to the server, this contains data that does not change on the server's end througout a simulation
 #[derive(Serialize, Deserialize, Clone)]
 #[cfg_attr(feature = "client", derive(Resource))]
 pub struct StaticData {
@@ -84,7 +86,8 @@ impl StaticData {
 	}
 }
 
-// Copied from https://rapier.rs/docs/user_guides/rust/serialization
+/// Complete physics state for use by Rapier
+/// Copied from https://rapier.rs/docs/user_guides/rust/serialization
 #[cfg(feature = "server")]
 pub struct PhysicsState {
 	pub pipeline: PhysicsPipeline,
@@ -176,9 +179,10 @@ impl PhysicsState {
 	}
 }
 
+/// Only what is needed to init the client's rapier context, this should only be sent once when the client initially connects as it can be very large when serialized
 #[derive(Serialize, Deserialize, Clone)]
 #[cfg(feature = "debug_render_physics")]
-pub struct PhysicsStateSend {// Only what is needed to init the client's rapier context, this should only be sent once when the client initially connects as it can be very large when serialized
+pub struct PhysicsStateSend {
 	pub islands: IslandManager,
 	pub bodies: RigidBodySet,
 	pub colliders: ColliderSet,
@@ -205,11 +209,14 @@ impl PhysicsStateSend {
 	}
 }
 
+/// Instead of sending over most of the rapier context, this just uses body handles and their corresponding states, only used for the `debug_render_physics` feature
 #[cfg(any(feature = "server", feature = "debug_render_physics"))]
 pub type BodyStates = HashMap<RigidBodyHandle, BodyStateSerialize>;
 
-pub mod async_messages {// These are sent between the thread running World::main_loop() and the master thread
+/// These are sent between the thread running `World::main_loop()` and thread running the Renet server
+pub mod async_messages {
 	use super::*;
+	/// From the server to the simulation
 	pub enum ToWorld {
 		ClientUpdate(ClientUpdate),
 		Pause,
@@ -218,13 +225,14 @@ pub mod async_messages {// These are sent between the thread running World::main
 		CreateChunk(ChunkRef),
 		RecoverVehicleFromFlip(ClientAuth)
 	}
-
+	/// From the simulation to the server
 	pub enum FromWorld {
 		State(WorldSend),
 		Error(String)
 	}
 }
 
+/// Loaded from and saved to the disk
 #[derive(Serialize, Deserialize)]
 pub struct WorldSave {
 	pub map: String,// Name of map file
@@ -234,13 +242,19 @@ pub struct WorldSave {
 	pub gravity: Float
 }
 
+/// World state, sent to the client(s)
 #[derive(Serialize, Deserialize)]
 #[cfg_attr(feature = "client", derive(Resource, Default))]
-pub struct WorldSend {// Sent to the client
+pub struct WorldSend {
+	/// Map of usernames and the state of their vehicles
 	pub vehicles: HashMap<String, VehicleSend>,
+	/// Current age of the world simulation in seconds
 	pub age: f64,
+	/// Whether the simulation is playing or paused
 	pub playing: bool,
+	/// Current server frames per second
 	pub fps: f64,
+	/// Rapier body states
 	#[cfg(feature = "debug_render_physics")]
 	pub body_states: BodyStates
 }
@@ -260,12 +274,18 @@ impl WorldSend {
 	}
 }
 
+/// Main game simulation, not directly serializable
 #[cfg(feature = "server")]
-pub struct World {// Main game simulation
+pub struct World {
+	/// The map in use by this world
 	pub map: ServerMap,
-	pub vehicles: HashMap<String, Vehicle>,// {username: vehicle}
+	/// Map of usernames and corresponding vehicles
+	pub vehicles: HashMap<String, Vehicle>,
+	/// Age of simulation
 	pub age: Duration,
+	/// Whether the simulation is playing or paused
 	pub playing: bool,
+	/// Gravity, should be negative
 	pub gravity: Float,
 	physics_state: PhysicsState
 }

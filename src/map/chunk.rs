@@ -1,4 +1,5 @@
-// Created 2023-9-29
+//! Created 2023-9-29
+//! Chunks are the "building-blocks" of a static map (they aren't modified during gameplay) sort of like in Minecraft which is where I got the idea.
 
 use std::{rc::Rc, error::Error, collections::HashMap, sync::{Arc, Mutex}, io::Write, net::SocketAddr, fs};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
@@ -11,10 +12,14 @@ use rapier3d::prelude::*;
 use crate::{prelude::*, resource_interface};
 
 // Structs
+
+/// Represents a `Chunk`s elevation data in a square grid of elevation values
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
-pub struct RegularElevationMesh {// This stores the map topography data in a grid of Z (verticle) values
-	pub precision: Float,// side-length of each square
-	pub grid: Vec<Vec<Float>>// elevation = grid[y][x], where x and y are in grid index units
+pub struct RegularElevationMesh {
+	/// side-length of each square
+	pub precision: Float,
+	/// elevation = grid[y][x], where x and y are in grid index units
+	pub grid: Vec<Vec<Float>>
 }
 
 impl RegularElevationMesh {
@@ -190,9 +195,11 @@ impl RegularElevationMesh {
 	}
 }
 
+/// A reference to a chunk anywhere in a map. It is assumed that any of these used in the game will fall on the grid formed by the map's `chunk_size` field.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Eq, Hash)]
 #[cfg_attr(feature = "client", derive(Component))]
-pub struct ChunkRef {// A deterministic reference to a chunk in the world
+pub struct ChunkRef {
+	/// Position in 2D space of south-west corner of a chunk (bottom-right when looking down facing in 2D +Y or 3D +Z)
 	pub position: IntV2
 }
 
@@ -298,10 +305,12 @@ impl ChunkRef {
 	}
 }
 
+/// Basically represents a chunk texture that was loaded and sent over to the client
 #[derive(Serialize, Deserialize, Clone)]
 pub struct ChunkTexture {
 	chunk_ref: ChunkRef,
-	pub raw_data: Vec<u8>,// PNG format
+	/// PNG format
+	pub raw_data: Vec<u8>,
 	generic: bool
 }
 
@@ -348,20 +357,29 @@ pub struct ChunkCreationArgs {
 	pub map_name: String
 }
 
+/// This struct contains the elevation mesh and optionally the raw PNG texture file.
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Chunk {
+	/// The reference to this chunk
 	pub ref_: ChunkRef,
+	/// Actual topographical data
 	pub elevation: RegularElevationMesh,
-	pub texture_opt: Option<ChunkTexture>,// Do not serde ignore this as it will not be sent to the client, one of the dumbest bugs I've had to fix
+	/// Basically just raw PNG file
+	/// Do not serde ignore this as it will not be sent to the client, one of the dumbest bugs I've had to fix
+	pub texture_opt: Option<ChunkTexture>,
+	/// Edge size in worl-units
 	pub size: UInt,
-	pub grid_size: UInt,// Number of spaces inside grid, for example if this is 4 then the elevation grid coordinates should be 5x5, because fence-post problem
+	/// Number of spaces inside grid, for example if this is 4 then the elevation grid coordinates should be 5x5, because fence-post problem
+	pub grid_size: UInt,
+	/// Default color if the client has no texture
 	pub background_color: [u8; 3],
 	#[serde(skip)]
 	#[cfg(any(feature = "server", feature = "debug_render_physics"))]
 	collider_handle: Option<ColliderHandle>,
 	#[serde(skip)]
 	#[cfg(feature = "client")]
-	pub asset_id_opt: Option<AssetId<Mesh>>// Can be used for `remove()`: https://docs.rs/bevy/0.11.0/bevy/asset/struct.Assets.html#method.remove
+	/// Can be used for `remove()`: https://docs.rs/bevy/0.11.0/bevy/asset/struct.Assets.html#method.remove
+	pub asset_id_opt: Option<AssetId<Mesh>>
 }
 
 impl Chunk {
@@ -548,6 +566,8 @@ impl ChunkCreationResult {
 	}
 }
 
+/// A Chunk folder/directory mau have one or both files: JSON file which is a serialized instance of `Chunk` or a PNG image which will be used as the chunk's texture.
+/// This enum is simply for generalizing the need to find default chunk meshes or textures.
 #[derive(Clone, Debug)]
 pub enum ChunkDirComponent {
 	JsonData,

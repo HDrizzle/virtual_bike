@@ -27,28 +27,27 @@ pub mod map_generation;
 use rapier3d::prelude::*;
 
 // Structs
-// Dummy struct to take the same amount of memory as `MapGenerator`, so that when the client decodes it, it will still work
-/*pub struct ClientDummy {
-	_padding: [u8; mem::size_of::<MapGenerator>()]
-}*/
-
-// Using my new fancy macro (WOW) to create MapSend
-/*#[cfg_attr(feature = "frontend", derive(Resource))]
-struct_subset!(Map, MapSend, name, loaded_chunks, path_set, chunk_size, chunkgrid_size, landmarks, background_color, auto_gen_chunks, body_handle_opt);// Simple for now*/
 
 /// Generic map struct which is Serialize/Deserialize-able and also is used during runtime, contains most of the map functionality
 /// This struct can't have things such as handles for async tasks to create chunks since those can't be serialized / deserialized
 #[derive(Serialize, Deserialize, Clone)]
 pub struct GenericMap {// Serialize, Deserialize, Clone, used by client AND server
+	/// Must match name of folder from which this map was deserialized
 	pub name: String,
-	//#[cfg(not(feature = "server"))] pub gen: ClientDummy,
+	/// Vector of chunks that are currently loaded, this is used on both the server and client sides
 	#[serde(skip)]
 	pub loaded_chunks: Vec<Chunk>,
-	pub chunk_size: UInt,// length of the side of each chunk, world units (meters)
-	pub chunk_grid_size: UInt,// Number of points along the side of each chunk
+	/// Length of the side of each chunk in world units (meters)
+	pub chunk_size: UInt,
+	/// Number of points along the side of each chunk
+	pub chunk_grid_size: UInt,
+	/// Map of strings representing landmarks and the locations in 2D space
 	pub landmarks: HashMap<String, V2>,
+	/// Default background color
 	pub background_color: [u8; 3],
+	/// Whether the server is allowed to automatically generate chunks
 	pub auto_gen_chunks: bool,
+	/// Used to store the handle for the Rapier physics body for the server or if debug render physics is enabled
 	#[serde(skip)]
 	#[cfg(any(feature = "server", feature = "debug_render_physics"))]
 	pub body_handle_opt: Option<RigidBodyHandle>
@@ -226,6 +225,7 @@ impl GenericMap {
 	}
 }
 
+/// This is what is sent to the client(s) as the "world state" update
 #[derive(Serialize, Deserialize, Clone)]
 pub struct SendMap {
 	pub generic: GenericMap,
@@ -331,6 +331,7 @@ impl validity::ValidityTest for SaveMap {
 	}
 }
 
+/// For implementing the `AutoFix` trait, contains more general information about the problem
 #[cfg(all(feature = "server", feature = "client"))]
 #[derive(Clone)]
 pub struct SaveMapAutoFix {
@@ -360,6 +361,7 @@ impl validity::AutoFix for SaveMapAutoFix {
 	}
 }
 
+/// Enum for specific problems/fixes that could be encountered with a map directory
 #[derive(Clone)]
 #[cfg(all(feature = "server", feature = "client"))]
 pub enum SaveMapAutoFixEnum {
