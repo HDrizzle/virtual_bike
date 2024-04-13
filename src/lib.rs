@@ -8,13 +8,12 @@ use rapier3d::{dynamics::{RigidBodySet, IslandManager}, geometry::ColliderSet};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 use nalgebra::{Point3, Point2, Vector3, Vector2, point, Matrix, Const, ArrayStorage, OPoint, Translation, Isometry3, UnitQuaternion, UnitComplex, Complex};
 #[cfg(feature = "client")]
-use bevy::{prelude::Transform, ecs::system::Resource, render::{mesh::{Mesh, Indices}, render_resource::PrimitiveTopology}};
+use bevy::{prelude::Transform, asset::{Asset, AssetServer, Handle}, ecs::system::Resource, render::{mesh::{Mesh, Indices}, render_resource::PrimitiveTopology, render_asset::RenderAssetUsages}};
 #[cfg(feature = "debug_render_physics")]
 use bevy_rapier3d::plugin::RapierContext;
 use dialoguer;
 use rand::Rng;
 #[cfg(feature = "client")]
-use bevy::{prelude::*, render::render_asset::RenderAssetUsages};
 use approx::{AbsDiffEq, RelativeEq};
 
 // Modules
@@ -55,7 +54,7 @@ pub mod prelude {
 	// Misc
 	pub use crate::{
 		world::{StaticData, WorldSave, WorldSend},
-		map::{GenericMap, SendMap, path::{PathType, PathTypeRef, Path, SavePath, GenericPath, PathSet, SavePathSet, GenericPathSet, PathBoundBodyState, PathPosition, BCurve, BCurveSample, Intersection, IntersectionDecision, IntersectionId, BCURVE_LENGTH_ESTIMATION_SEGMENTS}, chunk::{Chunk, ChunkRef, RegularElevationMesh}},
+		map::{GenericMap, SendMap, path::{PathType, PathTypeRef, Path, PathRef, SavePath, GenericPath, PathSet, SavePathSet, GenericPathSet, PathBoundBodyState, PathPosition, BCurve, BCurveSample, Intersection, IntersectionDecision, IntersectionId, BCURVE_LENGTH_ESTIMATION_SEGMENTS}, chunk::{Chunk, ChunkRef, RegularElevationMesh}},
 		vehicle::{VehicleStatic, VehicleStaticModel, VehicleSave, VehicleSend, Wheel, WheelStatic, BodyStateSerialize, BodyForces},
 		server::{RenetRequest, RenetResponse, AssetResponse, message_log},
 		GenericError,
@@ -76,7 +75,7 @@ pub mod prelude {
 		physics::{PhysicsController, PhysicsUpdateArgs, BodyAveragableState, defaut_extra_forces_calculator},
 		vehicle::Vehicle,
 		world::{World, PhysicsState},
-		map::{ServerMap, SaveMap, map_generation::{MapGenerator, MeshCreationArgs, gis::WorldLocation}, chunk::{ChunkCreationArgs, ChunkCreationResult}}
+		map::{ServerMap, SaveMap, map_generation::{self, MapGenerator, MeshCreationArgs, gis::WorldLocation}, chunk::{ChunkCreationArgs, ChunkCreationResult}}
 	};
 	#[cfg(feature = "client")] pub use crate::{
 		server::AssetRequest
@@ -169,7 +168,7 @@ pub mod prelude {
 			}
 		}
 		// Done
-		Image::new(
+		bevy::prelude::Image::new(
 			Extent3d {
 				width: in_.width(),
 				height: in_.height(),

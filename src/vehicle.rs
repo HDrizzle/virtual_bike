@@ -236,7 +236,7 @@ impl VehicleStatic {
 #[derive(Serialize, Deserialize)]
 pub struct VehicleSave {// This is saved to and loaded from a world (game save file)
 	pub type_: String,// Name of static vehicle file
-	body_state: BodyStateSerialize
+	pub body_state: BodyStateSerialize
 }
 
 #[derive(Serialize, Deserialize)]
@@ -283,10 +283,10 @@ impl VehicleSend {
 #[cfg(feature = "server")]//#[cfg_attr(feature = "frontend", derive(Component))]
 pub struct Vehicle {// This is used for physics
 	pub static_: Rc<VehicleStatic>,
-	latest_forces: Option<BodyForces>,
-	latest_input: Option<InputData>,
-	latest_input_t: u64,
-	physics_controller: Box<dyn PhysicsController>
+	pub latest_forces: Option<BodyForces>,
+	pub latest_input: Option<InputData>,
+	pub latest_input_t: u64,
+	pub physics_controller: Box<dyn PhysicsController>
 }
 
 #[cfg(feature = "server")]

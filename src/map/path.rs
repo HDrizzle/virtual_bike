@@ -7,6 +7,7 @@
 //! There are `Route`s which represent a loop and can use multiple paths/parts of paths. A `Path` is a series of cubic bezier curves (`BCurve`).
 
 use std::{collections::HashMap, sync::Arc, f32::consts::PI, net::SocketAddr};
+use core::cmp::{PartialOrd, Ordering};
 use bevy::math;
 use nalgebra::UnitQuaternion;
 use serde::{Serialize, Deserialize};
@@ -137,11 +138,11 @@ pub type PathTypeRef = String;
 #[derive(Serialize, Deserialize, Clone)]
 pub struct PathType {
 	/// Reference to this path type
-	ref_: PathTypeRef,
+	pub ref_: PathTypeRef,
 	/// Non-identifying, example usage: "Dirt path", "Road", or "Highway"
-	name: String,
+	pub name: String,
 	/// Width of path
-	width: Float
+	pub width: Float
 }
 
 impl Default for PathType {
@@ -163,7 +164,7 @@ pub struct GenericPath {
 	/// Non-identifying, Example usage: road names
 	pub name: String,
 	/// The spline must pass through these points
-	pub knot_points: Vec<P3>,
+	pub knot_points: Vec<V3>,
 	/// wrt each knot point
 	pub tangent_offsets: Vec<V3>,
 	/// Whether the end of this path is meant to meet up with the beginning
@@ -201,8 +202,8 @@ impl GenericPath {
 		else {
 			(i_raw, i_raw + 1)
 		};
-		let v0: V3 = self.knot_points[i0].coords;
-		let v1: V3 = self.knot_points[i1].coords;
+		let v0: V3 = self.knot_points[i0];
+		let v1: V3 = self.knot_points[i1];
 		let offset0: V3 = self.tangent_offsets[i0];
 		let offset1: V3 = -self.tangent_offsets[i1];// Negative is here for a reason
 		BCurve {
@@ -275,6 +276,27 @@ impl GenericPath {
 		)
 	}
 	/// Estimates the distance along this path to the given path pos using `num_segments` sections per bcurve
+	/// ```
+	/// use virtual_bike::prelude::*;
+	/// use approx::assert_relative_eq;
+	/// let path = GenericPath{// Should be a good approximation to the unit circle, https://spencermortensen.com/articles/bezier-circle/
+	/// 	name: "test-path-name".to_owned(),
+	/// 	knot_points: vec![
+	/// 		V3::new(1.0, 0.0, 0.0),
+	/// 		V3::new(0.0, 1.0, 0.0),
+	/// 		V3::new(-1.0, 0.0, 0.0),
+	/// 		V3::new(0.0, -1.0, 0.0),
+	/// 	],
+	/// 	tangent_offsets: vec![
+	/// 		V3::new(0.0, 0.55342686, 0.0),
+	/// 		V3::new(-0.55342686, 0.0, 0.0),
+	/// 		V3::new(0.0, -0.55342686, 0.0),
+	/// 		V3::new(0.55342686, 0.0, 0.0),
+	/// 	],
+	/// 	loop_: true
+	/// };
+	/// assert_relative_eq!(path.estimate_distance_to_position(&path.end_position(), 1000), PI*2.0, epsilon=0.005);// Unit circle = 2*pi
+	/// ```
 	pub fn estimate_distance_to_position(&self, pos: &PathPosition, num_segments: usize) -> Float {
 		let mut out: Float = 0.0;
 		for i in 0..pos.latest_point+1 {
@@ -296,7 +318,7 @@ impl GenericPath {
 	/// Returns: Optional amount of step distance left after intersection
 	pub fn update_body(&self, dt: Float, forces: &BodyForces, v_static: &VehicleStatic, state: &mut PathBoundBodyState, next_intersection_opt: Option<Float>) -> Option<Float> {
 		let bcurve = self.get_bcurve(state.pos.latest_point);
-		let dir_sign = state.direction_sign() as Float;
+		let dir_sign = bool_sign(state.forward) as Float;
 		// Acceleration: F = m * a, a = F / m
 		let acc = forces.lin.z / v_static.mass;
 		// Velocity: V += a * dt
@@ -581,6 +603,23 @@ impl Intersection {
 		state.path_ref = path_ref;
 		state.pos = path_pos;
 	}
+	/// Compiles Vec of all path points on given path
+	/// ```
+	/// use virtual_bike::prelude::{Intersection, PathRef, PathPosition};
+	/// let intersection = Intersection::new(vec![
+	/// 	(0, PathPosition::new(1, 0.0)),
+	/// 	(1, PathPosition::new(2, 0.0)),
+	/// 	(0, PathPosition::new(3, 0.0)),
+	/// 	(1, PathPosition::new(4, 0.0)),
+	/// ]);
+	/// assert_eq!(
+	/// 	intersection.path_points_on_specific_path(&1),
+	/// 	vec![
+	/// 		PathPosition::new(2, 0.0),
+	/// 		PathPosition::new(4, 0.0)
+	/// 	]
+	/// );
+	/// ```
 	pub fn path_points_on_specific_path(&self, path_ref: &PathRef) -> Vec<PathPosition> {
 		let mut out = Vec::<PathPosition>::new();
 		for pt in &self.path_points {
@@ -637,45 +676,55 @@ impl PathSet {
 	/// Returns: Option<(
 	/// 	Intersection ID,
 	/// 	&Intersection,
-	/// 	Distance along given path to intersection
+	/// 	Distance along given path to intersection in direction given by `forward`
 	/// )>
 	pub fn next_intersection_on_path(&self, path_ref: PathRef, path_pos: &PathPosition, forward: bool) -> Option<(IntersectionId, &Intersection, Float)> {
 		// Get path
 		let path: &Path = self.get_path_with_ref(&path_ref).expect("Invalid path reference");
+		let path_len = path.generic.estimate_distance_to_position(&path.generic.end_position(), BCURVE_LENGTH_ESTIMATION_SEGMENTS);
 		// Get distance along path
 		let dist_along_path = path.generic.estimate_distance_to_position(path_pos, BCURVE_LENGTH_ESTIMATION_SEGMENTS);
 		// Get all intersection points on given path
-		let mut intersection_points = Vec::<(IntersectionId, PathPosition)>::new();// (IntersectionId, intersection pos - `path_pos`)
+		let mut intersection_points: Vec<(u64, PathPosition)> = Vec::new();// (IntersectionId, intersection pos - `path_pos`)
 		for (id, intersection) in &self.generic.intersections {
 			let points: Vec<PathPosition> = intersection.path_points_on_specific_path(&path_ref);
 			for point in points {
 				intersection_points.push((*id, point));
 			}
 		}
-		// Sort intersection points
-		let floatify_path_pos = |t: &(u64, PathPosition)| -> Float {
-			(t.1.latest_point as Float) + t.1.t
-		};
-		intersection_points.sort_by(|a, b| floatify_path_pos(a).partial_cmp(&floatify_path_pos(b)).unwrap());
+		// Sort intersection points (unecessary)
+		//intersection_points.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 		// Get closest one in correct direction (use `forward`)
-		let mut out: Option<(IntersectionId, &Intersection, Float)> = None;
+		let mut out: Option<(IntersectionId, &Intersection, Float)> = None;// (IntersectionId, &Intersection, Distance from `path_pos` to this intersection point)
 		for (id, curr_pos) in intersection_points {
 			let curr_dist = path.generic.estimate_distance_to_position(&curr_pos, BCURVE_LENGTH_ESTIMATION_SEGMENTS);
 			let diff_raw = curr_dist - dist_along_path;// From given `path_pos` to curr pos
-			let diff_corrected = diff_raw * bool_sign(forward) as Float;
-			// Logic to get possible new closest intersection
-			let mut use_this_one = match &out {
-				Some(t) => t.2 >= 0.0 && diff_corrected < t.2,
-				None => if path.generic.loop_ {
-					true
+			let diff_sign_corrected = diff_raw * bool_sign(forward) as Float;
+			// Possible distance, could be `None` path is not a loop
+			let diff_positive_opt: Option<Float> = if diff_sign_corrected >= 0.0 {
+				Some(diff_sign_corrected)
+			}
+			else {
+				if path.generic.loop_ {
+					let out = diff_sign_corrected + path_len;
+					assert!(out >= 0.0, "The positive difference calculated between two points along path must be positive");
+					assert!(out < path_len, "The distance along the path must less then the path length. There is a possibility this is caused slight by length estimation errors");
+					Some(out)
 				}
 				else {
-					diff_corrected >= 0.0
+					None
 				}
 			};
-			// Update `out` if `new_out` is Some(_)
-			if use_this_one {
-				out = Some((id, self.generic.intersections.get(&id).expect("This shouldn't happen"), diff_corrected));
+			// Logic to get possible new closest intersection
+			if let Some(diff_positive) = diff_positive_opt {
+				let mut use_this_one = match &out {
+					Some((_, _, curr_best_dist)) => diff_positive < *curr_best_dist,
+					None => true
+				};
+				// Update `out` if `new_out` is Some(_)
+				if use_this_one {
+					out = Some((id, self.generic.intersections.get(&id).expect("This shouldn't happen"), diff_positive));
+				}
 			}
 		}
 		// Done
@@ -728,9 +777,19 @@ impl Default for GenericPathSet {
 	}
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+/// Represents a position along a path
+/// ```
+/// use std::cmp::Ordering;
+/// use virtual_bike::prelude::PathPosition;
+/// assert!(PathPosition::new(1, 0.5) > PathPosition::new(0, 0.5));
+/// assert!(PathPosition::new(0, 0.5) < PathPosition::new(1, 0.5));
+/// assert_eq!(PathPosition::new(0, 1.0).partial_cmp(&PathPosition::new(1, 0.0)), Some(Ordering::Equal));
+/// ```
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PathPosition {
+	/// The index of the first knot point encountered if moving backwards along path (or at of `t` = 0.0)
 	pub latest_point: usize,
+	/// The bezier curve LERP perameter, should be >=0 and < 1. Note that this does not map linearly along the length of a bezier curve.
 	pub t: Float// 0<= this <= 1
 }
 
@@ -740,6 +799,9 @@ impl PathPosition {
 			latest_point: i,
 			t: f
 		}
+	}
+	fn floatify(&self) -> Float {
+		(self.latest_point as Float) + self.t
 	}
 }
 
@@ -752,19 +814,59 @@ impl Default for PathPosition {
 	}
 }
 
+impl PartialEq for PathPosition {
+	fn eq(&self, other: &Self) -> bool {
+		self.floatify() == other.floatify()
+	}
+	fn ne(&self, other: &Self) -> bool {
+		!(self == other)
+	}
+}
+
+impl PartialOrd for PathPosition {
+	fn ge(&self, other: &Self) -> bool {
+		self > other || self == other
+	}
+	fn gt(&self, other: &Self) -> bool {
+		self.floatify() > other.floatify()
+	}
+	fn le(&self, other: &Self) -> bool {
+		self < other || self == other
+	}
+	fn lt(&self, other: &Self) -> bool {
+		self.floatify() < other.floatify()
+	}
+	fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+		Some(if self == other {
+			Ordering::Equal
+		}
+		else {
+			if self > other {
+				Ordering::Greater
+			}
+			else {
+				Ordering::Less
+			}
+		})
+	}
+}
+
+/// Represents the state of a "bath-bound" vehicle
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct PathBoundBodyState {
+	/// Reference to a path in the context of a `PathSet`
 	pub path_ref: PathRef,
+	/// Position of body in path
 	pub pos: PathPosition,
-	pub velocity: Float,// in world-units / second. Wrt body
+	/// in world-units / second. Wrt body
+	pub velocity: Float,
+	/// Whether vehicle is facing forward on path
 	pub forward: bool,
-	pub route_opt: Option<RouteId>// TODO: use this
+	/// The vehicle may have a route, which is used for making `IntersectionDecision`s
+	pub route_opt: Option<RouteId>
 }
 
 impl PathBoundBodyState {
-	pub fn direction_sign(&self) -> Int {
-		match self.forward {true => 1, false => -1}
-	}
 	/// Updates self. If it goes through an intersection, it will use the optional state's route to make an `IntersectionDecision`.
 	/// This will work in a loop until it has travelled the correct distance.
 	pub fn update(&mut self, dt: Float, forces: &BodyForces, v_static: &VehicleStatic, paths: &PathSet) {

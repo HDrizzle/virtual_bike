@@ -401,8 +401,8 @@ impl SaveMapAutoFixEnum {
 pub struct ServerMap {
 	pub generic: GenericMap,
 	pub path_set: PathSet,
-	gen: MapGenerator,
-	chunk_creator: ChunkCreationManager
+	pub gen: MapGenerator,
+	pub chunk_creator: ChunkCreationManager
 }
 
 #[cfg(feature = "server")]
@@ -484,7 +484,7 @@ impl ServerMap {
 }
 
 #[cfg(feature = "server")]
-struct ChunkCreationManager {
+pub struct ChunkCreationManager {
 	active_chunk_creators: Vec<AsyncChunkCreator>,
 	creation_stack_before_threads: Vec<ChunkCreationArgs>,// For chunks to be created after the `active_chunk_creators` length goes below `active_chunk_creators_limit`
 	active_chunk_creators_limit: usize,// Maximum length of `active_chunk_creators`

@@ -200,10 +200,10 @@ pub mod paths {
 			generic: GenericPath {
 				name: "test".to_owned(),
 				knot_points: vec![
-					P3::new( 0.0, 0.0,  0.0),// >
-					P3::new(10.0, 0.0,  0.0),// ^
-					P3::new(10.0, 0.0, 10.0),// <
-					P3::new( 0.0, 0.0, 10.0)//  v
+					V3::new( 0.0, 0.0,  0.0),// >
+					V3::new(10.0, 0.0,  0.0),// ^
+					V3::new(10.0, 0.0, 10.0),// <
+					V3::new( 0.0, 0.0, 10.0)//  v
 				],
 				tangent_offsets: vec![
 					V3::new(0.0, 0.0, 0.0),
@@ -348,9 +348,9 @@ pub mod paths {
 			generic: GenericPath {
 				name: "test".to_owned(),
 				knot_points: vec![
-					P3::new( 0.0, 10.0, -100.0),
-					P3::new( 0.0, 10.0,    0.0),
-					P3::new(50.0, 1.00,  100.0)
+					V3::new( 0.0, 10.0, -100.0),
+					V3::new( 0.0, 10.0,    0.0),
+					V3::new(50.0, 1.00,  100.0)
 				],
 				tangent_offsets: vec![
 					V3::new( 0.0, 0.0, 0.0),
@@ -531,8 +531,12 @@ pub mod paths {
 		);
 		// TODO
 		/*assert_eq!(
+			path_set.next_intersection_on_path(1, &PathPosition::new(2, 0.5), true),
+			Some((1u64, path_set.generic.intersections.get(&1).expect("expected Intersection"), 10.0 as Float))
+		);
+		assert_eq!(
 			path_set.next_intersection_on_path(1, &PathPosition::new(2, 0.75), false),
-			Some((0u64, path_set.intersections.get(&0).expect("expected Intersection"), 25.0 as Float))
+			Some((0u64, path_set.generic.intersections.get(&0).expect("expected Intersection"), 25.0 as Float))
 		);*/
 	}
 }

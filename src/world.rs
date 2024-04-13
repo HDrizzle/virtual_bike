@@ -1,6 +1,6 @@
 //! World simulation
 
-use std::{thread, error::Error, sync::mpsc, rc::Rc, collections::HashMap, time::{Duration, Instant}, net::IpAddr};
+use std::{thread, error::Error, sync::mpsc, rc::Rc, collections::HashMap, time::{Duration, Instant}, net::IpAddr, sync::Arc};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 #[cfg(feature = "client")]
 #[cfg(feature = "debug_render_physics")]
@@ -363,7 +363,7 @@ impl World {
 		let max_step: f64 = 0.1;// Maximum time step, to prevent collision glitches
 		// Main loop, I want this to run as FAST as possible
 		loop {
-			// 1: Timing, DO NOT USE dt, USE dt_f64 INSTEAD
+			// Timing, DO NOT USE dt, USE dt_f64 INSTEAD
 			dt = prev_t.elapsed();
 			prev_t = Instant::now();
 			dt_f64 = dt.as_secs_f64();
@@ -372,56 +372,62 @@ impl World {
 			if dt_f64 > max_step {
 				dt_f64 = max_step;
 			}
-			// 2: Updates
-			// rx
-			loop {
-				match rx.try_recv() {// https://doc.rust-lang.org/stable/std/sync/mpsc/struct.Receiver.html
-					Ok(update) => {
-						match update {
-							async_messages::ToWorld::ClientUpdate(update) => match self.vehicles.get_mut(&update.auth.name) {
-								Some(v) => v.update_user_input(update.input),
-								None => ()
-							}
-							async_messages::ToWorld::Pause => {self.playing = false},
-							async_messages::ToWorld::Play => {self.playing = true},
-							async_messages::ToWorld::TogglePlaying => {self.playing = !self.playing},
-							async_messages::ToWorld::CreateChunk(ref_) => {
-								//println!("Creating chunk {:?} upon client request", &ref_);
-								self.map.load_or_create_chunk(&ref_);
-							},
-							async_messages::ToWorld::RecoverVehicleFromFlip(auth) => {
-								match self.vehicles.get_mut(&auth.name) {
-									Some(v) => v.recover_from_flip(&mut self.physics_state),
-									None => {}
-								}
-							}
-						}
-					},
-					Err(error) => {
-						match error {
-							mpsc::TryRecvError::Empty => break,
-							mpsc::TryRecvError::Disconnected => panic!("Client updates message queue has been disconnected")
-						}
-					}
-				}
-			}
-			// tx
-			tx.send(async_messages::FromWorld::State(self.send(fps))).unwrap();
-			// 3: Step physics simulation
-			if self.playing {
-				// All vehicle physics controllers
-				for (_, v) in self.vehicles.iter_mut() {
-					v.update_physics(dt_f64 as Float, 1.225, &mut self.physics_state, &self.map.path_set, self.gravity);
-				}
-				// Rapier
-				self.physics_state.step();
-			}
-			// 4: Chunks
-			self.load_unload_chunks();
-			self.map.check_chunk_creator(&mut self.physics_state.build_body_creation_deletion_context());
+			// Simulation iteration
+			self.step(dt_f64, fps, &rx, &tx);
 			// Placeholder to prevent the computer from freezing
 			thread::sleep(Duration::from_millis(5));
 		}
+	}
+	/// Steps entire world simulation
+	/// `dt_f64` and `fps` are not redundant because `fps` is NOT USED for the simulation, only to report performance. `dt_f64` is used used for the actual timestep.
+	pub fn step(&mut self, dt_f64: f64, fps: f64, rx: &mpsc::Receiver<async_messages::ToWorld>, tx: &mpsc::Sender<async_messages::FromWorld>) {
+		// 1: Updates
+		// rx
+		loop {
+			match rx.try_recv() {// https://doc.rust-lang.org/stable/std/sync/mpsc/struct.Receiver.html
+				Ok(update) => {
+					match update {
+						async_messages::ToWorld::ClientUpdate(update) => match self.vehicles.get_mut(&update.auth.name) {
+							Some(v) => v.update_user_input(update.input),
+							None => ()
+						}
+						async_messages::ToWorld::Pause => {self.playing = false},
+						async_messages::ToWorld::Play => {self.playing = true},
+						async_messages::ToWorld::TogglePlaying => {self.playing = !self.playing},
+						async_messages::ToWorld::CreateChunk(ref_) => {
+							//println!("Creating chunk {:?} upon client request", &ref_);
+							self.map.load_or_create_chunk(&ref_);
+						},
+						async_messages::ToWorld::RecoverVehicleFromFlip(auth) => {
+							match self.vehicles.get_mut(&auth.name) {
+								Some(v) => v.recover_from_flip(&mut self.physics_state),
+								None => {}
+							}
+						}
+					}
+				},
+				Err(error) => {
+					match error {
+						mpsc::TryRecvError::Empty => break,
+						mpsc::TryRecvError::Disconnected => panic!("Client updates message queue has been disconnected")
+					}
+				}
+			}
+		}
+		// tx
+		tx.send(async_messages::FromWorld::State(self.send(fps))).unwrap();
+		// 2: Step physics simulation
+		if self.playing {
+			// All vehicle physics controllers
+			for (_, v) in self.vehicles.iter_mut() {
+				v.update_physics(dt_f64 as Float, 1.225, &mut self.physics_state, &self.map.path_set, self.gravity);
+			}
+			// Rapier
+			self.physics_state.step();
+		}
+		// 3: Chunks
+		self.load_unload_chunks();
+		self.map.check_chunk_creator(&mut self.physics_state.build_body_creation_deletion_context());
 	}
 	pub fn load_unload_chunks(&mut self) {
 		// Possibly similar to client::chunk_manager::RenderDistance::load_unload_chunks()
@@ -506,24 +512,89 @@ impl World {
 
 #[cfg(test)]
 mod tests {
+	use crate::vehicle::VehiclePathBoundController;
 	use super::*;
-	#[test]
-	fn physics() {
-		// TODO
-		/*let mut generic_map = GenericMap::new("test-map", 100, 1, [0; 3]);
-		generic_map.path_set = PathSet {
-			paths: vec![
-				Path {
-
-				}// TODO
-			]
+	fn path_physics_initial_state() -> World {
+		let mut generic_map = GenericMap::new("test-map", 100, 1, [0; 3]);
+		let path_set = PathSet {
+			generic: GenericPathSet {
+				query_grid_scale: 0,
+				routes: HashMap::new(),
+				intersections: HashMap::new()
+			},
+			query_grid: HashMap::new(),
+			paths: HashMap::<u64, Path>::from([
+				(
+					0,
+					Path {
+						generic: GenericPath {
+							name: "test-path-name".to_owned(),
+							knot_points: vec![
+								V3::new(0.0, 0.0, 0.0),
+								V3::new(0.0, 0.0, 50.0),
+								V3::new(0.0, 10.0, 100.0),
+								V3::new(0.0, 10.0, 150.0),
+							],
+							tangent_offsets: vec![
+								V3::zeros(); 4
+							],
+							loop_: true
+						},
+						type_: Arc::new(PathType {
+							ref_: "test-path-type-ref".to_owned(),
+							name: "test-path-type-name".to_owned(),
+							width: 10.0
+						})
+					}
+				)
+			])
 		};
-		let map = ServerMap::from_save(SaveMap{
-			generic: (),
-			gen: (),
-			chunk_creation_rate_limit: (),
-			active_chunk_creators_limit: ()
+		let map = ServerMap {
+			generic: generic_map,
+			path_set: path_set,
+			gen: MapGenerator::RandomGen(map_generation::Random::flat()),
+			chunk_creator: crate::map::ChunkCreationManager::new(1.0, 1)
+		};
+		let mut vehicles = HashMap::<String, Vehicle>::new();
+		let v_static_rc = Rc::new(
+			VehicleStatic {
+				type_name: "test-vehicle-type".to_owned(),
+				mass: 100.0,
+				ctr_g_hight: 0.0,
+				drag: V2::new(0.0, 0.0),
+				wheels: Vec::new()
 		});
-		let world = World::new(map, vehicles, playing, gravity)*/
+		vehicles.insert("test-user".to_owned(), Vehicle {
+			static_: v_static_rc.clone(),
+			latest_forces: None,
+			latest_input: None,
+			latest_input_t: 0,
+			physics_controller: Box::new(VehiclePathBoundController::build(
+				PathBoundBodyState {
+					path_ref: 0,
+					pos: PathPosition::new(0, 0.5),
+					velocity: 10.0,
+					forward: true,
+					route_opt: None
+				},
+				v_static_rc
+			))
+		});
+		// Done
+		World::new(map, vehicles, true, -9.81)
+	}
+	#[test]
+	fn path_physics() {
+		// Initial state
+		let mut world = path_physics_initial_state();
+		let (to_world_tx, to_world_rx) = mpsc::channel::<async_messages::ToWorld>();
+		let (from_world_tx, from_world_rx) = mpsc::channel::<async_messages::FromWorld>();
+		// Test
+		// TODO
+		world.step(1.0, 0.0, &to_world_rx, &from_world_tx);
+		let binding = world.send(0.0);
+		let v_state: &BodyStateSerialize = &binding.vehicles.get("test-user").unwrap().body_state;
+		//assert_eq!(v_state.lin_vel, V3::new(0.0, 0.0, 10.0));
+		//assert_eq!(v_state.position.translation.vector, V3::new(0.0, 0.0, 15.0));
 	}
 }
