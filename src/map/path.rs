@@ -9,6 +9,7 @@
 use std::{collections::HashMap, sync::Arc, f32::consts::PI, net::SocketAddr};
 use core::cmp::{PartialOrd, Ordering};
 use bevy::math;
+use bevy_inspector_egui::egui::epaint::tessellator::path;
 use nalgebra::UnitQuaternion;
 use serde::{Serialize, Deserialize};
 #[cfg(feature = "client")]
@@ -135,7 +136,7 @@ impl BCurve {
 pub type PathTypeRef = String;
 
 /// Defines information about any paths of this path type
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PathType {
 	/// Reference to this path type
 	pub ref_: PathTypeRef,
@@ -155,12 +156,12 @@ impl Default for PathType {
 	}
 }
 
-pub type PathRef = u64;
-
 /// Generic path is Serialize/Deserialize-able and used during runtime, has most of the functionality.
 /// Has data which representes a series of cubic beier curves.
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct GenericPath {
+	/// Possible identifying name
+	pub unique_name_opt: Option<String>,
 	/// Non-identifying, Example usage: road names
 	pub name: String,
 	/// The spline must pass through these points
@@ -280,6 +281,7 @@ impl GenericPath {
 	/// use virtual_bike::prelude::*;
 	/// use approx::assert_relative_eq;
 	/// let path = GenericPath{// Should be a good approximation to the unit circle, https://spencermortensen.com/articles/bezier-circle/
+	/// 	unique_name_opt: None,
 	/// 	name: "test-path-name".to_owned(),
 	/// 	knot_points: vec![
 	/// 		V3::new(1.0, 0.0, 0.0),
@@ -486,7 +488,7 @@ impl GenericPath {
 }
 
 /// This is not loaded/saved but it implements Serialize / Deserialize so it can be sent over to the client
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct Path {
 	pub generic: GenericPath,
 	pub type_: Arc<PathType>
@@ -519,23 +521,38 @@ pub struct SavePath {
 	pub type_: PathTypeRef
 }
 
-pub type RouteId = u64;
-
-#[derive(Serialize, Deserialize, Clone)]
+/// A Route which will suggest intersection decisions for a vehicle
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct Route {// List of intersections
+	/// Non-identifying
 	name: String,
-	intersection_decisions: HashMap<IntersectionId, IntersectionDecision>,
+	/// Vec of intersection desicions
+	pub intersection_decisions: Vec<(GenericQuery<Intersection>, IntersectionDecision)>,
+	/// Start
 	start: PathBoundBodyState
 }
 
 impl Route {
-	pub fn decision_opt(&self, intersection: IntersectionId) -> Option<IntersectionDecision> {
-		self.intersection_decisions.get(&intersection).cloned()
+	/// Gets the decision for the first time that this route encounters `IntersectionId` (if at all)
+	pub fn unreliable_decision_opt(&self, intersection_query: GenericQuery<Intersection>, forward: bool, intersections: &GenericDataset<Intersection>) -> Option<IntersectionDecision> {
+		let int_id = match intersections.get_item_id(&intersection_query) {
+			Some(id) => id,
+			None => return None
+		};
+		for decision_t in &self.intersection_decisions {
+			if let Some(curr_id) = intersections.get_item_id(&intersection_query) {
+				if curr_id == int_id {
+					return Some(decision_t.1.clone())
+				}
+			}
+		}
+		// Done
+		None
 	}
 }
 
 /// A "decision" for an intersection - represents which way to turn
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct IntersectionDecision {
 	pub exit: usize,// Index for intersection.path_points
 	pub forward: bool// Whether going forward on new path coming out of intersection
@@ -553,22 +570,21 @@ impl IntersectionDecision {
 	}
 }
 
-pub type IntersectionId = u64;
-
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+/// An intersection between paths, all `path_point`s are assumed to be in the same place, or at least very close to each other
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
 pub struct Intersection {
-	pub path_points: Vec<(PathRef, PathPosition)>
+	pub path_points: Vec<(GenericQuery<Path>, PathPosition)>
 }
 
 impl Intersection {
 	pub fn new(
-		path_points: Vec<(PathRef, PathPosition)>
+		path_points: Vec<(GenericQuery<Path>, PathPosition)>
 	) -> Self {
 		Self {
 			path_points
 		}
 	}
-	pub fn default_decision(&self, paths: &PathSet, curr_path: PathRef) -> IntersectionDecision {
+	pub fn default_decision(&self, paths: &PathSet, curr_path: &GenericQuery<Path>) -> IntersectionDecision {
 		let mut out = IntersectionDecision {
 			exit: 0,
 			forward: true
@@ -580,51 +596,64 @@ impl Intersection {
 	/// Applies intersection decision to `state`
 	/// ```
 	/// use virtual_bike::prelude::*;
+	/// let paths = GenericDataset::<Path> {items: vec![
+	/// 	(GenericRef::id(0), Path::default())
+	/// ]};
 	/// let int = Intersection::new(
 	/// 	vec![
-	/// 		(0, PathPosition::new(0, 0.5)),
-	/// 		(0, PathPosition::new(10, 0.75))
+	/// 		(GenericQuery::id(0), PathPosition::new(0, 0.5)),
+	/// 		(GenericQuery::id(0), PathPosition::new(10, 0.75))
 	/// 	]
 	/// );
 	/// let decision = IntersectionDecision::new(1, true);
 	/// let mut state = PathBoundBodyState {
-	/// 	path_ref: 0,
+	/// 	path_query: GenericQuery::id(0),
 	/// 	pos: PathPosition::new(0, 0.5),
 	/// 	velocity: 10.0,
 	/// 	forward: true,
-	/// 	route_opt: None
+	/// 	route_query_opt: None
 	/// };
-	/// int.apply_decision(&decision, &mut state);
+	/// int.apply_decision(&decision, &mut state, &paths);
 	/// assert_eq!(state.pos, PathPosition::new(10, 0.75));
 	/// ```
-	pub fn apply_decision(&self, decision: &IntersectionDecision, state: &mut PathBoundBodyState) {
+	pub fn apply_decision(&self, decision: &IntersectionDecision, state: &mut PathBoundBodyState, paths: &GenericDataset<Path>) {
 		assert!(decision.exit < self.path_points.len(), "Decision exit index must be < the length of points for this intersection");
-		let (path_ref, path_pos) = self.path_points[decision.exit].clone();
-		state.path_ref = path_ref;
+		let (path_query, path_pos) = self.path_points[decision.exit].clone();
+		state.path_query = paths.get_item_tuple(&path_query).expect(&format!("Intersection path query \"{:?}\" does not work", &path_query)).0.to_query();
 		state.pos = path_pos;
 	}
 	/// Compiles Vec of all path points on given path
 	/// ```
-	/// use virtual_bike::prelude::{Intersection, PathRef, PathPosition};
+	/// use virtual_bike::prelude::*;
+	/// let paths = GenericDataset::<Path> {items: vec![
+	/// 	(GenericRef::id(0), Path::default()),
+	/// 	(GenericRef::id(1), Path::default())
+	/// ]};
 	/// let intersection = Intersection::new(vec![
-	/// 	(0, PathPosition::new(1, 0.0)),
-	/// 	(1, PathPosition::new(2, 0.0)),
-	/// 	(0, PathPosition::new(3, 0.0)),
-	/// 	(1, PathPosition::new(4, 0.0)),
+	/// 	(GenericQuery::id(0), PathPosition::new(1, 0.0)),
+	/// 	(GenericQuery::id(1), PathPosition::new(2, 0.0)),
+	/// 	(GenericQuery::id(0), PathPosition::new(3, 0.0)),
+	/// 	(GenericQuery::id(1), PathPosition::new(4, 0.0)),
 	/// ]);
 	/// assert_eq!(
-	/// 	intersection.path_points_on_specific_path(&1),
+	/// 	intersection.path_points_on_specific_path(&GenericQuery::id(1), &paths),
 	/// 	vec![
 	/// 		PathPosition::new(2, 0.0),
 	/// 		PathPosition::new(4, 0.0)
 	/// 	]
 	/// );
 	/// ```
-	pub fn path_points_on_specific_path(&self, path_ref: &PathRef) -> Vec<PathPosition> {
+	pub fn path_points_on_specific_path(&self, path_query: &GenericQuery<Path>, paths: &GenericDataset<Path>) -> Vec<PathPosition> {
+		let path_id = match paths.get_item_id(path_query) {
+			Some(id) => id,
+			None => return Vec::new()
+		};
 		let mut out = Vec::<PathPosition>::new();
-		for pt in &self.path_points {
-			if &pt.0 == path_ref {
-				out.push(pt.1.clone());
+		for (curr_path_query, path_pos) in &self.path_points {
+			if let Some((curr_ref, path)) = paths.get_item_tuple(curr_path_query) {
+				if curr_ref.id == path_id {
+					out.push(path_pos.clone());
+				}
 			}
 		}
 		// Done
@@ -633,16 +662,33 @@ impl Intersection {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
+pub struct GenericPathSet {
+	pub query_grid_scale: UInt,// 0 means no query grid
+	pub intersections: GenericDataset<Intersection>,
+	pub routes: GenericDataset<Route>
+}
+
+impl Default for GenericPathSet {
+	fn default() -> Self {
+		Self {
+			query_grid_scale: 0,
+			intersections: GenericDataset::new(),
+			routes: GenericDataset::new()
+		}
+	}
+}
+
+#[derive(Serialize, Deserialize, Clone)]
 pub struct SavePathSet {
 	pub generic: GenericPathSet,
-	pub paths: HashMap<PathRef, SavePath>
+	pub paths: GenericDataset<SavePath>
 }
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct PathSet {
 	pub generic: GenericPathSet,
-	pub query_grid: HashMap<IntV2, Vec<PathRef>>,
-	pub paths: HashMap<PathRef, Path>
+	pub query_grid: HashMap<IntV2, Vec<u64>>,
+	pub paths: GenericDataset<Path>
 }
 
 impl PathSet {
@@ -651,8 +697,8 @@ impl PathSet {
 	pub fn from_save(save: SavePathSet) -> Result<Self, String> {
 		// Load path types
 		let mut path_types = HashMap::<PathTypeRef, Arc<PathType>>::new();
-		let mut paths = HashMap::<PathRef, Path>::new();
-		for (path_id, save_path) in save.paths.iter() {
+		let mut paths = GenericDataset::<Path>::new();
+		for (save_path_ref, save_path) in save.paths.items {
 			// get path type config
 			let path_type: Arc<PathType> = if let Some(type_arc) = path_types.get(&save_path.type_) {
 				Ok(type_arc.clone())
@@ -660,7 +706,7 @@ impl PathSet {
 			else {
 				to_string_err(resource_interface::load_path_type(&save_path.type_)).map(|og_path_type| Arc::new(og_path_type))
 			}?;
-			paths.insert(*path_id, Path::from_save(save_path.clone(), path_type));
+			paths.items.push((save_path_ref.into_another_type::<Path>(), Path::from_save(save_path.clone(), path_type)));
 		}
 		// Done
 		Ok(Self {
@@ -669,38 +715,38 @@ impl PathSet {
 			paths
 		})
 	}
-	pub fn get_path_with_ref(&self, ref_: &PathRef) -> Option<&Path> {
-		self.paths.get(ref_)
-	}
 	/// Gets next intersection on given path in given direction if there is one
-	/// Returns: Option<(
-	/// 	Intersection ID,
+	/// 
+	/// # Returns
+	/// 
+	/// Option<(
+	/// 	Intersection ID (u64),
 	/// 	&Intersection,
-	/// 	Distance along given path to intersection in direction given by `forward`
+	/// 	Distance along given path to intersection in direction given by `forward` (should always be 0 or positive)
 	/// )>
-	pub fn next_intersection_on_path(&self, path_ref: PathRef, path_pos: &PathPosition, forward: bool) -> Option<(IntersectionId, &Intersection, Float)> {
+	pub fn next_intersection_on_path(&self, path_query: &GenericQuery<Path>, path_pos: &PathPosition, forward: bool) -> Option<(u64, &Intersection, Float)> {
 		// Get path
-		let path: &Path = self.get_path_with_ref(&path_ref).expect("Invalid path reference");
+		let path: &Path = &self.paths.get_item_tuple(&path_query).expect("Invalid path reference").1;
 		let path_len = path.generic.estimate_distance_to_position(&path.generic.end_position(), BCURVE_LENGTH_ESTIMATION_SEGMENTS);
 		// Get distance along path
 		let dist_along_path = path.generic.estimate_distance_to_position(path_pos, BCURVE_LENGTH_ESTIMATION_SEGMENTS);
 		// Get all intersection points on given path
-		let mut intersection_points: Vec<(u64, PathPosition)> = Vec::new();// (IntersectionId, intersection pos - `path_pos`)
-		for (id, intersection) in &self.generic.intersections {
-			let points: Vec<PathPosition> = intersection.path_points_on_specific_path(&path_ref);
+		let mut intersection_points: Vec<(u64, PathPosition)> = Vec::new();// (Intersection ID, intersection pos - `path_pos`)
+		for (ref_, intersection) in &self.generic.intersections.items {
+			let points: Vec<PathPosition> = intersection.path_points_on_specific_path(&path_query, &self.paths);
 			for point in points {
-				intersection_points.push((*id, point));
+				intersection_points.push((ref_.id, point));
 			}
 		}
 		// Sort intersection points (unecessary)
 		//intersection_points.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 		// Get closest one in correct direction (use `forward`)
-		let mut out: Option<(IntersectionId, &Intersection, Float)> = None;// (IntersectionId, &Intersection, Distance from `path_pos` to this intersection point)
+		let mut out: Option<(u64, &Intersection, Float)> = None;// (IntersectionId, &Intersection, Distance from `path_pos` to this intersection point)
 		for (id, curr_pos) in intersection_points {
 			let curr_dist = path.generic.estimate_distance_to_position(&curr_pos, BCURVE_LENGTH_ESTIMATION_SEGMENTS);
 			let diff_raw = curr_dist - dist_along_path;// From given `path_pos` to curr pos
 			let diff_sign_corrected = diff_raw * bool_sign(forward) as Float;
-			// Possible distance, could be `None` path is not a loop
+			// Possible distance, could be `None` if path is not a loop
 			let diff_positive_opt: Option<Float> = if diff_sign_corrected >= 0.0 {
 				Some(diff_sign_corrected)
 			}
@@ -708,7 +754,7 @@ impl PathSet {
 				if path.generic.loop_ {
 					let out = diff_sign_corrected + path_len;
 					assert!(out >= 0.0, "The positive difference calculated between two points along path must be positive");
-					assert!(out < path_len, "The distance along the path must less then the path length. There is a possibility this is caused slight by length estimation errors");
+					assert!(out < path_len, "The distance along the path must be less then the path length. There is a possibility this is caused by a length estimation error");
 					Some(out)
 				}
 				else {
@@ -723,7 +769,7 @@ impl PathSet {
 				};
 				// Update `out` if `new_out` is Some(_)
 				if use_this_one {
-					out = Some((id, self.generic.intersections.get(&id).expect("This shouldn't happen"), diff_positive));
+					out = Some((id, &(self.generic.intersections.get_item_tuple(&GenericQuery::id(id)).expect("This shouldn't happen").1), diff_positive));
 				}
 			}
 		}
@@ -738,9 +784,9 @@ impl PathSet {
 	/// ```
 	pub fn save(&self) -> SavePathSet {
 		// Create `SavePath`s
-		let mut paths = HashMap::<PathRef, SavePath>::new();
-		for (path_ref, path) in &self.paths {
-			paths.insert(*path_ref, path.save());
+		let mut paths = GenericDataset::<SavePath>::new();
+		for (path_ref, path) in &self.paths.items {
+			paths.items.push((path_ref.into_another_type::<SavePath>(), path.save()));
 		}
 		// Done
 		SavePathSet {
@@ -755,24 +801,7 @@ impl Default for PathSet {
 		Self {
 			generic: GenericPathSet::default(),
 			query_grid: HashMap::new(),
-			paths: HashMap::new()
-		}
-	}
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-pub struct GenericPathSet {
-	pub query_grid_scale: UInt,// 0 means no query grid
-	pub intersections: HashMap<IntersectionId, Intersection>,
-	pub routes: HashMap<RouteId, Route>
-}
-
-impl Default for GenericPathSet {
-	fn default() -> Self {
-		Self {
-			query_grid_scale: 0,
-			intersections: HashMap::new(),
-			routes: HashMap::new()
+			paths: GenericDataset::<Path>::new()
 		}
 	}
 }
@@ -852,10 +881,10 @@ impl PartialOrd for PathPosition {
 }
 
 /// Represents the state of a "bath-bound" vehicle
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct PathBoundBodyState {
 	/// Reference to a path in the context of a `PathSet`
-	pub path_ref: PathRef,
+	pub path_query: GenericQuery<Path>,
 	/// Position of body in path
 	pub pos: PathPosition,
 	/// in world-units / second. Wrt body
@@ -863,36 +892,36 @@ pub struct PathBoundBodyState {
 	/// Whether vehicle is facing forward on path
 	pub forward: bool,
 	/// The vehicle may have a route, which is used for making `IntersectionDecision`s
-	pub route_opt: Option<RouteId>
+	pub route_query_opt: Option<GenericQuery<Route>>
 }
 
 impl PathBoundBodyState {
 	/// Updates self. If it goes through an intersection, it will use the optional state's route to make an `IntersectionDecision`.
 	/// This will work in a loop until it has travelled the correct distance.
-	pub fn update(&mut self, dt: Float, forces: &BodyForces, v_static: &VehicleStatic, paths: &PathSet) {
+	pub fn update(&mut self, dt: Float, forces: &BodyForces, v_static: &VehicleStatic, path_set: &PathSet) {
 		// Intersection decision loop, this will usually only run once or twice, but it in theory should handle arbitrarily large steps
 		let mut step_remaining: Float = 0.0;
 		loop {
-			let next_intersection_opt: Option<(IntersectionId, &Intersection, Float)> = paths.next_intersection_on_path(self.path_ref, &self.pos, self.forward);
+			let next_intersection_opt: Option<(u64, &Intersection, Float)> = path_set.next_intersection_on_path(&self.path_query, &self.pos, self.forward);
 			//let next_intersection_opt: Option<&Intersection> = next_intersection_id_opt.map(|id| paths.intersections.get(&id).expect("Invalid intersection ID"));
-			let path: &Path = paths.get_path_with_ref(&self.path_ref).unwrap();
+			let path: &Path = path_set.paths.get_item_tuple(&self.path_query).expect("Invalid path query").1;
 			let step_remaining_opt: Option<f32> = path.generic.update_body(dt, &forces, v_static, self, next_intersection_opt.map(|t| t.2));
 			step_remaining = match next_intersection_opt {
 				Some((next_intersection_id, next_intersection, _)) => match step_remaining_opt {
 					Some(step_remaining) => {// There is still distance remaining after the intersection
 						// Intersection decision
-						let decision: IntersectionDecision = match match &self.route_opt {
-							Some(route_id) => {
-								let route: &Route = paths.generic.routes.get(route_id).expect("This PathBoundBodyState has an invalid route ID");
-								route.decision_opt(next_intersection_id)
+						let decision: IntersectionDecision = match match &self.route_query_opt {
+							Some(route_query) => {
+								let route: &Route = path_set.generic.routes.get_item_tuple(&route_query).expect("This PathBoundBodyState has an invalid route ID").1;
+								route.unreliable_decision_opt(GenericQuery::id(next_intersection_id), self.forward, &path_set.generic.intersections)
 							},
 							None => None
 						} {
 							Some(decision) => decision,
-							None => next_intersection.default_decision(paths, self.path_ref)
+							None => next_intersection.default_decision(path_set, &self.path_query)
 						};
 						// Act on decision
-						next_intersection.apply_decision(&decision, self);
+						next_intersection.apply_decision(&decision, self, &path_set.paths);
 						// Done
 						step_remaining
 					},

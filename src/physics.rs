@@ -14,7 +14,7 @@ pub struct PhysicsUpdateArgs<'a> {
 	pub dt: Float,
 	pub gravity: Float,
 	pub rapier: &'a mut PhysicsState,
-	pub paths: &'a PathSet,
+	pub path_set: &'a PathSet,
 	pub latest_input: &'a Option<InputData>,
 	pub extra_forces_calculator: &'a dyn Fn(V3, V3) -> BodyForces// (linear velocity, angular velocity) -> (linear force, torque); Both wrt body (not global)
 }

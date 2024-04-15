@@ -20,10 +20,16 @@
 	"path_set": {
 		"generic": {
 			"query_grid_scale": 0,
-			"intersections": {},
-			"routes": {}
+			"intersections": {
+				"items": []
+			},
+			"routes": {
+				"items": []
+			}
 		},
-		"paths": {}
+		"paths": {
+			"items": []
+		}
 	},
 	"chunk_creation_rate_limit": 100,
 	"active_chunk_creators_limit": 20

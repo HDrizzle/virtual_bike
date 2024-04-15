@@ -1,0 +1,166 @@
+{
+	"generic": {
+		"name": "intersection_test",
+		"chunk_size": 100,
+		"chunk_grid_size": 10,
+		"landmarks": {},
+		"background_color": [0, 128, 0],
+		"auto_gen_chunks": true
+	},
+	"gen": {
+		"RandomGen": {
+			"seed": 1,
+			"max_slope": 10,
+			"rand_multiplier": 0,
+			"first_sum_multiplier": 0,
+			"second_sum_multiplier": 0,
+			"elev_abs_limit": 20
+		}
+	},
+	"path_set": {
+		"generic": {
+			"query_grid_scale": 0,
+			"intersections": {
+				"items": [
+					[
+						{
+							"id": 0,
+							"unique_name": "center-right"
+						},
+						{
+							"path_points": [
+								[
+									{
+										"UniqueName": ["right"]
+									},
+									{
+										"latest_point": 2,
+										"t": 0.0
+									}
+								],
+								[
+									{
+										"UniqueName": ["center"]
+									},
+									{
+										"latest_point": 0,
+										"t": 0.0
+									}
+								]
+							]
+						}
+					]
+				]
+			},
+			"routes": {
+				"items": [
+					[
+						{
+							"id": 0,
+							"unique_name": "test-route-0"
+						},
+						{
+							"name": "Right-Center figure-8",
+							"intersection_decisions": [
+								[{"UniqueName": ["center-right"]}, {"exit": 1, "forward": false}],
+								[{"UniqueName": ["center-right"]}, {"exit": 0, "forward": true}]
+							],
+							"start": {
+								"path_query": {"UniqueName": ["right"]},
+								"pos": {"latest_point": 0, "t": 0},
+								"velocity": 15,
+								"forward": true,
+								"route_query_opt": {"UniqueName": ["test-route-0"]}
+							}
+						}
+					]
+				]
+			}
+		},
+		"paths": {
+			"items":[
+				[
+					{
+						"id": 0,
+						"unique_name": "left"
+					},
+					{
+						"generic": {
+							"name": "Left ball",
+							"knot_points": [
+								[50,1,0],
+								[100,1,50],
+								[150,1,0],
+								[100,1,-50]
+							],
+							"tangent_offsets": [
+								[0,0,27.5],
+								[27.5,0,0],
+								[0,0,-27.5],
+								[-27.5,0,0]
+							],
+							"loop_": true
+						},
+						"type_": "generic_road"
+					}
+				],
+				[
+					{
+						"id": 1,
+						"unique_name": "center"
+					},
+					{
+						"generic": {
+							"name": "Thing",
+							"knot_points": [
+								[-50,1,0],
+								[-50,1,300],
+								[0,1,350],
+								[50,1,300],
+								[50,1,0],
+								[0,1,-50]
+							],
+							"tangent_offsets": [
+								[0,0,27.5],
+								[0,0,27.5],
+								[27.5,0,0],
+								[0,0,-27.5],
+								[0,0,-27.5],
+								[-27.5,0,0]
+							],
+							"loop_": true
+						},
+						"type_": "generic_road"
+					}
+				],
+				[
+					{
+						"id": 2,
+						"unique_name": "right"
+					},
+					{
+						"generic": {
+							"name": "Right ball",
+							"knot_points": [
+								[-150,1,0],
+								[-100,1,50],
+								[-50,1,0],
+								[-100,1,-50]
+							],
+							"tangent_offsets": [
+								[0,0,27.5],
+								[27.5,0,0],
+								[0,0,-27.5],
+								[-27.5,0,0]
+							],
+							"loop_": true
+						},
+						"type_": "generic_road"
+					}
+				]
+			]
+		}
+	},
+	"chunk_creation_rate_limit": 20,
+	"active_chunk_creators_limit": 20
+}

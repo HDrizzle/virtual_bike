@@ -194,7 +194,7 @@ impl GenericMap {
 	#[cfg(feature = "client")]
 	pub fn init_bevy(&mut self, path_set: &PathSet, commands: &mut Commands, meshes:  &mut Assets<Mesh>, materials: &mut Assets<StandardMaterial>, asset_server: &AssetServer, server_addr: &SocketAddr) {
 		#[cfg(feature = "path_rendering")]
-		for (_, path) in &path_set.paths {
+		for (_, path) in &path_set.paths.items {
 			path.init_bevy(commands, meshes, materials, asset_server, server_addr);
 		}
 	}

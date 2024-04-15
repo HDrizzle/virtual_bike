@@ -314,14 +314,14 @@ impl Vehicle {
 		self.latest_input = Some(control);
 		self.latest_input_t = get_unix_ts_secs_u64();
 	}
-	pub fn update_physics(&mut self, dt: Float, fluid_density: Float, physics_state: &mut PhysicsState, paths: &PathSet, gravity: Float) {
+	pub fn update_physics(&mut self, dt: Float, fluid_density: Float, physics_state: &mut PhysicsState, path_set: &PathSet, gravity: Float) {
 		// Run every frame
 		//update(&mut self, dt: Float, drag_force: V3, latest_input: Option<InputData>, paths: &PathSet, bodies: &mut RigidBodySet, joints: &mut ImpulseJointSet)
 		let forces = self.physics_controller.update(PhysicsUpdateArgs{
 			dt,
 			gravity,
 			rapier: physics_state,
-			paths,
+			path_set,
 			latest_input: &self.latest_input,
 			extra_forces_calculator: &|lin: V3, ang: V3| -> BodyForces {BodyForces::default()}// TODO
 		});
@@ -501,8 +501,8 @@ impl VehiclePathBoundController {
 
 #[cfg(feature = "server")]
 impl PhysicsController for VehiclePathBoundController{
-	fn serializable(&self, _: &RigidBodySet, paths: &PathSet) -> BodyStateSerialize {
-		let path: &Path = paths.get_path_with_ref(&self.state.path_ref).expect("Unable to get path with path body state");
+	fn serializable(&self, _: &RigidBodySet, path_set: &PathSet) -> BodyStateSerialize {
+		let path: &Path = path_set.paths.get_item_tuple(&self.state.path_query).expect(&format!("Unable to get path with body state path query `{:?}`", &self.state.path_query)).1;
 		path.generic.create_body_state(self.state.clone())
 	}
 	fn update(&mut self, args: PhysicsUpdateArgs) -> BodyForces {
@@ -510,7 +510,7 @@ impl PhysicsController for VehiclePathBoundController{
 		let mut forces = BodyForces::default();
 		forces += (args.extra_forces_calculator)(V3::new(0.0, 0.0, self.state.velocity), V3::zeros());// TODO
 		// Get path
-		let path: &Path = args.paths.get_path_with_ref(&self.state.path_ref).unwrap();
+		let path: &Path = args.path_set.paths.get_item_tuple(&self.state.path_query).expect("Unable to get path with path body state").1;
 		// User input
 		let (drive_force, brake_force): (Float, Float) = match args.latest_input {
 			Some(input) => {
@@ -533,7 +533,7 @@ impl PhysicsController for VehiclePathBoundController{
 		};
 		forces.lin += V3::new(0.0, 0.0, drive_force + brake_force + (path.generic.sideways_gravity_force_component(&self.state.pos, &*self.v_static, args.gravity) * bool_sign(self.state.forward) as Float));
 		// Update
-		self.state.update(args.dt, &forces, &self.v_static, &args.paths);
+		self.state.update(args.dt, &forces, &self.v_static, &args.path_set);
 		//path.update_body(args.dt, &forces, &self.v_static, &mut self.state);
 		forces
 	}

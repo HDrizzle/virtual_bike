@@ -519,15 +519,16 @@ mod tests {
 		let path_set = PathSet {
 			generic: GenericPathSet {
 				query_grid_scale: 0,
-				routes: HashMap::new(),
-				intersections: HashMap::new()
+				routes: GenericDataset::new(),
+				intersections: GenericDataset::new()
 			},
 			query_grid: HashMap::new(),
-			paths: HashMap::<u64, Path>::from([
+			paths: GenericDataset::<Path>{items: vec![
 				(
-					0,
+					GenericRef::id(0),
 					Path {
 						generic: GenericPath {
+							unique_name_opt: None,
 							name: "test-path-name".to_owned(),
 							knot_points: vec![
 								V3::new(0.0, 0.0, 0.0),
@@ -547,7 +548,7 @@ mod tests {
 						})
 					}
 				)
-			])
+			]}
 		};
 		let map = ServerMap {
 			generic: generic_map,
@@ -571,11 +572,11 @@ mod tests {
 			latest_input_t: 0,
 			physics_controller: Box::new(VehiclePathBoundController::build(
 				PathBoundBodyState {
-					path_ref: 0,
+					path_query: GenericQuery::<Path>::id(0),
 					pos: PathPosition::new(0, 0.5),
 					velocity: 10.0,
 					forward: true,
-					route_opt: None
+					route_query_opt: None
 				},
 				v_static_rc
 			))

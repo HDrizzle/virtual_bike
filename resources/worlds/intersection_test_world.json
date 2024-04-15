@@ -1,28 +1,29 @@
 {
-	"map": "paths_test",
+	"map": "intersection_test",
 	"vehicles": {
 		"admin": {
-			"type_": "cool_bike",
+			"type_": "toilet",
 			"body_state": {
 				"position": {
-					"translation": [50, 20, 50],
+					"translation": [0, 20, 0],
 					"rotation": [0, 0, 0, 1]
 				},
 				"lin_vel": [0, 0, 0],
 				"ang_vel": [0, 0, 0],
 				"path_bound_opt": {
-                    "path_ref": 0,
+                    "path_query": {"Id": [2]},
 					"pos": {
 						"latest_point": 0,
                     	"t": 0.0
 					},
-                    "velocity": 10,
-                    "forward": true
+                    "velocity": 15,
+                    "forward": true,
+					"route_query_opt": {"UniqueName": ["test-route-0"]}
                 }
 			}
 		}
 	},
 	"age": 0.0,
 	"playing": false,
-	"gravity": -0.3
+	"gravity": -9.81
 }
