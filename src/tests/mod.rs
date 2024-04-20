@@ -250,6 +250,43 @@ pub mod paths {
 			wheels: Vec::new()
 		}
 	}
+	fn intersections_initial_state() -> PathSet {
+		let path = square_loop_non_unit_edges();
+		let mut paths = GenericDataset::<Path>::new();
+		paths.items.push((GenericRef::id(0), path.clone()));
+		paths.items.push((GenericRef::id(1), path));
+		let mut intersections = GenericDataset::<Intersection>{items: vec![
+			(
+				GenericRef::id(0),
+				Intersection {
+					path_points: vec![
+						(GenericQuery::<Path>::id(0), PathPosition::new(0, 0.5)),
+						(GenericQuery::<Path>::id(1), PathPosition::new(2, 0.5)),
+					]
+				}
+			),
+			(
+				GenericRef::id(1),
+				Intersection {
+					path_points: vec![
+						(GenericQuery::<Path>::id(0), PathPosition::new(1, 0.5)),
+						(GenericQuery::<Path>::id(1), PathPosition::new(3, 0.5)),
+					]
+				}
+			)
+		]};
+		let routes = GenericDataset::<Route>::new();
+		// Done
+		PathSet {
+			generic: GenericPathSet {
+				query_grid_scale: 0,
+				intersections,
+				routes
+			},
+			paths,
+			query_grid: HashMap::new()
+		}
+	}
 	// Tests
 	#[test]
 	fn forward() {
@@ -260,7 +297,7 @@ pub mod paths {
 		// Update
 		let dt = 1.0;
 		let mut forces = BodyForces::default();
-		path.generic.update_body(dt, &mut forces, &v_static, &mut state, None);
+		path.generic.update_body(dt, &mut forces, &v_static, &mut state, &None);
 		// Compare
 		let ideal_new_state = PathBoundBodyState {
 			path_query: GenericQuery::id(0),
@@ -284,7 +321,7 @@ pub mod paths {
 		let mut forces = BodyForces::default();
 		// 1
 		state.velocity = -5.0;
-		path.generic.update_body(dt, &mut forces, &v_static, &mut state, None);
+		path.generic.update_body(dt, &mut forces, &v_static, &mut state, &None);
 		// Compare
 		assert_eq!(
 			state.pos,
@@ -295,7 +332,7 @@ pub mod paths {
 		);
 		// 2
 		state.velocity = -7.0;
-		path.generic.update_body(dt, &mut forces, &v_static, &mut state, None);
+		path.generic.update_body(dt, &mut forces, &v_static, &mut state, &None);
 		// Compare
 		assert_eq!(
 			state.pos,
@@ -416,7 +453,7 @@ pub mod paths {
 		let path: Path = square_loop_non_unit_edges();
 		let mut pos: PathPosition = PathPosition::default();
 		// + 15
-		assert!(!path.generic.step_position_by_world_units(&mut pos, 15.0, None, None).0);
+		assert!(!path.generic.step_position_by_world_units(&mut pos, 15.0, None, &None).0);
 		assert_eq!(
 			pos,
 			PathPosition {
@@ -425,7 +462,7 @@ pub mod paths {
 			}
 		);
 		// - 20
-		assert!(path.generic.step_position_by_world_units(&mut pos, -20.0, None, None).0);
+		assert!(path.generic.step_position_by_world_units(&mut pos, -20.0, None, &None).0);
 		assert_eq!(
 			pos,
 			PathPosition {
@@ -434,7 +471,7 @@ pub mod paths {
 			}
 		);
 		// + 40
-		assert!(path.generic.step_position_by_world_units(&mut pos, 40.0, None, None).0);
+		assert!(path.generic.step_position_by_world_units(&mut pos, 40.0, None, &None).0);
 		assert_eq!(
 			pos,
 			PathPosition {
@@ -450,7 +487,7 @@ pub mod paths {
 		path.generic.loop_ = false;
 		let mut pos: PathPosition = PathPosition::default();// 0
 		// + 15
-		assert!(!path.generic.step_position_by_world_units(&mut pos, 15.0, None, None).0);
+		assert!(!path.generic.step_position_by_world_units(&mut pos, 15.0, None, &None).0);
 		assert_eq!(
 			pos,
 			PathPosition {
@@ -459,7 +496,7 @@ pub mod paths {
 			}
 		);
 		// + 30
-		assert!(path.generic.step_position_by_world_units(&mut pos, 30.0, None, None).0);
+		assert!(path.generic.step_position_by_world_units(&mut pos, 30.0, None, &None).0);
 		assert_eq!(
 			pos,
 			PathPosition {
@@ -468,7 +505,7 @@ pub mod paths {
 			}
 		);
 		// - 45
-		assert!(path.generic.step_position_by_world_units(&mut pos, -45.0, None, None).0);
+		assert!(path.generic.step_position_by_world_units(&mut pos, -45.0, None, &None).0);
 		assert_eq!(
 			pos,
 			PathPosition {
@@ -478,55 +515,46 @@ pub mod paths {
 		);
 	}
 	#[test]
-	fn intersections() {
-		// Initial stuff
-		let path = square_loop_non_unit_edges();
-		let mut paths = GenericDataset::<Path>::new();
-		paths.items.push((GenericRef::id(0), path.clone()));
-		paths.items.push((GenericRef::id(1), path));
-		let mut intersections = GenericDataset::<Intersection>{items: vec![
-			(
-				GenericRef::id(0),
-				Intersection {
-					path_points: vec![
-						(GenericQuery::<Path>::id(0), PathPosition::new(0, 0.5)),
-						(GenericQuery::<Path>::id(1), PathPosition::new(2, 0.5)),
-					]
-				}
-			),
-			(
-				GenericRef::id(1),
-				Intersection {
-					path_points: vec![
-						(GenericQuery::<Path>::id(0), PathPosition::new(1, 0.5)),
-						(GenericQuery::<Path>::id(1), PathPosition::new(3, 0.5)),
-					]
-				}
-			)
-		]};
-		let mut routes = GenericDataset::<Route>::new();
-		let path_set = PathSet {
-			generic: GenericPathSet {
-				query_grid_scale: 0,
-				intersections,
-				routes
-			},
-			paths,
-			query_grid: HashMap::new()
-		};
+	fn next_intersection_on_path() {
+		// Initial state
+		let path_set: PathSet = intersections_initial_state();
 		// Next intersection finding
 		assert_eq!(
 			path_set.next_intersection_on_path(&GenericQuery::id(0), &PathPosition::new(0, 0.0), true),
-			Some((0u64, path_set.generic.intersections.get_item_tuple(&GenericQuery::id(0)).expect("expected Intersection").1, 5.0 as Float))
+			Some((0u64, path_set.generic.intersections.get_item_tuple(&GenericQuery::id(0)).expect("expected Intersection").1, PathPosition::new(0, 0.5), 5.0 as Float))
 		);
 		assert_eq!(
 			path_set.next_intersection_on_path(&GenericQuery::id(1), &PathPosition::new(2, 0.5), true),
-			Some((0u64, path_set.generic.intersections.get_item_tuple(&GenericQuery::id(0)).expect("expected Intersection").1, 0.0 as Float))
+			Some((0u64, path_set.generic.intersections.get_item_tuple(&GenericQuery::id(0)).expect("expected Intersection").1, PathPosition::new(2, 0.5), 0.0 as Float))
 		);
 		assert_eq!(
 			path_set.next_intersection_on_path(&GenericQuery::id(1), &PathPosition::new(0, 0.5), false),
-			Some((1u64, path_set.generic.intersections.get_item_tuple(&GenericQuery::id(1)).expect("expected Intersection").1, 10.0 as Float))
+			Some((1u64, path_set.generic.intersections.get_item_tuple(&GenericQuery::id(1)).expect("expected Intersection").1, PathPosition::new(3, 0.5), 10.0 as Float))
 		);
+	}
+	#[test]
+	fn step_past_intersection() {
+		// Path set
+		let path = square_loop_non_unit_edges();
+		// Path bound initial state
+		let mut pos = PathPosition::new(0, 0.0);
+		// Forward, no edge cases
+		assert_eq!(
+			path.generic.step_position_by_world_units(&mut pos, 5.0, None, &Some(PathPosition::new(0, 0.75))),// Should miss this
+			(false, None)
+		);
+		assert_eq!(pos, PathPosition::new(0, 0.5));
+		assert_eq!(
+			path.generic.step_position_by_world_units(&mut pos, 15.0, None, &Some(PathPosition::new(1, 0.5))),// Should hit this with 5 left over
+			(false, Some(5.0))
+		);
+		assert_eq!(pos, PathPosition::new(1, 0.5));
+		// Backward, no edge cases
+		assert_eq!(
+			path.generic.step_position_by_world_units(&mut pos, -25.0, None, &Some(PathPosition::new(3, 0.5))),
+			(true, Some(-5.0))
+		);
+		assert_eq!(pos, PathPosition::new(3, 0.5));
 	}
 }
 

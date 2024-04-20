@@ -212,8 +212,13 @@ impl GenericPath {
 			offsets: [offset0, offset1]
 		}
 	}
-	/// Returns: (
-	/// 	whether the position looped over to the beginning/end of this path or is being clamped,
+	/// Steps `pos` by `step` along path in world units, direction is given by sign of `step`.
+	/// `next_intersection_opt` is an optional point along the path to stop and return the distance left over.
+	/// 
+	/// # Returns
+	/// 
+	/// (
+	/// 	whether the position looped over to the beginning/end of this path or is being clamped (Does not include going past an intersection),
 	/// 	Option<Step distance left over past optional given intersection if this step would go past it: Float>
 	/// )
 	pub fn step_position_by_world_units(
@@ -221,10 +226,8 @@ impl GenericPath {
 		pos: &mut PathPosition,
 		step: Float,
 		loop_override_opt: Option<bool>,
-		next_intersection_opt: Option<Float>
+		next_intersection_opt: &Option<PathPosition>
 	) -> (bool, Option<Float>) {
-		// TODO: use `next_intersection_opt`
-		//dbg!((&pos, step));
 		let loop_ = match loop_override_opt {
 			Some(loop_override) => loop_override,
 			None => self.loop_
@@ -235,6 +238,21 @@ impl GenericPath {
 		let mut looped: bool = false;
 		loop {
 			let bcurve = self.get_bcurve(bcurve_index);
+			match next_intersection_opt {
+				Some(int_pos) => if bcurve_index == int_pos.latest_point {
+					*pos = PathPosition {
+						t: int_pos.t,
+						latest_point: bcurve_index
+					};
+					let int_pos_bcurve_len = bcurve.estimate_length(int_pos.t, BCURVE_LENGTH_ESTIMATION_SEGMENTS);
+					let dist_past_intersection = unapplied_change - if unapplied_change >= 0.0 {int_pos_bcurve_len} else {int_pos_bcurve_len - bcurve.estimate_length(1.0, BCURVE_LENGTH_ESTIMATION_SEGMENTS)};
+					dbg!((unapplied_change, bcurve_index, curr_t, int_pos_bcurve_len, dist_past_intersection));
+					if sign(dist_past_intersection) == sign(unapplied_change) {
+						return (looped, Some(dist_past_intersection));
+					}
+				},
+				None => {}
+			}
 			let (new_t, change_left_over) = bcurve.step_distance(curr_t, unapplied_change);
 			curr_t = new_t;
 			unapplied_change = change_left_over;
@@ -273,7 +291,7 @@ impl GenericPath {
 		//dbg!("Done");
 		(
 			looped,
-			None// TODO
+			None
 		)
 	}
 	/// Estimates the distance along this path to the given path pos using `num_segments` sections per bcurve
@@ -318,7 +336,7 @@ impl GenericPath {
 	}
 	/// Updates path bound body state. If it goes through an intersection, it will return the remaining step distance after the intersection.
 	/// Returns: Optional amount of step distance left after intersection
-	pub fn update_body(&self, dt: Float, forces: &BodyForces, v_static: &VehicleStatic, state: &mut PathBoundBodyState, next_intersection_opt: Option<Float>) -> Option<Float> {
+	pub fn update_body(&self, dt: Float, forces: &BodyForces, v_static: &VehicleStatic, state: &mut PathBoundBodyState, next_intersection_opt: &Option<PathPosition>) -> Option<Float> {
 		let bcurve = self.get_bcurve(state.pos.latest_point);
 		let dir_sign = bool_sign(state.forward) as Float;
 		// Acceleration: F = m * a, a = F / m
@@ -422,7 +440,7 @@ impl GenericPath {
 			// Next pos/i
 			i += 1;
 			// Check stop conditions
-			let (looped_over, _) = self.step_position_by_world_units(&mut curr_pos, PATH_RENDER_SEGMENT_LENGTH / 2.0, Some(false), None);
+			let (looped_over, _) = self.step_position_by_world_units(&mut curr_pos, PATH_RENDER_SEGMENT_LENGTH / 2.0, Some(false), &None);
 			/*if looped_over {
 				print!("Hit the end of the path while creating chunk, loop should break now");
 			}*/
@@ -722,9 +740,10 @@ impl PathSet {
 	/// Option<(
 	/// 	Intersection ID (u64),
 	/// 	&Intersection,
+	/// 	Position on path of intersection: PathPosition,
 	/// 	Distance along given path to intersection in direction given by `forward` (should always be 0 or positive)
 	/// )>
-	pub fn next_intersection_on_path(&self, path_query: &GenericQuery<Path>, path_pos: &PathPosition, forward: bool) -> Option<(u64, &Intersection, Float)> {
+	pub fn next_intersection_on_path(&self, path_query: &GenericQuery<Path>, path_pos: &PathPosition, forward: bool) -> Option<(u64, &Intersection, PathPosition, Float)> {
 		// Get path
 		let path: &Path = &self.paths.get_item_tuple(&path_query).expect("Invalid path reference").1;
 		let path_len = path.generic.estimate_distance_to_position(&path.generic.end_position(), BCURVE_LENGTH_ESTIMATION_SEGMENTS);
@@ -741,7 +760,7 @@ impl PathSet {
 		// Sort intersection points (unecessary)
 		//intersection_points.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 		// Get closest one in correct direction (use `forward`)
-		let mut out: Option<(u64, &Intersection, Float)> = None;// (IntersectionId, &Intersection, Distance from `path_pos` to this intersection point)
+		let mut out: Option<(u64, &Intersection, PathPosition, Float)> = None;// (IntersectionId, &Intersection, Distance from `path_pos` to this intersection point)
 		for (id, curr_pos) in intersection_points {
 			let curr_dist = path.generic.estimate_distance_to_position(&curr_pos, BCURVE_LENGTH_ESTIMATION_SEGMENTS);
 			let diff_raw = curr_dist - dist_along_path;// From given `path_pos` to curr pos
@@ -763,13 +782,13 @@ impl PathSet {
 			};
 			// Logic to get possible new closest intersection
 			if let Some(diff_positive) = diff_positive_opt {
-				let mut use_this_one = match &out {
-					Some((_, _, curr_best_dist)) => diff_positive < *curr_best_dist,
+				let mut use_this_one: bool = match &out {
+					Some((_, _, curr_pos, curr_best_dist)) => diff_positive < *curr_best_dist,
 					None => true
 				};
 				// Update `out` if `new_out` is Some(_)
 				if use_this_one {
-					out = Some((id, &(self.generic.intersections.get_item_tuple(&GenericQuery::id(id)).expect("This shouldn't happen").1), diff_positive));
+					out = Some((id, &(self.generic.intersections.get_item_tuple(&GenericQuery::id(id)).expect("This shouldn't happen").1), curr_pos, diff_positive));
 				}
 			}
 		}
@@ -902,18 +921,19 @@ impl PathBoundBodyState {
 		// Intersection decision loop, this will usually only run once or twice, but it in theory should handle arbitrarily large steps
 		let mut step_remaining: Float = 0.0;
 		loop {
-			let next_intersection_opt: Option<(u64, &Intersection, Float)> = path_set.next_intersection_on_path(&self.path_query, &self.pos, self.forward);
+			// Possible next intersection on current path
+			let next_intersection_opt: Option<(u64, &Intersection, PathPosition, Float)> = path_set.next_intersection_on_path(&self.path_query, &self.pos, self.forward);
 			//let next_intersection_opt: Option<&Intersection> = next_intersection_id_opt.map(|id| paths.intersections.get(&id).expect("Invalid intersection ID"));
 			let path: &Path = path_set.paths.get_item_tuple(&self.path_query).expect("Invalid path query").1;
-			let step_remaining_opt: Option<f32> = path.generic.update_body(dt, &forces, v_static, self, next_intersection_opt.map(|t| t.2));
-			step_remaining = match next_intersection_opt {
-				Some((next_intersection_id, next_intersection, _)) => match step_remaining_opt {
+			let step_remaining_opt: Option<f32> = path.generic.update_body(dt, &forces, v_static, self, &next_intersection_opt.as_ref().map(|t| t.2.clone()));
+			step_remaining = match &next_intersection_opt {
+				Some((next_intersection_id, next_intersection, _, _)) => match step_remaining_opt {
 					Some(step_remaining) => {// There is still distance remaining after the intersection
 						// Intersection decision
 						let decision: IntersectionDecision = match match &self.route_query_opt {
 							Some(route_query) => {
 								let route: &Route = path_set.generic.routes.get_item_tuple(&route_query).expect("This PathBoundBodyState has an invalid route ID").1;
-								route.unreliable_decision_opt(GenericQuery::id(next_intersection_id), self.forward, &path_set.generic.intersections)
+								route.unreliable_decision_opt(GenericQuery::id(*next_intersection_id), self.forward, &path_set.generic.intersections)
 							},
 							None => None
 						} {

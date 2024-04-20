@@ -258,6 +258,9 @@ use std::marker::PhantomData;
 			false => -1
 		}
 	}
+	pub fn sign(n: Float) -> bool {
+		n >= 0.0
+	}
 	/// Computes angle (in Radians) from its cos and whether the sin is + or -. If the angle is 0 or 180, the `sin_sign` arg doesn't matter
 	/// ```
 	/// use virtual_bike::prelude::{PI, angle_from_cos_sin_sign};
