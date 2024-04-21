@@ -7,6 +7,10 @@ use std::{error::Error, rc::Rc, ops::AddAssign, io::Write, net::SocketAddr};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 #[cfg(feature = "client")]
 use bevy::{prelude::*, ecs::component::Component};
+#[cfg(feature = "client")]
+use bevy_inspector_egui::{
+	bevy_egui::{egui::{Ui, Window}, EguiContexts}// Importing from re-export to prevent conflicting versions of bevy_egui
+};
 use nalgebra::{vector, point, UnitQuaternion};
 #[cfg(feature = "server")]
 use easy_gltf;
@@ -27,10 +31,12 @@ pub struct WheelStatic {
 	pub dia: Float,
 	pub width: Float,
 	pub friction: Float,
-	pub position_wrt_body: Iso,// Relative to the vehicle body
+	/// Relative to the vehicle body
+	pub position_wrt_body: Iso,
 	pub driven: bool,
 	pub steering: bool,
-	pub steering_rotation_axis_offset: Float, // A non-zero value of this will result in something similar to a shopping-cart wheel
+	/// A non-zero value of this will result in something similar to a shopping-cart wheel where the wheel axis does not align with the turning axis
+	pub steering_rotation_axis_offset: Float,
 }
 
 impl WheelStatic {
@@ -58,7 +64,8 @@ pub struct Wheel {
 	static_: WheelStatic,
 	#[cfg(feature = "server")] body_handle: RigidBodyHandle,
 	#[cfg(feature = "server")] collider_handle: ColliderHandle,
-	#[cfg(feature = "server")] steering: WheelSteering// None if not static_.steering or built in client
+	/// None if not static_.steering or built in client
+	#[cfg(feature = "server")] steering: WheelSteering
 }
 
 #[cfg(feature = "server")]
@@ -143,8 +150,9 @@ impl Wheel {
 	}
 }
 
+/// This is loaded from the resources and is identified by a vehicle name
 #[derive(Serialize, Deserialize, Clone)]
-pub struct VehicleStatic {// This is loaded from the resources and is identified by a vehicle name
+pub struct VehicleStatic {
 	/// Type of vehicle this represents
 	pub type_name: String,
 	pub mass: Float,
@@ -184,7 +192,7 @@ impl CacheableBevyAsset for VehicleStaticModel {
 	fn write_to_file(&self, file: &mut std::fs::File) -> Result<(), String> {
 		to_string_err(file.write_all(&self.glb_data))
 	}
-	// Copied from default trait implementation to add "#Scene0" to asset path
+	/// Copied from default trait implementation to add "#Scene0" to asset path
 	fn load_to_bevy(name: &str, server_addr: SocketAddr, asset_server: &AssetServer) -> Result<Handle<Self::BevyAssetType>, String> {
 		let path_raw = Self::get_path(name, server_addr);
 		match path_raw.strip_prefix("assets/") {
@@ -233,16 +241,22 @@ impl VehicleStatic {
 	}
 }
 
+/// This is saved to and loaded from a world (game save file)
 #[derive(Serialize, Deserialize)]
-pub struct VehicleSave {// This is saved to and loaded from a world (game save file)
-	pub type_: String,// Name of static vehicle file
+pub struct VehicleSave {
+	/// Name of static vehicle file
+	pub type_: String,
 	pub body_state: BodyStateSerialize
 }
 
+/// This is sent over the network to the client
 #[derive(Serialize, Deserialize)]
-pub struct VehicleSend {// This is sent over the network to the client
-	pub type_: String,// Name of static vehicle file
+pub struct VehicleSend {
+	/// Name of static vehicle file
+	pub type_: String,
 	pub latest_forces: Option<BodyForces>,
+	/// Description of forces acting on vehicle when on path
+	pub path_forces_opt: Option<PathBodyForceDescription>,
 	pub body_state: BodyStateSerialize,
 	input: Option<InputData>,
 	latest_input_t: u64
@@ -280,10 +294,12 @@ impl VehicleSend {
 	}*/
 }
 
-#[cfg(feature = "server")]//#[cfg_attr(feature = "frontend", derive(Component))]
-pub struct Vehicle {// This is used for physics
+/// This is used for physics
+#[cfg(feature = "server")]
+pub struct Vehicle {
 	pub static_: Rc<VehicleStatic>,
 	pub latest_forces: Option<BodyForces>,
+	pub path_forces_opt: Option<PathBodyForceDescription>,
 	pub latest_input: Option<InputData>,
 	pub latest_input_t: u64,
 	pub physics_controller: Box<dyn PhysicsController>
@@ -304,29 +320,31 @@ impl Vehicle {
 		Ok(Self {
 			static_,
 			latest_forces: None,
+			path_forces_opt: None,
 			latest_input: None,
 			latest_input_t: 0u64,
 			physics_controller
 		})
 	}
+	/// IMPORTANT: ONLY RUN WHEN THERE IS NEW USER INPUT
 	pub fn update_user_input(&mut self, control: InputData) {
-		// IMPORTANT: ONLY RUN WHEN THERE IS NEW USER DATA
 		self.latest_input = Some(control);
 		self.latest_input_t = get_unix_ts_secs_u64();
 	}
+	/// Must be run every frame
 	pub fn update_physics(&mut self, dt: Float, fluid_density: Float, physics_state: &mut PhysicsState, path_set: &PathSet, gravity: Float) {
-		// Run every frame
 		//update(&mut self, dt: Float, drag_force: V3, latest_input: Option<InputData>, paths: &PathSet, bodies: &mut RigidBodySet, joints: &mut ImpulseJointSet)
-		let forces = self.physics_controller.update(PhysicsUpdateArgs{
+		let (forces, path_forces_opt): (BodyForces, Option<PathBodyForceDescription>) = self.physics_controller.update(PhysicsUpdateArgs{
 			dt,
 			gravity,
 			rapier: physics_state,
 			path_set,
 			latest_input: &self.latest_input,
-			extra_forces_calculator: &|lin: V3, ang: V3| -> BodyForces {BodyForces::default()}// TODO
+			drag_force_calculator: &|lin: V3, ang: V3| -> BodyForces {BodyForces::default()}// TODO
 		});
 		// Save forces
 		self.latest_forces = Some(forces);
+		self.path_forces_opt = path_forces_opt;
 	}
 	pub fn recover_from_flip(&mut self, physics_state: &mut PhysicsState) {
 		self.physics_controller.recover_from_flip(physics_state);
@@ -344,6 +362,7 @@ impl Vehicle {
 		VehicleSend {
 			type_: self.static_.type_name.clone(),
 			latest_forces: self.latest_forces.clone(),
+			path_forces_opt: self.path_forces_opt.clone(),
 			body_state: self.create_serialize_state(body_set, paths),
 			input: self.latest_input,
 			latest_input_t: self.latest_input_t
@@ -355,8 +374,9 @@ impl Vehicle {
 	}
 }
 
+/// This is saved/sent over the network to the client. It will NOT be used inside the server game logic.
 #[derive(Serialize, Deserialize, Clone)]
-pub struct BodyStateSerialize {// This is saved/sent over the network to the client. It will NOT be used inside the server game logic.
+pub struct BodyStateSerialize {
 	pub position: Iso,
 	pub lin_vel: V3,
 	pub ang_vel: V3,
@@ -448,7 +468,7 @@ impl PhysicsController for VehicleRapierController {
 		let body: &RigidBody = bodies.get(self.body_handle).expect("Unable to get body with BodyPhysicsController::RegularPhysics.body_handle");
 		BodyStateSerialize::from_rapier_body(body, None)
 	}
-	fn update(&mut self, args: PhysicsUpdateArgs) -> BodyForces {
+	fn update(&mut self, args: PhysicsUpdateArgs) -> (BodyForces, Option<PathBodyForceDescription>) {
 		match args.latest_input {
 			Some(control) => match args.rapier.bodies.get_mut(self.body_handle) {
 				Some(body) => {
@@ -469,7 +489,7 @@ impl PhysicsController for VehicleRapierController {
 			},
 			None => {}
 		}
-		BodyForces::default()
+		(BodyForces::default(), None)// TODO
 	}
 	fn recover_from_flip(&mut self, physics_state: &mut PhysicsState) {
 		// TODO: fix
@@ -505,10 +525,9 @@ impl PhysicsController for VehiclePathBoundController{
 		let path: &Path = path_set.paths.get_item_tuple(&self.state.path_query).expect(&format!("Unable to get path with body state path query `{:?}`", &self.state.path_query)).1;
 		path.generic.create_body_state(self.state.clone())
 	}
-	fn update(&mut self, args: PhysicsUpdateArgs) -> BodyForces {
+	fn update(&mut self, args: PhysicsUpdateArgs) -> (BodyForces, Option<PathBodyForceDescription>) {
 		// Forces
-		let mut forces = BodyForces::default();
-		forces += (args.extra_forces_calculator)(V3::new(0.0, 0.0, self.state.velocity), V3::zeros());// TODO
+		let mut forces = PathBodyForceDescription::default();
 		// Get path
 		let path: &Path = args.path_set.paths.get_item_tuple(&self.state.path_query).expect("Unable to get path with path body state").1;
 		// User input
@@ -531,11 +550,17 @@ impl PhysicsController for VehiclePathBoundController{
 			},
 			None => (0.0, 0.0)
 		};
-		forces.lin += V3::new(0.0, 0.0, drive_force + brake_force + (path.generic.sideways_gravity_force_component(&self.state.pos, &*self.v_static, args.gravity) * bool_sign(self.state.forward) as Float));
+		// old
+		//forces.lin += V3::new(0.0, 0.0, drive_force + brake_force + (path.generic.sideways_gravity_force_component(&self.state.pos, &*self.v_static, args.gravity) * bool_sign(self.state.forward) as Float));
+		forces.drive = drive_force;
+		forces.brake = brake_force;
+		forces.drag = (args.drag_force_calculator)(V3::new(0.0, 0.0, self.state.velocity), V3::zeros()).lin.z;
+		forces.gravity = path.generic.sideways_gravity_force_component(&self.state.pos, &*self.v_static, args.gravity) * (bool_sign(self.state.forward) as Float);
+		forces.rolling_resistance = 0.0;// TODO
 		// Update
 		self.state.update(args.dt, &forces, &self.v_static, &args.path_set);
 		//path.update_body(args.dt, &forces, &self.v_static, &mut self.state);
-		forces
+		(BodyForces::from_path_bound_forces(&forces), Some(forces))
 	}
 }
 
@@ -555,10 +580,21 @@ impl BodyLinearForces {
 	}
 }*/
 
+/// Standard units, so Newtons. Always wrt the body even if it is facing backwards on a path
 #[derive(Serialize, Deserialize, Default, Clone)]
-pub struct BodyForces {// Standard units, so Newtons. Always wrt the body even if it is facing backwards on a path
+pub struct BodyForces {
 	pub lin: V3,
 	pub ang: V3
+}
+
+impl BodyForces {
+	/// Creates a new Self from the forces acting on a path bound object. These forces are considered to act along the local Z-axis of the object.
+	pub fn from_path_bound_forces(path_forces: &PathBodyForceDescription) -> Self {
+		Self {
+			lin: V3::new(0.0, 0.0, path_forces.sum()),
+			ang: V3::zeros()
+		}
+	}
 }
 
 impl AddAssign for BodyForces {
@@ -567,5 +603,51 @@ impl AddAssign for BodyForces {
 		self.lin += rhs.lin;
 		// Angular
 		self.ang += rhs.ang;
+	}
+}
+
+/// Describes all forces acting to acc/decelerate a path bound body, sent to client
+/// All forces are Newtons
+#[derive(Serialize, Deserialize, Default, Clone)]
+pub struct PathBodyForceDescription {
+	/// Drive force, power / speed
+	pub drive: Float,
+	/// Brake force
+	pub brake: Float,
+	/// This one can really suck
+	pub drag: Float,
+	/// Ugghhh hills
+	pub gravity: Float,
+	/// Only important on like gravel
+	pub rolling_resistance: Float,
+	/// In case there's something I haven't thought of, (force, description)
+	pub other_opt: Option<(Float, String)>
+}
+
+impl PathBodyForceDescription {
+	/// Sum, including other
+	pub fn sum(&self) -> Float {
+		let almost = self.drive + self.brake + self.drag + self.gravity + self.rolling_resistance;
+		match self.other_opt {
+			Some((other_force, _)) => almost + other_force,
+			None => almost
+		}
+	}
+	/// Renders to a part of an egui
+	#[cfg(feature = "client")]
+	pub fn render_to_egui(&self, ui: &mut Ui) {
+		ui.label("Forces");
+		ui.label(format!("Drive: {:.2}", self.drive));
+		ui.label(format!("Brake: {:.2}", self.brake));
+		ui.label(format!("Drag: {:.2}", self.drag));
+		ui.label(format!("Gravity: {:.2}", self.gravity));
+		ui.label(format!("Rolling resistance: {:.2}", self.rolling_resistance));
+		match &self.other_opt {
+			Some((other_force, desc)) => {
+				ui.label(format!("Other ({}): {:.2}", desc, other_force));
+			}
+			None => {}
+		}
+		ui.label(format!("Total: {:.2}", self.sum()));
 	}
 }

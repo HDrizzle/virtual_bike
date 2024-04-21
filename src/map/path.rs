@@ -8,7 +8,9 @@
 
 use std::{collections::HashMap, sync::Arc, f32::consts::PI, net::SocketAddr};
 use core::cmp::{PartialOrd, Ordering};
+#[cfg(feature = "client")]
 use bevy::math;
+#[cfg(feature = "client")]
 use bevy_inspector_egui::egui::epaint::tessellator::path;
 use nalgebra::UnitQuaternion;
 use serde::{Serialize, Deserialize};
@@ -160,8 +162,6 @@ impl Default for PathType {
 /// Has data which representes a series of cubic beier curves.
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct GenericPath {
-	/// Possible identifying name
-	pub unique_name_opt: Option<String>,
 	/// Non-identifying, Example usage: road names
 	pub name: String,
 	/// The spline must pass through these points
@@ -246,7 +246,7 @@ impl GenericPath {
 					};
 					let int_pos_bcurve_len = bcurve.estimate_length(int_pos.t, BCURVE_LENGTH_ESTIMATION_SEGMENTS);
 					let dist_past_intersection = unapplied_change - if unapplied_change >= 0.0 {int_pos_bcurve_len} else {int_pos_bcurve_len - bcurve.estimate_length(1.0, BCURVE_LENGTH_ESTIMATION_SEGMENTS)};
-					dbg!((unapplied_change, bcurve_index, curr_t, int_pos_bcurve_len, dist_past_intersection));
+					//dbg!((unapplied_change, bcurve_index, curr_t, int_pos_bcurve_len, dist_past_intersection));
 					if sign(dist_past_intersection) == sign(unapplied_change) {
 						return (looped, Some(dist_past_intersection));
 					}
@@ -299,7 +299,6 @@ impl GenericPath {
 	/// use virtual_bike::prelude::*;
 	/// use approx::assert_relative_eq;
 	/// let path = GenericPath{// Should be a good approximation to the unit circle, https://spencermortensen.com/articles/bezier-circle/
-	/// 	unique_name_opt: None,
 	/// 	name: "test-path-name".to_owned(),
 	/// 	knot_points: vec![
 	/// 		V3::new(1.0, 0.0, 0.0),
@@ -336,11 +335,11 @@ impl GenericPath {
 	}
 	/// Updates path bound body state. If it goes through an intersection, it will return the remaining step distance after the intersection.
 	/// Returns: Optional amount of step distance left after intersection
-	pub fn update_body(&self, dt: Float, forces: &BodyForces, v_static: &VehicleStatic, state: &mut PathBoundBodyState, next_intersection_opt: &Option<PathPosition>) -> Option<Float> {
+	pub fn update_body(&self, dt: Float, forces: &PathBodyForceDescription, v_static: &VehicleStatic, state: &mut PathBoundBodyState, next_intersection_opt: &Option<PathPosition>) -> Option<Float> {
 		let bcurve = self.get_bcurve(state.pos.latest_point);
 		let dir_sign = bool_sign(state.forward) as Float;
 		// Acceleration: F = m * a, a = F / m
-		let acc = forces.lin.z / v_static.mass;
+		let acc = forces.sum() / v_static.mass;
 		// Velocity: V += a * dt
 		let new_velocity = state.velocity + (acc * dt);
 		// Translation: translation += V * dt
@@ -543,11 +542,15 @@ pub struct SavePath {
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct Route {// List of intersections
 	/// Non-identifying
-	name: String,
+	pub name: String,
 	/// Vec of intersection desicions
 	pub intersection_decisions: Vec<(GenericQuery<Intersection>, IntersectionDecision)>,
-	/// Start
-	start: PathBoundBodyState
+	/// Start path query
+	pub start_path_query: GenericQuery<Path>,
+	/// Start path position
+	pub start_path_pos: PathPosition,
+	/// Whether to start facing forward on path
+	pub start_forward: bool
 }
 
 impl Route {
@@ -757,8 +760,6 @@ impl PathSet {
 				intersection_points.push((ref_.id, point));
 			}
 		}
-		// Sort intersection points (unecessary)
-		//intersection_points.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 		// Get closest one in correct direction (use `forward`)
 		let mut out: Option<(u64, &Intersection, PathPosition, Float)> = None;// (IntersectionId, &Intersection, Distance from `path_pos` to this intersection point)
 		for (id, curr_pos) in intersection_points {
@@ -917,22 +918,36 @@ pub struct PathBoundBodyState {
 impl PathBoundBodyState {
 	/// Updates self. If it goes through an intersection, it will use the optional state's route to make an `IntersectionDecision`.
 	/// This will work in a loop until it has travelled the correct distance.
-	pub fn update(&mut self, dt: Float, forces: &BodyForces, v_static: &VehicleStatic, path_set: &PathSet) {
+	pub fn update(&mut self, dt: Float, forces: &PathBodyForceDescription, v_static: &VehicleStatic, path_set: &PathSet) {
 		// Intersection decision loop, this will usually only run once or twice, but it in theory should handle arbitrarily large steps
 		let mut step_remaining: Float = 0.0;
+		let mut prev_path_pos_and_intersection_opt: Option<(PathPosition, u64)> = None;
 		loop {
 			// Possible next intersection on current path
-			let next_intersection_opt: Option<(u64, &Intersection, PathPosition, Float)> = path_set.next_intersection_on_path(&self.path_query, &self.pos, self.forward);
+			let next_intersection_opt_raw: Option<(u64, &Intersection, PathPosition, Float)> = path_set.next_intersection_on_path(&self.path_query, &self.pos, self.forward);
+			// Only use this intersection option if it is different then the previous one
+			let next_intersection_opt: Option<(u64, &Intersection, PathPosition, f32)> = match &next_intersection_opt_raw {
+				Some(t) => match prev_path_pos_and_intersection_opt {
+					Some((prev_path_pos, prev_id)) => if prev_id == t.0 && prev_path_pos == self.pos {
+						None
+					}
+					else {
+						Some(t.clone())
+					},
+					None => Some(t.clone())
+				},
+				None => None
+			};
 			//let next_intersection_opt: Option<&Intersection> = next_intersection_id_opt.map(|id| paths.intersections.get(&id).expect("Invalid intersection ID"));
 			let path: &Path = path_set.paths.get_item_tuple(&self.path_query).expect("Invalid path query").1;
-			let step_remaining_opt: Option<f32> = path.generic.update_body(dt, &forces, v_static, self, &next_intersection_opt.as_ref().map(|t| t.2.clone()));
+			let step_remaining_after_intersection_opt: Option<f32> = path.generic.update_body(dt, &forces, v_static, self, &next_intersection_opt.as_ref().map(|t| t.2.clone()));
 			step_remaining = match &next_intersection_opt {
-				Some((next_intersection_id, next_intersection, _, _)) => match step_remaining_opt {
-					Some(step_remaining) => {// There is still distance remaining after the intersection
+				Some((next_intersection_id, next_intersection, _, _)) => match step_remaining_after_intersection_opt {
+					Some(step_remaining_after_intersection) => {// There is still distance remaining after the intersection
 						// Intersection decision
 						let decision: IntersectionDecision = match match &self.route_query_opt {
 							Some(route_query) => {
-								let route: &Route = path_set.generic.routes.get_item_tuple(&route_query).expect("This PathBoundBodyState has an invalid route ID").1;
+								let route: &Route = path_set.generic.routes.get_item_tuple(&route_query).expect(&format!("This PathBoundBodyState has an invalid route query `{:?}`", route_query)).1;
 								route.unreliable_decision_opt(GenericQuery::id(*next_intersection_id), self.forward, &path_set.generic.intersections)
 							},
 							None => None
@@ -943,7 +958,7 @@ impl PathBoundBodyState {
 						// Act on decision
 						next_intersection.apply_decision(&decision, self, &path_set.paths);
 						// Done
-						step_remaining
+						step_remaining_after_intersection
 					},
 					None => 0.0
 				},
@@ -952,26 +967,8 @@ impl PathBoundBodyState {
 			if step_remaining == 0.0 {
 				break;
 			}
+			// Update prev intersection ID
+			prev_path_pos_and_intersection_opt = next_intersection_opt_raw.map(|t| (self.pos.clone(), t.0));
 		}
 	}
 }
-
-/*
-{
-                    "path_ref": 0,
-					"pos": {
-						"latest_point": 0,
-                    	"t": 0.5
-					},
-                    "velocity": 10,
-                    "forward": true
-                } */
-/*
-"knot_points": [
-                    [-50, 10, 0],
-                    [ 50, 10, 0]
-                ],
-                "tangent_offsets": [
-                    [0, 0, -50],
-                    [0, 0,  50]
-                ]*/

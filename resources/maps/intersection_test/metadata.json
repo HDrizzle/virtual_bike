@@ -65,13 +65,9 @@
 								[{"UniqueName": ["center-right"]}, {"exit": 1, "forward": false}],
 								[{"UniqueName": ["center-right"]}, {"exit": 0, "forward": true}]
 							],
-							"start": {
-								"path_query": {"UniqueName": ["right"]},
-								"pos": {"latest_point": 0, "t": 0},
-								"velocity": 15,
-								"forward": true,
-								"route_query_opt": {"UniqueName": ["test-route-0"]}
-							}
+							"start_path_query": {"UniqueName": ["right"]},
+							"start_path_pos": {"latest_point": 0, "t": 0},
+							"start_forward": true
 						}
 					]
 				]

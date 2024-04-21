@@ -510,7 +510,7 @@ impl World {
 	}
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "server"))]
 mod tests {
 	use crate::vehicle::VehiclePathBoundController;
 	use super::*;
@@ -528,7 +528,6 @@ mod tests {
 					GenericRef::id(0),
 					Path {
 						generic: GenericPath {
-							unique_name_opt: None,
 							name: "test-path-name".to_owned(),
 							knot_points: vec![
 								V3::new(0.0, 0.0, 0.0),
@@ -568,6 +567,7 @@ mod tests {
 		vehicles.insert("test-user".to_owned(), Vehicle {
 			static_: v_static_rc.clone(),
 			latest_forces: None,
+			path_forces_opt: None,
 			latest_input: None,
 			latest_input_t: 0,
 			physics_controller: Box::new(VehiclePathBoundController::build(

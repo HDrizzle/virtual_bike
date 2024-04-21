@@ -13,7 +13,6 @@ use bevy::{prelude::Transform, asset::{Asset, AssetServer, Handle}, ecs::system:
 use bevy_rapier3d::plugin::RapierContext;
 use dialoguer;
 use rand::Rng;
-#[cfg(feature = "client")]
 use approx::{AbsDiffEq, RelativeEq};
 
 // Modules
@@ -51,12 +50,11 @@ pub mod prelude {
 	pub type Iso = Isometry3<Float>;
 	pub const EPSILON: Float = 1.0e-6;// Arbitrary
 	pub use std::f32::consts::PI;
-use std::marker::PhantomData;
 	// Misc
 	pub use crate::{
 		world::{StaticData, WorldSave, WorldSend},
 		map::{GenericMap, SendMap, path::{PathType, PathTypeRef, Path, SavePath, GenericPath, PathSet, SavePathSet, GenericPathSet, PathBoundBodyState, PathPosition, BCurve, BCurveSample, Intersection, IntersectionDecision, BCURVE_LENGTH_ESTIMATION_SEGMENTS}, chunk::{Chunk, ChunkRef, RegularElevationMesh}},
-		vehicle::{VehicleStatic, VehicleStaticModel, VehicleSave, VehicleSend, Wheel, WheelStatic, BodyStateSerialize, BodyForces},
+		vehicle::{VehicleStatic, VehicleStaticModel, VehicleSave, VehicleSend, Wheel, WheelStatic, BodyStateSerialize, BodyForces, PathBodyForceDescription},
 		server::{RenetRequest, RenetResponse, AssetResponse, message_log},
 		GenericError,
 		GenericRef,

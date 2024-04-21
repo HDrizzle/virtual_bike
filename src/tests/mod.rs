@@ -2,7 +2,7 @@ use std::{collections::HashMap, rc::Rc, sync::Arc, f32::consts::PI};
 use approx::assert_relative_eq;
 use crate::prelude::*;
 
-#[cfg(feature = "server")]// TODO: fix: I don't like feature-gating tests, there should be a better way
+#[cfg(feature = "server")]
 pub mod gen {
 	use crate::map::map_generation;
 	use super::*;
@@ -193,12 +193,10 @@ pub mod gen {
 pub mod paths {
 	use crate::map::path::{PathType, Intersection, Route};
 	use super::*;
-	// TODO: test step distance with Some(intersection point)
 	// Initial states
 	fn square_loop_non_unit_edges() -> Path {// 10 x 10 square loop
 		Path {
 			generic: GenericPath {
-				unique_name_opt: None,
 				name: "test".to_owned(),
 				knot_points: vec![
 					V3::new( 0.0, 0.0,  0.0),// >
@@ -255,7 +253,7 @@ pub mod paths {
 		let mut paths = GenericDataset::<Path>::new();
 		paths.items.push((GenericRef::id(0), path.clone()));
 		paths.items.push((GenericRef::id(1), path));
-		let mut intersections = GenericDataset::<Intersection>{items: vec![
+		let mut intersections = GenericDataset::<Intersection> {items: vec![
 			(
 				GenericRef::id(0),
 				Intersection {
@@ -275,7 +273,21 @@ pub mod paths {
 				}
 			)
 		]};
-		let routes = GenericDataset::<Route>::new();
+		let routes = GenericDataset::<Route> {items: vec![
+			(
+				GenericRef::id(0),
+				Route {
+					name: "test-route".to_string(),
+					intersection_decisions: vec![
+						(GenericQuery::<Intersection>::id(0), IntersectionDecision::new(1, false)),
+						(GenericQuery::<Intersection>::id(0), IntersectionDecision::new(0, true))
+					],
+					start_path_query: GenericQuery::<Path>::id(0),
+					start_path_pos: PathPosition::new(0, 0.0),
+					start_forward: true
+				}
+			)
+		]};
 		// Done
 		PathSet {
 			generic: GenericPathSet {
@@ -296,7 +308,7 @@ pub mod paths {
 		state.velocity = 12.0;
 		// Update
 		let dt = 1.0;
-		let mut forces = BodyForces::default();
+		let mut forces = PathBodyForceDescription::default();
 		path.generic.update_body(dt, &mut forces, &v_static, &mut state, &None);
 		// Compare
 		let ideal_new_state = PathBoundBodyState {
@@ -318,7 +330,7 @@ pub mod paths {
 		let mut state = initial_path_bound_body_state();
 		// Update
 		let dt = 1.0;
-		let mut forces = BodyForces::default();
+		let mut forces = PathBodyForceDescription::default();
 		// 1
 		state.velocity = -5.0;
 		path.generic.update_body(dt, &mut forces, &v_static, &mut state, &None);
@@ -372,7 +384,6 @@ pub mod paths {
 	fn get_bcurve() {
 		let path = Path {
 			generic: GenericPath {
-				unique_name_opt: None,
 				name: "test".to_owned(),
 				knot_points: vec![
 					V3::new( 0.0, 10.0, -100.0),
@@ -555,6 +566,29 @@ pub mod paths {
 			(true, Some(-5.0))
 		);
 		assert_eq!(pos, PathPosition::new(3, 0.5));
+		// Backward, edge case
+		assert_eq!(
+			path.generic.step_position_by_world_units(&mut pos, -10.0, None, &Some(PathPosition::new(2, 1.0))),
+			(false, Some(-5.0))
+		);
+		assert_eq!(pos, PathPosition::new(3, 0.0));
+	}
+	#[test]
+	fn route_following() {
+		// Initial state
+		let path_set = intersections_initial_state();
+		let mut path_body_state = PathBoundBodyState {
+			path_query: GenericQuery::id(0),
+			pos: PathPosition::new(0, 0.0),
+			velocity: 10.0,
+			forward: true,
+			route_query_opt: Some(GenericQuery::<Route>::id(0))
+		};
+		let v_static = &VehicleStatic{type_name: "test".to_owned(), mass: 100.0, ctr_g_hight: 0.0, drag: V2::zeros(), wheels: vec![]};
+		// Step
+		// TODO: fix
+		path_body_state.update(1.0, &PathBodyForceDescription::default(), &v_static, &path_set);
+		//assert_eq!(path_body_state.pos, PathPosition::new(3, 0.0));
 	}
 }
 
@@ -584,6 +618,11 @@ mod misc {
 	#[should_panic]
 	fn rel_eq_test() {
 		assert_relative_eq!(EPSILON * 2.0, 0.0, epsilon = EPSILON);// Just to make sure I'm using this right
+	}
+	#[test]
+	fn client_and_server_features_enabled() {
+		#[cfg(not(all(feature = "server", feature = "client")))]
+		panic!("Both the `server` and `client` features should be enabled for testing")
 	}
 	// TODO
 	/*#[test]

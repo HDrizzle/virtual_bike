@@ -31,6 +31,7 @@ mod chunk_manager;
 use chunk_manager::{ChunkManagerPlugin, RenderDistance, RequestedChunks};
 mod skybox;
 mod chat;
+mod main_egui;
 
 // Custom resources
 #[derive(Resource)]
@@ -592,7 +593,8 @@ pub fn start(init_info: InitInfo) {
 		HardwareControllerPlugin,
 		skybox::Sky{resolution: 1000},
 		chat::ChatGuiPlugin,
-		MainClientPlugin
+		MainClientPlugin,
+		main_egui::GuiPlugin
 	));
 	InitInfo::setup_app(init_info, &mut app);
 	println!("Starting Bevy app");

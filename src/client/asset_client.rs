@@ -2,8 +2,6 @@
 
 use std::{sync::{Arc, Mutex}, time::{Instant, Duration}, net::SocketAddr, thread, mem};
 use bevy::{prelude::*, render::settings};
-use easy_gltf::load;
-use rapier3d::data::Index;
 use reqwest;
 
 use crate::prelude::*;
