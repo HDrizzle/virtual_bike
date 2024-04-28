@@ -1,12 +1,12 @@
 //! World simulation
 
-use std::{thread, error::Error, sync::mpsc, rc::Rc, collections::HashMap, time::{Duration, Instant}, net::IpAddr, sync::Arc};
+use std::{thread, sync::mpsc, rc::Rc, collections::HashMap, time::{Duration, Instant}};
+#[cfg(all(test, feature = "server"))]
+use std::sync::Arc;
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 #[cfg(feature = "client")]
 #[cfg(feature = "debug_render_physics")]
 use bevy_rapier3d::plugin::RapierContext;
-#[cfg(feature = "client")]
-use crate::client::cache;
 #[cfg(feature = "client")]
 use bevy::ecs::system::Resource;
 
@@ -235,7 +235,8 @@ pub mod async_messages {
 /// Loaded from and saved to the disk
 #[derive(Serialize, Deserialize)]
 pub struct WorldSave {
-	pub map: String,// Name of map file
+	/// Name of map file
+	pub map: String,
 	pub vehicles: HashMap<String, VehicleSave>,
 	pub age: f64,
 	pub playing: bool,
@@ -294,15 +295,15 @@ pub struct World {
 impl World {
 	pub fn load(name: &str) -> Result<Self, String> {
 		// name: name of world file
-		let save = to_string_err(load_world(name))?;
-		let map: ServerMap = ServerMap::from_save(to_string_err_with_message(load_map_metadata(&save.map), &format!("Could not load SaveMap for world \"{name}\""))?)?;
+		let save = to_string_err_with_message(load_world(name), &format!("Could not load/deserialize world save file"))?;
+		let map: ServerMap = ServerMap::from_save(to_string_err_with_message(load_map_metadata(&save.map), &format!("Could not load SaveMap (\"{}\") for world \"{}\"", &save.map, name))?)?;
 		// Create blank physics state
 		let mut physics_state: PhysicsState = PhysicsState::new(save.gravity);
 		// Load vehicles
 		let mut vehicles: HashMap<String, Vehicle> = HashMap::new();
 		for (user, v_save) in save.vehicles.iter() {
-			let v_static: VehicleStatic = to_string_err(load_static_vehicle(&v_save.type_))?;
-			vehicles.insert(user.clone(), to_string_err(Vehicle::build(v_save, Rc::new(v_static), &mut physics_state.bodies, &mut physics_state.colliders, &mut physics_state.impulse_joints, &map.path_set))?);
+			let v_static: VehicleStatic = to_string_err_with_message(load_static_vehicle(&v_save.type_), &format!("Could not load VehicleStatic \"{}\"", &v_save.type_))?;// TODO: Move this error msg to `load_static_vehicle`
+			vehicles.insert(user.clone(), to_string_err_with_message(Vehicle::build(v_save, Rc::new(v_static), &mut physics_state.bodies, &mut physics_state.colliders, &mut physics_state.impulse_joints), &format!("Could not build Vehicle from VehicleStatic \"{}\"", &v_save.type_))?);
 		}
 		// Create world
 		let mut out = Self {
@@ -515,7 +516,7 @@ mod tests {
 	use crate::vehicle::VehiclePathBoundController;
 	use super::*;
 	fn path_physics_initial_state() -> World {
-		let mut generic_map = GenericMap::new("test-map", 100, 1, [0; 3]);
+		let generic_map = GenericMap::new("test-map", 100, 1, [0; 3]);
 		let path_set = PathSet {
 			generic: GenericPathSet {
 				query_grid_scale: 0,
@@ -561,7 +562,8 @@ mod tests {
 				type_name: "test-vehicle-type".to_owned(),
 				mass: 100.0,
 				ctr_g_hight: 0.0,
-				drag: V2::new(0.0, 0.0),
+				drag: 0.0,
+				cross_sectional_area: 1.0,
 				wheels: Vec::new()
 		});
 		vehicles.insert("test-user".to_owned(), Vehicle {
@@ -588,12 +590,13 @@ mod tests {
 	fn path_physics() {
 		// Initial state
 		let mut world = path_physics_initial_state();
-		let (to_world_tx, to_world_rx) = mpsc::channel::<async_messages::ToWorld>();
-		let (from_world_tx, from_world_rx) = mpsc::channel::<async_messages::FromWorld>();
+		let (_to_world_tx, to_world_rx) = mpsc::channel::<async_messages::ToWorld>();
+		let (from_world_tx, _from_world_rx) = mpsc::channel::<async_messages::FromWorld>();
 		// Test
 		// TODO
 		world.step(1.0, 0.0, &to_world_rx, &from_world_tx);
 		let binding = world.send(0.0);
+		#[allow(unused)]
 		let v_state: &BodyStateSerialize = &binding.vehicles.get("test-user").unwrap().body_state;
 		//assert_eq!(v_state.lin_vel, V3::new(0.0, 0.0, 10.0));
 		//assert_eq!(v_state.position.translation.vector, V3::new(0.0, 0.0, 15.0));

@@ -112,7 +112,7 @@ impl<T, E, F> ValidityTest for GenericValidityTest<T, E, F> where E: ToString, F
 	fn check(&self) -> Vec<ValidityTestResult<Self::AutoFixT>> {
 		vec![
 			match &self.result {
-				Ok(t) => ValidityTestResult::Ok,
+				Ok(_) => ValidityTestResult::Ok,
 				Err(e) => ValidityTestResult::Problem{type_: ProblemType::Error, message: e.to_string(), auto_fix_opt: self.fix_opt.clone()}
 			}
 		]
@@ -124,7 +124,7 @@ impl<T, E> ValidityTest for Result<T, E> where T: ValidityTest, E: ToString {
 	fn condition_description(&self) -> String {
 		match &self {
 			Ok(tester) => format!("This Result::Ok(_): {}", tester.condition_description()),
-			Err(e) => "This Result<_, _> is Ok(_)".to_owned()
+			Err(_) => "This Result<_, _> is Ok(_)".to_owned()
 		}
 	}
 	fn check(&self) -> Vec<ValidityTestResult<Self::AutoFixT>> {
@@ -286,7 +286,7 @@ fn test_ui<T: ValidityTest>(tester: T) -> bool {
 	// Done
 	out
 }
-
+#[allow(unused)]
 fn vec_test_ui<T: ValidityTest>(testers: Vec<T>) -> bool {
 	let mut out = true;
 	for tester in testers {
@@ -320,6 +320,25 @@ pub fn all_tests() {
 	test_ui(ResourceDeserializationChecker::<client::Settings>::new(resource_interface::CLIENT_SETTINGS_FILE.to_owned()));
 	// Vehicles
 	test_ui(ResourceExistanceChecker::new(resource_interface::VEHICLES_DIR.to_owned(), false));
+	for entry_res in fs::read_dir(resource_interface::VEHICLES_DIR).unwrap() {
+		let entry = entry_res.unwrap();
+		if entry.metadata().unwrap().is_dir() {
+			let path = entry.path().to_str().expect("Could not get &str from path").to_owned() + "/" + resource_interface::VEHICLE_STATIC_JSON_FILENAME;
+			test_ui(ResourceDeserializationChecker::<VehicleStatic>::new(path.clone()));
+			// Check that v_static.type_name == path filename
+			// TODO: implement validity test for vehicle static
+			/*let name: &str = entry.path().file_name().expect(&format!("Couldn't get filename for static vehicle path \"{}\"", &path)).to_str().unwrap();
+			let de_type_name = resource_interface::load_static_vehicle(name).expect("This error thould have been detected earlier").type_name;
+			test_ui(
+				if de_type_name == *name {
+					Ok(())
+				}
+				else {
+					Err(format!("Deserialized static vehicle `type_name` field (\"{}\") does not match directory name (\"{}\")", de_type_name, name))
+				}
+			);*/
+		}
+	}
 	// Maps
 	test_ui(ResourceExistanceChecker::new(resource_interface::MAPS_DIR.to_owned(), false));
 	for entry_res in fs::read_dir(resource_interface::MAPS_DIR).unwrap() {
@@ -336,11 +355,16 @@ pub fn all_tests() {
 	for entry_res in fs::read_dir(resource_interface::WORLDS_DIR).unwrap() {
 		let entry = entry_res.unwrap();
 		if entry.metadata().unwrap().is_file() {
-			let path = entry.path().to_str().expect("Could not get &str from path").to_owned();
+			let path = entry.path().to_str().expect("Could not get &str from entry PathBuf").to_owned();
+			let filename_binding = entry.file_name();
+			let filename = filename_binding.to_str().expect("Could not get &str from entry OsString");
+			if filename == ".DS_Store" {
+				continue;
+			}
 			// Test world load
 			test_ui(GenericValidityTest::new(
 				format!("World at {} can be loaded", &path),
-				World::load(entry.file_name().to_str().expect("Could not get &str from path").strip_suffix(".json").expect("world filename didn't end with \".json\"")),
+				World::load(filename.strip_suffix(".json").expect(&format!("world filename \"{}\" didn't end with \".json\"", filename))),
 				None::<()>
 			));
 		}

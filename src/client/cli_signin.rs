@@ -1,14 +1,11 @@
 //! Created 2023-11-24
 //! Replacing the egui signin window
 
-use std::{time::Duration, thread, sync::{Arc, Mutex}, mem, net, io::Write};
-use bevy_renet::renet::DefaultChannel;
+use std::{time::Duration, thread, sync::{Arc, Mutex}, io::Write, net};
 //use extras::prompt;
 
 use crate::prelude::*;
-use super::{SigninEntryState, play, cache, asset_client::{AssetLoaderManager, self}, load_static_data, load_vehicle_models};
-
-const BACKSPACE: char = 8u8 as char;
+use super::{SigninEntryState, play, asset_client::AssetLoaderManager, load_static_data};
 
 fn loading_screen(go: Arc<Mutex<bool>>) {
 	println!("Loading");
@@ -60,7 +57,7 @@ pub fn get_play_init_info() -> Option<play::InitInfo> {
 	let go_mutex_clone = go_mutex.clone();
 	let thread_handle = thread::spawn(move || loading_screen(go_mutex_clone));
 	// Asset client
-	let mut asset_client = {
+	let asset_client = {
 		let renet_addr = network_init_info.renet_server_addr;
 		AssetLoaderManager::new(&settings, net::SocketAddr::new(renet_addr.ip(), renet_addr.port() + 1))
 	};

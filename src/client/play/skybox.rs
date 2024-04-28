@@ -2,14 +2,11 @@
 //! Example: https://github.com/bevyengine/bevy/blob/main/examples/3d/skybox.rs
 //! wgpu error: https://www.reddit.com/r/bevy/comments/1588577/how_to_skybox/
 
-use std::fs;
-use nalgebra::SimdValue;
-use serde::{Serialize, Deserialize};
 use bevy::{
 	prelude::*,
 	asset::LoadState,
     core_pipeline::Skybox,
-	render::{render_resource::{TextureViewDescriptor, TextureViewDimension}, texture::{ImageType, CompressedImageFormats, ImageSampler}, render_asset::RenderAssetUsages}
+	render::{render_resource::{TextureViewDescriptor, TextureViewDimension}, render_asset::RenderAssetUsages}
 };
 use image::{Rgb, RgbImage};
 
@@ -78,8 +75,7 @@ impl Sky {
 		mut commands: Commands,
 		asset_server: Res<AssetServer>,
     	mut images: ResMut<Assets<Image>>,
-		mut cubemap: ResMut<Cubemap>,
-		mut skyboxes: Query<&mut Skybox>
+		mut cubemap: ResMut<Cubemap>
 	) {
 		if !cubemap.is_loaded && asset_server.load_state(&cubemap.image_handle) == LoadState::Loaded {
 			bevy::log::info!("Skybox texture loaded");

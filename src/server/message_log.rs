@@ -1,9 +1,10 @@
 /// Created 2024-3-5
 /// Chat log
 
-use std::time::{Instant, Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Serialize, Deserialize};
 
+#[allow(unused_imports)]
 use crate::prelude::*;
 #[cfg(feature = "client")]
 use bevy::prelude::Resource;

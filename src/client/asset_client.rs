@@ -1,7 +1,7 @@
 //! For loading assets/big files from the server's HTTP asset server
 
-use std::{sync::{Arc, Mutex}, time::{Instant, Duration}, net::SocketAddr, thread, mem};
-use bevy::{prelude::*, render::settings};
+use std::{sync::{Arc, Mutex}, time::Duration, net::SocketAddr, thread, mem};
+use bevy::prelude::*;
 use reqwest;
 
 use crate::prelude::*;
@@ -69,36 +69,25 @@ impl AssetLoaderManager {
 }
 
 pub struct HttpAssetLoader {
-	latest_request: Arc<Mutex<Instant>>,
-	retry_time: Duration,
 	result_opt: Arc<Mutex<Option<Result<AssetResponse, String>>>>,
-	request_handle: thread::JoinHandle<()>,
 	pub request_hash: u64
 }
 
 impl HttpAssetLoader {
-	pub fn new(server_addr: SocketAddr, retry_time: Duration, request: AssetRequest) -> Self {
+	pub fn new(server_addr: SocketAddr, _retry_time: Duration, request: AssetRequest) -> Self {
 		let request_hash = calculate_hash(&request);
-		// Latest request
-		let latest_request = Arc::new(Mutex::new(Instant::now()));
-		let latest_request_clone = latest_request.clone();
-		// Retry time
-		let retry_time_clone = retry_time.clone();
 		// Result option
 		let result_opt: Arc<Mutex<Option<Result<AssetResponse, String>>>> = Arc::new(Mutex::new(None));
 		let result_opt_clone = result_opt.clone();
 		// Start thread
-		let request_handle = thread::spawn(
+		let _request_handle = thread::spawn(
 			move || {
 				Self::main_loop(server_addr, request, result_opt_clone);
 			}
 		);
 		// Done
 		Self {
-			latest_request,
-			retry_time,
 			result_opt,
-			request_handle,
 			request_hash
 		}
 	}

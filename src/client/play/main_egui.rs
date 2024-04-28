@@ -4,7 +4,6 @@ use bevy_inspector_egui::{
 	bevy_egui::{egui::{Ui, Window}, EguiContexts}// Importing from re-export to prevent conflicting versions of bevy_egui
 };
 use bevy::prelude::*;
-use renet::{DefaultChannel, RenetClient};
 
 use crate::prelude::*;
 
@@ -20,7 +19,6 @@ struct GuiState;
 /// * (optional) upcomming intersection
 fn update_system(
     mut egui_contexts: EguiContexts,
-	mut state: Local<GuiState>,
     auth: Res<ClientAuth>,
     world_state: Res<WorldSend>
 ) {

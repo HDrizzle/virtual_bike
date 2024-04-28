@@ -4,7 +4,7 @@
 
 use std::{net, thread, time::{Duration, SystemTime}};
 use bevy::ecs::system::Resource;
-use bevy_renet::renet::{DefaultChannel, RenetClient, ConnectionConfig, transport::{NetcodeClientTransport, ClientAuthentication}};
+use bevy_renet::renet::{DefaultChannel, RenetClient, transport::{NetcodeClientTransport, ClientAuthentication}};
 use local_ip_address::local_ip;
 use serde::{Serialize, Deserialize};
 
@@ -17,7 +17,6 @@ mod egui_signin;
 mod cli_signin;
 pub mod play;
 pub mod hardware_controller;
-mod network;
 pub mod cache;
 pub mod asset_client;
 use asset_client::AssetLoaderManager;
@@ -99,7 +98,6 @@ fn load_static_data(network_init_info: &mut play::NetworkInitInfo) -> Result<Sta
 		// Handle messages
 		if !network_init_info.renet_client.is_disconnected() {
 			// Check if static data has been recieved
-			let mut done = false;// Can't break from inside while loop, use this flag instead
 			while let Some(message) = network_init_info.renet_client.receive_message(DefaultChannel::ReliableOrdered) {
 				let res = bincode::deserialize::<RenetResponse>(&message).unwrap();
 				match res {
@@ -111,13 +109,14 @@ fn load_static_data(network_init_info: &mut play::NetworkInitInfo) -> Result<Sta
 				}
 			}
 		}
-		network_init_info.renet_transport.send_packets(&mut network_init_info.renet_client);// Don't unwrap this, it will cause errors and it turns out that just ignoring them works
+		let _ = network_init_info.renet_transport.send_packets(&mut network_init_info.renet_client);// Don't unwrap this, it will cause errors and it turns out that just ignoring them works
 		thread::sleep(Duration::from_millis(100));// Don't waste CPU
 	};
 }
 
 /// Gets all of the static vehicle binary GLB 3D models from the asset server
 #[deprecated]// Bevy web asset means this is no longer needed
+#[allow(unused)]
 fn load_vehicle_models(asset_client: &mut AssetLoaderManager, static_data: &StaticData, settings: &Settings, network_init_info: &play::NetworkInitInfo) -> Result<Vec<VehicleStaticModel>, String> {
 	// Request vehicle models
 	let mut static_vehicles_requested: usize = 0;

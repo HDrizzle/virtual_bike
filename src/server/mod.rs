@@ -1,7 +1,7 @@
 //! Created 2023-7-29
 //! see README on https://github.com/lucaspoffo/renet
-use std::{net::{SocketAddr, UdpSocket, IpAddr, Ipv4Addr}, time::{SystemTime, Duration, Instant, UNIX_EPOCH}, thread, sync::{mpsc, Arc}, mem};
-use renet::{RenetServer, ServerEvent, ConnectionConfig, SendType, ChannelConfig, transport::{ServerAuthentication, ServerConfig}, transport::NetcodeServerTransport, DefaultChannel};
+use std::{net::{SocketAddr, UdpSocket, IpAddr, Ipv4Addr}, time::{SystemTime, Duration, UNIX_EPOCH}, thread, sync::{mpsc, Arc}, mem};
+use renet::{RenetServer, ServerEvent, ConnectionConfig, ChannelConfig, transport::{ServerAuthentication, ServerConfig}, transport::NetcodeServerTransport, DefaultChannel};
 use serde::{Serialize, Deserialize};
 use bincode;
 use local_ip_address::local_ip;
@@ -79,7 +79,6 @@ pub enum AssetResponse {
 #[cfg(feature = "server")]
 struct NetworkRuntimeManager {
 	pub server: RenetServer,
-	pub addr: SocketAddr,
 	pub transport: NetcodeServerTransport,
 	pub static_data: StaticData,
 	pub message_log: Log
@@ -148,7 +147,7 @@ impl NetworkRuntimeManager {
 								// TODO: authenticate client
 								tx.send(async_messages::ToWorld::RecoverVehicleFromFlip(auth)).expect("Unable to send message to world");
 							},
-							RenetRequest::NewUser{name, psswd} => {
+							RenetRequest::NewUser{..} => {
 								todo!();// TODO
 							}
 							RenetRequest::Chat(auth, chat) => {
@@ -216,7 +215,6 @@ impl WorldServer {
 			public_addresses: vec![addr],
 			authentication: ServerAuthentication::Unsecure
 		};
-		let current_time = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap();
 		let transport = NetcodeServerTransport::new(server_config, socket).unwrap();
 		// Done
 		Self {
@@ -224,7 +222,6 @@ impl WorldServer {
 			world,
 			net_manager_opt: Some(NetworkRuntimeManager {
 				server,
-				addr,
 				transport,
 				static_data,
 				message_log: Log::new()
@@ -268,7 +265,7 @@ impl WorldServer {
 }
 
 pub fn connection_config() -> ConnectionConfig {
-	let mut channels_config: Vec<ChannelConfig> = DefaultChannel::config();
+	let channels_config: Vec<ChannelConfig> = DefaultChannel::config();
 	ConnectionConfig {
 		available_bytes_per_tick: 60_000,
 		server_channels_config: channels_config.clone(),
@@ -290,6 +287,7 @@ fn response_code_and_message(code: u16, message: String) -> rouille::Response {
 #[cfg(feature = "server")]
 #[derive(Clone)]
 struct AssetServer {
+	#[allow(unused)]
 	world_name: String,
 	map_name: String,
 	tx: mpsc::Sender<async_messages::ToWorld>
@@ -360,7 +358,7 @@ impl AssetServer {
 					if url_parts.len() >= 3 {// If raw texture is requested
 						match url_parts[2] {
 							"raw_texture.png" => match resource_interface::load_chunk_texture(&chunk_ref, &self.map_name) {
-								Ok((raw_file, generic)) => rouille::Response::from_data("image/png", raw_file),
+								Ok((raw_file, _)) => rouille::Response::from_data("image/png", raw_file),
 								Err(e) => response_code_and_message(400, format!("Could not load raw texture file: {}", e))
 							},
 							_ => rouille::Response::empty_404()
@@ -369,9 +367,9 @@ impl AssetServer {
 					else {
 						rouille::Response::from_data("application/octet-stream", bincode::serialize(&match Chunk::load(&chunk_ref, &self.map_name, with_texture) {
 							Ok(chunk) => AssetResponse::Chunk(chunk),
-							Err(e) => {
+							Err(_e) => {
 								self.tx.send(async_messages::ToWorld::CreateChunk(chunk_ref)).expect("Unable to send chunk creation request to world");
-								AssetResponse::Wait//Err(format!("Error loading chunk: {}, request to create chunk was sent to the world server", e))
+								AssetResponse::Wait//Err(format!("Error loading chunk: {}, request to create chunk was sent to the world server", _e))
 							}
 						}).expect("Unable to serialize response"))
 					}

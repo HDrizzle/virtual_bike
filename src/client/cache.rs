@@ -2,13 +2,11 @@
 //! Caches corresponding to each server will be stored in CACHE_DIR/<IP addr>:<port #>/
 
 pub const CACHE_DIR: &str = "assets/client_cache/";
-#[deprecated]
-const VEHICLE_MODEL_FILE_NAME: &str = "model.glb";
 
-use std::{fs, path, net::SocketAddr, io};
+use std::{fs, path, net::SocketAddr};
+#[allow(unused)]
 use crate::prelude::*;
 use bevy::prelude::*;
-use reqwest;
 
 pub trait CacheableBevyAsset: Sized {
 	/// Ex: "static_vehicles/"
@@ -47,6 +45,7 @@ fn get_or_create_cache_dir(addr: SocketAddr) -> String {
 	format!("{}{:?}/", CACHE_DIR, addr)
 }
 
+/*
 #[deprecated]
 pub fn get_static_vehicle_model_path(addr: SocketAddr, type_: &str) -> String {
 	format!("{}static_vehicles/{}/{}", get_or_create_cache_dir(addr), type_, VEHICLE_MODEL_FILE_NAME)
@@ -63,4 +62,4 @@ pub fn save_static_vehicle_model(addr: SocketAddr, type_: &str, data: Vec<u8>) -
 #[deprecated]
 pub fn is_vehicle_model_cached(addr: SocketAddr, type_: &str) -> bool {
 	path::Path::new(&get_static_vehicle_model_path(addr, type_)).exists()
-}
+}*/

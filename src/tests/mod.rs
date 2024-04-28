@@ -1,4 +1,4 @@
-use std::{collections::HashMap, rc::Rc, sync::Arc, f32::consts::PI};
+use std::{collections::HashMap, rc::Rc, sync::Arc};
 use approx::assert_relative_eq;
 use crate::prelude::*;
 
@@ -244,7 +244,8 @@ pub mod paths {
 			type_name: "vehicle static name".to_owned(),
 			mass: 200.0,
 			ctr_g_hight: 0.0,
-			drag: V2::zeros(),
+			drag: 0.0,
+			cross_sectional_area: 1.0,
 			wheels: Vec::new()
 		}
 	}
@@ -253,7 +254,7 @@ pub mod paths {
 		let mut paths = GenericDataset::<Path>::new();
 		paths.items.push((GenericRef::id(0), path.clone()));
 		paths.items.push((GenericRef::id(1), path));
-		let mut intersections = GenericDataset::<Intersection> {items: vec![
+		let intersections = GenericDataset::<Intersection> {items: vec![
 			(
 				GenericRef::id(0),
 				Intersection {
@@ -584,7 +585,7 @@ pub mod paths {
 			forward: true,
 			route_query_opt: Some(GenericQuery::<Route>::id(0))
 		};
-		let v_static = &VehicleStatic{type_name: "test".to_owned(), mass: 100.0, ctr_g_hight: 0.0, drag: V2::zeros(), wheels: vec![]};
+		let v_static = &VehicleStatic{type_name: "test".to_owned(), mass: 100.0, ctr_g_hight: 0.0, drag: 0.0, cross_sectional_area: 1.0, wheels: vec![]};
 		// Step
 		// TODO: fix
 		path_body_state.update(1.0, &PathBodyForceDescription::default(), &v_static, &path_set);
@@ -593,7 +594,6 @@ pub mod paths {
 }
 
 mod misc {
-	use nalgebra::{UnitQuaternion, UnitVector3};
 	use super::*;
 	#[test]
 	fn rounding() {

@@ -6,16 +6,15 @@
 //! 
 //! Major change 2023-11-21: this module will only be used when the game is signed-in and being played
 
-use std::{collections::{HashMap, HashSet}, net, f32::consts::PI, os::unix::net::SocketAddr};
+use std::{collections::{HashMap, HashSet}, net, f32::consts::PI};
 use bevy::{
 	prelude::*,
-	core_pipeline::Skybox,
 	input::{keyboard::KeyboardInput, ButtonState}
 };
 use bevy_renet::renet::{RenetClient, DefaultChannel, transport::NetcodeClientTransport};
 #[cfg(feature = "debug_render_physics")]
 use bevy_rapier3d::plugin::RapierContext;
-use nalgebra::{UnitQuaternion, Translation, Isometry};
+use nalgebra::{UnitQuaternion, Isometry};
 #[cfg(feature = "debug_render_physics")]
 use rapier3d::dynamics::RigidBodyHandle;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
@@ -24,7 +23,7 @@ use bevy_web_asset;
 
 use crate::prelude::*;
 
-use super::{hardware_controller::HardwareControllerPlugin, network::CustomRenetPlugin, cache, Settings, asset_client::AssetLoaderManager};
+use super::{hardware_controller::HardwareControllerPlugin, Settings, asset_client::AssetLoaderManager};
 
 // Mods
 mod chunk_manager;
@@ -66,16 +65,16 @@ impl CameraController {
 	}
 	pub fn toggle(&mut self, vehicles: &HashMap<String, VehicleSend>, username: String) {
 		*self = match self {
-			Self::Spectator{pos} => {
+			Self::Spectator{pos: _} => {
 				let rel_pos = Self::default_pos_wrt_vehicle();
 				Self::Vehicle{username, rel_rot: rel_pos.0, radius: rel_pos.1}
 			},
-			Self::Vehicle{username, ..} => {
+			Self::Vehicle{username: _, ..} => {
 				Self::Spectator{pos: SimpleIso::from_iso(self.get_pos(vehicles))}
 			}
 		};
 	}
-	pub fn update(&mut self, dt: Float, vehicles: &HashMap<String, VehicleSend>, trans_input: V3, rot_input: V2) {
+	pub fn update(&mut self, dt: Float, trans_input: V3, rot_input: V2) {
 		match self {
 			Self::Spectator{pos} => {
 				let lin_speed: Float = 250.0;// M/s
@@ -93,7 +92,7 @@ impl CameraController {
 				let delta_pitch = rot_input.y * ang_speed * dt;
 				pos.rotation.pitch += delta_pitch;
 			},
-			Self::Vehicle{username, rel_rot, radius} => {
+			Self::Vehicle{username: _, rel_rot, radius: _} => {
 				let ang_speed: Float = 1.0;// Rad/s
 				// Delta-yaw
 				let delta_yaw = rot_input.x * ang_speed * dt;
@@ -174,7 +173,6 @@ impl InitInfo {
 		mut meshes: ResMut<Assets<Mesh>>,
 		mut materials: ResMut<Assets<StandardMaterial>>,
 		asset_server: Res<AssetServer>,
-		renet_server_addr: Res<RenetServerAddr>,
 		asset_client: Res<AssetLoaderManager>
 		//vehicle_static_models: Res<VehicleStaticModelsResource>
 	) {
@@ -344,10 +342,8 @@ fn update_system(
 	mut renet_client: ResMut<RenetClient>,
 	mut asset_client: ResMut<AssetLoaderManager>,
 	#[cfg(feature = "debug_render_physics")] rapier_context_res: ResMut<RapierContext>,
-	mut camera_query: Query<(&mut CameraComponent, &mut Transform, &Projection)>,
 	#[cfg(feature = "debug_render_physics")] map_body_handle: Res<MapBodyHandle>,
 	mut requested_chunks: ResMut<RequestedChunks>,
-	auth: Res<ClientAuth>,
 	renet_server_addr: Res<RenetServerAddr>,
 	mut world_state_res: ResMut<WorldSend>,
 	settings: Res<Settings>,
@@ -433,7 +429,7 @@ fn camera_update_system(
 	mut render_distance: ResMut<RenderDistance>,
 	auth: Res<ClientAuth>
 ) {
-	for (_, mut transform, projection) in camera_query.iter_mut() {
+	for (_, mut transform, _) in camera_query.iter_mut() {
 		// Detect motion
 		// Translation
 		let mut translation = V3::zeros();
@@ -487,7 +483,7 @@ fn camera_update_system(
 				}
 			}
 		}
-		camera_controller.update(1.0/60.0, &world_state.vehicles, translation, rotation);
+		camera_controller.update(1.0/60.0, translation, rotation);
 		// Update camera
 		let nalgebra_iso = camera_controller.get_pos(&world_state.vehicles);
 		*transform = nalgebra_iso_to_bevy_transform(nalgebra_iso.clone());
@@ -497,8 +493,7 @@ fn camera_update_system(
 }
 
 fn render_test(
-	mut commands: Commands,
-	asset_server: Res<AssetServer>
+	mut commands: Commands
 ) {
 	// Copied from https://bevyengine.org/examples/3D%20Rendering/3d-scene/
 	// Camera
@@ -588,7 +583,6 @@ pub fn start(init_info: InitInfo) {
 		}),
 		// You need to add this plugin to enable wireframe rendering
 		WireframePlugin*/,
-		CustomRenetPlugin,
 		ChunkManagerPlugin,
 		HardwareControllerPlugin,
 		skybox::Sky{resolution: 1000},

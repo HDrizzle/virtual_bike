@@ -2,7 +2,8 @@
     "type_name": "test-bike",
     "mass": 100,
     "ctr_g_hight": 1,
-    "drag": [0, 0],
+    "drag": 0,
+    "cross_sectional_area": 1,
     "wheels": [
         {
             "dia": 4,

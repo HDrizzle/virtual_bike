@@ -1,6 +1,6 @@
 //! Map main module file
 
-use std::{collections::HashMap, mem, thread, sync::{Arc, Mutex}, time::{Instant, Duration}, ops::Index, net::{IpAddr, SocketAddr}};
+use std::{collections::HashMap, mem, thread, sync::{Arc, Mutex}, time::{Instant, Duration}, net::SocketAddr};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 use serde_json;
 #[cfg(feature = "client")]
@@ -78,7 +78,7 @@ impl GenericMap {
 		self.body_handle_opt = Some(body_handle);
 	}
     #[cfg(feature = "client")]
-	pub fn unload_chunk_client(&mut self, ref_: &ChunkRef, #[cfg(feature = "debug_render_physics")] mut context: &mut RapierContext, meshes: &mut ResMut<Assets<Mesh>>, materials: &mut ResMut<Assets<StandardMaterial>>) {
+	pub fn unload_chunk_client(&mut self, ref_: &ChunkRef, #[cfg(feature = "debug_render_physics")] mut context: &mut RapierContext, meshes: &mut ResMut<Assets<Mesh>>, _materials: &mut ResMut<Assets<StandardMaterial>>) {
 		match self.get_chunk_id(ref_) {
 			Some(i) => {
 				let chunk = &mut self.loaded_chunks[i];
@@ -312,7 +312,7 @@ impl validity::ValidityTest for SaveMap {
 				abort = true;
 				out.push(ValidityTestResult::Problem {
 					type_: validity::ProblemType::Error,
-					message: format!("Chunks directory (\"{}\") doesn't exist", chunks_dir),
+					message: format!("Chunks directory (\"{}\") could not be read because \"{}\"", chunks_dir, e.to_string()),
 					auto_fix_opt: Some(
 						SaveMapAutoFix::new(
 							&self.generic.name,
@@ -323,9 +323,11 @@ impl validity::ValidityTest for SaveMap {
 				});
 			}
 		}
+		if abort {
+			return out;
+		}
 		// Stage 2
-		
-		
+		// TODO
 		// Done
 		out
 	}
@@ -381,14 +383,14 @@ impl SaveMapAutoFixEnum {
 			Self::AlignChunkEdges(ref1, ref2) => format!("Modify chunks {:?} and {:?} so their edges line up", ref1, ref2)
 		}
 	}
-	fn fix(&self, map_name: &str, chunk_size: UInt) -> Result<(), String> {
+	fn fix(&self, map_name: &str, _chunk_size: UInt) -> Result<(), String> {
 		match self {
 			Self::DeleteEmptyGenericChunkFolder => to_string_err(fs::remove_dir(ChunkRef{position: IntV2(0, 0)}.resource_dir(map_name, true))),
 			Self::DeleteEmptyChunkFolder(chunk_ref) => to_string_err(fs::remove_dir(chunk_ref.resource_dir(map_name, false))),
 			Self::CreateChunksFolder(fix) => fix.fix(),
 			Self::AlignChunkEdges(ref1, ref2) => {
 				// Assert that they are adjacent
-				let diff: IntV2 = ref2.position - ref1.position;
+				let _diff: IntV2 = ref2.position - ref1.position;
 				// TODO
 				Ok(())
 			}
@@ -431,6 +433,7 @@ impl ServerMap {
 	}
 	pub fn send(&self, #[cfg(feature = "debug_render_physics")] physics: &mut PhysicsStateSend) -> SendMap {
 		// Unloads all chunks from the physics state which will also be sent to the client
+		#[allow(unused_mut)]// Only needs mutable if `debug_render_physics` is enabled
 		let mut out_generic = self.generic.clone();
 		#[cfg(feature = "debug_render_physics")]
 		out_generic.unload_chunks(&Vec::<ChunkRef>::new(), &mut physics.build_body_creation_deletion_context());
@@ -533,7 +536,7 @@ impl ChunkCreationManager {
 		// Check chunk creators
 		let mut indices_to_delete = Vec::<usize>::new();
 		let mut out = Vec::<ChunkCreationResult>::new();
-		for (i, mut chunk_creator) in &mut self.active_chunk_creators.iter_mut().enumerate() {
+		for (i, chunk_creator) in &mut self.active_chunk_creators.iter_mut().enumerate() {
 			let opt = chunk_creator.check();
 			match opt {
 				Some(result) => {
@@ -568,8 +571,10 @@ impl ChunkCreationManager {
 
 #[cfg(feature = "server")]
 struct AsyncChunkCreator {
+	#[allow(unused)]
 	start_time: Instant,
 	thread_handle_opt: Option<thread::JoinHandle<()>>,
+	#[allow(unused)]
 	chunk_ref: ChunkRef,
 	result: Arc<Mutex<Option<ChunkCreationResult>>>
 }

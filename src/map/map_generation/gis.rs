@@ -134,7 +134,9 @@ pub mod open_elevation_client {
 
 	#[derive(Deserialize, Debug)]
 	struct LocationResponse {
+		#[allow(unused)]
 		pub latitude: Float,
+		#[allow(unused)]
 		pub longitude: Float,
 		pub elevation: Float
 	}
@@ -184,6 +186,7 @@ pub mod opentopodata_client {
 	#[derive(Deserialize, Debug)]
 	struct Response {
 		pub results: Vec<_Result>,
+		#[allow(unused)]
 		pub status: String
 	}
 
@@ -199,14 +202,18 @@ pub mod opentopodata_client {
 
 	#[derive(Deserialize, Debug)]
 	struct _Result {
+		#[allow(unused)]
 		pub dataset: String,
 		pub elevation: Float,
+		#[allow(unused)]
 		pub location: Location
 	}
 
 	#[derive(Deserialize, Debug)]
 	struct Location {
+		#[allow(unused)]
 		pub lat: Float,
+		#[allow(unused)]
 		pub lng: Float
 	}
 
@@ -259,7 +266,7 @@ pub fn create_mesh_from_real_world<T: ElevationGetter>(
 		//let y_angle = angles[1] + (meters_to_degrees(y as Int) * precision);//meters_to_degrees(chunk_ref.position.1 + ((y as Float * precision) as Int));//
 		for x in 0..grid_matrix_size {
 			//let x_angle = angles[0] + (meters_to_degrees(x as Int) * precision) / x_scale;//meters_to_degrees(chunk_ref.position.0 + ((x as Float * precision) as Int));
-			let ((x_angle, y_angle), scale) = chunk_local_location(&map_location, chunk_ref, IntV2(((x as Float * precision) as Int), ((y as Float * precision) as Int)));
+			let ((x_angle, y_angle), _) = chunk_local_location(&map_location, chunk_ref, IntV2((x as Float * precision) as Int, (y as Float * precision) as Int));
 			req.locations.push(WorldLocation{lat: y_angle, lon: x_angle});
 		}
 	}

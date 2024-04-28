@@ -28,11 +28,16 @@ pub struct PhysicsUpdateArgs<'a> {
 pub trait PhysicsController {
 	fn serializable(&self, bodies: &RigidBodySet, paths: &PathSet) -> BodyStateSerialize;
 	fn update(&mut self, info: PhysicsUpdateArgs) -> (BodyForces, Option<PathBodyForceDescription>);
-	fn recover_from_flip(&mut self, physics_state: &mut PhysicsState) {}
+	fn recover_from_flip(&mut self, _physics_state: &mut PhysicsState) {}
 }
 
 /// Currently not used, but may be used for 2/3 numerical integration stepping
 pub trait BodyAveragableState {
 	/// Averages `self` with `other` in-place
 	fn average(&mut self, other: &Self);
+}
+
+/// For calculating drag force
+pub fn fluid_drag_force(density: Float, speed: Float, cd: Float, cross_sectional_area: Float) -> Float {
+	0.5 * density * speed*speed * cd * cross_sectional_area
 }

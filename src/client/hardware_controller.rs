@@ -1,10 +1,9 @@
 //! Gets raw data from the hardware on the bike (Arduino board) and sends it to the server
-use std::{error::Error, time::{Duration, Instant}, sync::{Arc, Mutex}};
+use std::{error::Error, time::Duration, sync::{Arc, Mutex}};
 use serde::{Serialize, Deserialize};
 //use extras;
 use serialport::SerialPortInfo;
 use bevy::prelude::*;
-use bevy_renet::renet::*;
 use bevy_inspector_egui::{
 	bevy_egui::{egui::{Ui, Window}, EguiContexts}// Importing from re-export to prevent conflicting versions of bevy_egui
 };
@@ -60,7 +59,6 @@ impl Calibration {
 #[derive(Resource)]
 pub struct HardwareInterface {// Recieves data from the bike hardware over a serial connection
 	port: Arc<Mutex<Box<dyn serialport::SerialPort>>>,
-	latest_update: Instant,
 	cal: Calibration
 }
 
@@ -72,7 +70,6 @@ impl HardwareInterface {
             .open().expect(&format!("Failed to open port \"{}\"", &port_name));
 		Self {
 			port: Arc::new(Mutex::new(port)),
-			latest_update: Instant::now(),
 			cal
 		}
 	}
@@ -120,9 +117,7 @@ fn update_system(
 	mut commands: Commands,
 	mut egui_contexts: EguiContexts,
 	hardward_opt: Option<ResMut<HardwareInterface>>,
-	renet_client: ResMut<RenetClient>,
-	mut input_state: Local<String>,
-	auth: Res<ClientAuth>,
+	mut input_state: Local<String>
 ) {
 	match hardward_opt {
 		Some(mut hardware) => {// Update latest data and send to server, TODO: eliminate code repitition

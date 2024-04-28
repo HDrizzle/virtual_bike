@@ -1,12 +1,12 @@
 //! Stationary bike-controlled video game / training program
 //! Created by Hadrian Ward, 2023-6-8
 
-#![allow(warnings)]// TODO: remove when I have a lot of free-time
-use std::{fmt, env, ops, error::Error, collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, time::{SystemTime, UNIX_EPOCH}, fs, path, net::{SocketAddr, SocketAddrV4, SocketAddrV6, IpAddr, Ipv4Addr, Ipv6Addr}, marker::PhantomData};
+//#![allow(warnings)]// TODO: remove when I have a lot of free-time
+use std::{fmt, env, ops, error::Error, collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, time::{SystemTime, UNIX_EPOCH}, fs, path, net::SocketAddr, marker::PhantomData};
 #[cfg(any(feature = "server", feature = "debug_render_physics"))]
 use rapier3d::{dynamics::{RigidBodySet, IslandManager}, geometry::ColliderSet};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
-use nalgebra::{Point3, Point2, Vector3, Vector2, point, Matrix, Const, ArrayStorage, OPoint, Translation, Isometry3, UnitQuaternion, UnitComplex, Complex};
+use nalgebra::{Point3, Point2, Vector3, Vector2, point, Matrix, Const, ArrayStorage, OPoint, Translation, Isometry3, UnitQuaternion};
 #[cfg(feature = "client")]
 use bevy::{prelude::Transform, asset::{Asset, AssetServer, Handle}, ecs::system::Resource, render::{mesh::{Mesh, Indices}, render_resource::PrimitiveTopology, render_asset::RenderAssetUsages}};
 #[cfg(feature = "debug_render_physics")]
@@ -80,10 +80,12 @@ pub mod prelude {
 		world::{World, PhysicsState},
 		map::{ServerMap, SaveMap, map_generation::{self, MapGenerator, MeshCreationArgs, gis::WorldLocation}, chunk::{ChunkCreationArgs, ChunkCreationResult}}
 	};
+	#[allow(unused_import_braces)]
 	#[cfg(feature = "client")] pub use crate::{
 		server::AssetRequest
 	};
 	#[cfg(all(feature = "server", feature = "client"))] pub use crate::validity;
+	#[allow(unused_import_braces)]
 	#[cfg(any(feature = "server", feature = "debug_render_physics"))] pub use crate::{
 		RapierBodyCreationDeletionContext
 	};
@@ -299,6 +301,7 @@ impl<T: fmt::Display> fmt::Display for GenericError<T> {
 impl<T: fmt::Debug + fmt::Display> Error for GenericError<T> {}
 
 impl<T: fmt::Display> GenericError<T> {
+	#[allow(unused)]
     fn new(message: T) -> Self {
         GenericError { message }
     }
@@ -819,7 +822,7 @@ impl RelativeEq for SimpleRotation {
 	fn default_max_relative() -> Self::Epsilon {
 		Self::default_epsilon()
 	}
-	fn relative_eq(&self, other: &Self, epsilon: Self::Epsilon, max_relative: Self::Epsilon) -> bool {
+	fn relative_eq(&self, other: &Self, epsilon: Self::Epsilon, _max_relative: Self::Epsilon) -> bool {
 		self.abs_diff_eq(other, epsilon)
 	}
 }

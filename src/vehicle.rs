@@ -6,11 +6,10 @@
 use std::{error::Error, rc::Rc, ops::AddAssign, io::Write, net::SocketAddr};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 #[cfg(feature = "client")]
-use bevy::{prelude::*, ecs::component::Component};
+use bevy::prelude::*;
 #[cfg(feature = "client")]
-use bevy_inspector_egui::{
-	bevy_egui::{egui::{Ui, Window}, EguiContexts}// Importing from re-export to prevent conflicting versions of bevy_egui
-};
+use bevy_inspector_egui::bevy_egui::egui::Ui;// Importing from re-export to prevent conflicting versions of bevy_egui
+
 use nalgebra::{vector, point, UnitQuaternion};
 #[cfg(feature = "server")]
 use easy_gltf;
@@ -63,9 +62,9 @@ type WheelSteering = Option<(RigidBodyHandle, ImpulseJointHandle)>;
 pub struct Wheel {
 	static_: WheelStatic,
 	#[cfg(feature = "server")] body_handle: RigidBodyHandle,
-	#[cfg(feature = "server")] collider_handle: ColliderHandle,
+	#[allow(unused)] #[cfg(feature = "server")] collider_handle: ColliderHandle,
 	/// None if not static_.steering or built in client
-	#[cfg(feature = "server")] steering: WheelSteering
+	#[allow(unused)] #[cfg(feature = "server")] steering: WheelSteering
 }
 
 #[cfg(feature = "server")]
@@ -82,6 +81,7 @@ impl Wheel {
 		let collider = static_.build_rapier_collider();
 		let collider_handle = colliders.insert_with_parent(collider, body_handle, bodies);
 		// Steering with joints: https://docs.rs/rapier3d/0.17.2/rapier3d/dynamics/struct.RevoluteJointBuilder.html
+		#[allow(unused)]
 		#[cfg(feature = "server")]
 		let steering = {
 			let (wheel_anchor_handle, wheel_position_wrt_anchor, steering): (RigidBodyHandle, Iso, WheelSteering) = match static_.steering {// The body that the wheel's "axle" will be attached to, either the vehicle itself or an intermediate body if it steers
@@ -138,7 +138,7 @@ impl Wheel {
 	pub fn set_position_wrt_body_static(body: &mut RigidBody, position_wrt_vehicle: &Iso, vehicle_position: &Iso) {
 		body.set_position(add_isometries(vehicle_position, position_wrt_vehicle), true);
 	}
-	pub fn update_steering(&self, steering: Float, bodies: &mut RigidBodySet, joints: &mut ImpulseJointSet) {
+	pub fn update_steering(&self, steering: Float, bodies: &mut RigidBodySet, _joints: &mut ImpulseJointSet) {
 		if self.static_.steering {
 			//let (_, joint_handle) = self.steering.expect("steering is None, but static data says this wheel is steering");
 			//let joint = joints.get_mut(joint_handle).expect("Joint set does not contain wheel steering joint");
@@ -157,7 +157,9 @@ pub struct VehicleStatic {
 	pub type_name: String,
 	pub mass: Float,
 	pub ctr_g_hight: Float,
-	pub drag: V2,
+	pub drag: Float,
+	/// For calculating drag
+	pub cross_sectional_area: Float,
 	pub wheels: Vec<WheelStatic>
 }
 
@@ -312,10 +314,9 @@ impl Vehicle {
 		static_: Rc<VehicleStatic>,
 		bodies: &mut RigidBodySet,
 		colliders: &mut ColliderSet,
-		joints: &mut ImpulseJointSet,
-		paths: &PathSet
+		joints: &mut ImpulseJointSet
 	) -> Result<Vehicle, Box<dyn Error>> {
-		let physics_controller = save.body_state.build_physics_controller(bodies, colliders, joints, paths, static_.clone());
+		let physics_controller = save.body_state.build_physics_controller(bodies, colliders, joints, static_.clone());
 		// Done
 		Ok(Self {
 			static_,
@@ -340,7 +341,7 @@ impl Vehicle {
 			rapier: physics_state,
 			path_set,
 			latest_input: &self.latest_input,
-			drag_force_calculator: &|lin: V3, ang: V3| -> BodyForces {BodyForces::default()}// TODO
+			drag_force_calculator: &|lin: V3, _ang: V3| -> BodyForces {BodyForces::new(V3::new(0.0, 0.0, crate::physics::fluid_drag_force(fluid_density, lin.z, self.static_.drag, self.static_.cross_sectional_area)), V3::zeros())}
 		});
 		// Save forces
 		self.latest_forces = Some(forces);
@@ -368,10 +369,10 @@ impl Vehicle {
 			latest_input_t: self.latest_input_t
 		}
 	}
-	pub fn calculate_forces(&self, lin: V3, ang: V3, fluid_density: Float) -> BodyForces {
+	/*pub fn calculate_forces(&self, lin: V3, ang: V3, fluid_density: Float) -> BodyForces {
 		// Drag force wrt this vehicle
 		BodyForces::default()
-	}
+	}*/
 }
 
 /// This is saved/sent over the network to the client. It will NOT be used inside the server game logic.
@@ -405,7 +406,6 @@ impl BodyStateSerialize {
 		bodies: &mut RigidBodySet,
 		colliders: &mut ColliderSet,
 		joints: &mut ImpulseJointSet,
-		paths: &PathSet,
 		v_static: Rc<VehicleStatic>
 	) -> Box<dyn PhysicsController> {
 		match &self.path_bound_opt {
@@ -413,7 +413,7 @@ impl BodyStateSerialize {
 				Box::new(VehiclePathBoundController::build(path_state.clone(), v_static))
 			},
 			None => {
-				Box::new(VehicleRapierController::build(&self, bodies, colliders, joints, paths, v_static))
+				Box::new(VehicleRapierController::build(&self, bodies, colliders, joints, v_static))
 			}
 		}
 	}
@@ -422,7 +422,9 @@ impl BodyStateSerialize {
 #[cfg(feature = "server")]
 pub struct VehicleRapierController {
 	body_handle: RigidBodyHandle,
+	#[allow(unused)]
 	collider_handle: ColliderHandle,
+	#[allow(unused)]
 	wheels: Vec<Wheel>,
 	v_static: Rc<VehicleStatic>
 }
@@ -434,7 +436,6 @@ impl VehicleRapierController {
 		bodies: &mut RigidBodySet,
 		colliders: &mut ColliderSet,
 		joints: &mut ImpulseJointSet,
-		paths: &PathSet,
 		static_: Rc<VehicleStatic>
 	) -> Self {
 		// Body
@@ -464,7 +465,7 @@ impl VehicleRapierController {
 
 #[cfg(feature = "server")]
 impl PhysicsController for VehicleRapierController {
-	fn serializable(&self, bodies: &RigidBodySet, paths: &PathSet) -> BodyStateSerialize {
+	fn serializable(&self, bodies: &RigidBodySet, _paths: &PathSet) -> BodyStateSerialize {
 		let body: &RigidBody = bodies.get(self.body_handle).expect("Unable to get body with BodyPhysicsController::RegularPhysics.body_handle");
 		BodyStateSerialize::from_rapier_body(body, None)
 	}
@@ -588,6 +589,12 @@ pub struct BodyForces {
 }
 
 impl BodyForces {
+	pub fn new(lin: V3, ang: V3) -> Self {
+		Self {
+			lin,
+			ang
+		}
+	}
 	/// Creates a new Self from the forces acting on a path bound object. These forces are considered to act along the local Z-axis of the object.
 	pub fn from_path_bound_forces(path_forces: &PathBodyForceDescription) -> Self {
 		Self {

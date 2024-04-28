@@ -6,4 +6,5 @@
 //! 
 //! Also possibly usefull: https://nasa-gibs.github.io/gibs-api-docs/python-usage/
 
+#[allow(unused)]
 use crate::prelude::*;

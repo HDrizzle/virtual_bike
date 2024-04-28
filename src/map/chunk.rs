@@ -1,7 +1,7 @@
 //! Created 2023-9-29
 //! Chunks are the "building-blocks" of a static map (they aren't modified during gameplay) sort of like in Minecraft which is where I got the idea.
 
-use std::{rc::Rc, error::Error, collections::HashMap, sync::{Arc, Mutex}, io::Write, net::SocketAddr, fs};
+use std::{rc::Rc, sync::{Arc, Mutex}, io::Write, net::SocketAddr, fs};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 #[cfg(feature = "client")]
 use bevy::{prelude::*, render::{texture::{ImageType, CompressedImageFormats, ImageSampler, ImageFormat}, render_asset::RenderAssetUsages}};

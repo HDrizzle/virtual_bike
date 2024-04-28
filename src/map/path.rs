@@ -8,10 +8,6 @@
 
 use std::{collections::HashMap, sync::Arc, f32::consts::PI, net::SocketAddr};
 use core::cmp::{PartialOrd, Ordering};
-#[cfg(feature = "client")]
-use bevy::math;
-#[cfg(feature = "client")]
-use bevy_inspector_egui::egui::epaint::tessellator::path;
 use nalgebra::UnitQuaternion;
 use serde::{Serialize, Deserialize};
 #[cfg(feature = "client")]
@@ -336,7 +332,6 @@ impl GenericPath {
 	/// Updates path bound body state. If it goes through an intersection, it will return the remaining step distance after the intersection.
 	/// Returns: Optional amount of step distance left after intersection
 	pub fn update_body(&self, dt: Float, forces: &PathBodyForceDescription, v_static: &VehicleStatic, state: &mut PathBoundBodyState, next_intersection_opt: &Option<PathPosition>) -> Option<Float> {
-		let bcurve = self.get_bcurve(state.pos.latest_point);
 		let dir_sign = bool_sign(state.forward) as Float;
 		// Acceleration: F = m * a, a = F / m
 		let acc = forces.sum() / v_static.mass;
@@ -555,7 +550,7 @@ pub struct Route {// List of intersections
 
 impl Route {
 	/// Gets the decision for the first time that this route encounters `IntersectionId` (if at all)
-	pub fn unreliable_decision_opt(&self, intersection_query: GenericQuery<Intersection>, forward: bool, intersections: &GenericDataset<Intersection>) -> Option<IntersectionDecision> {
+	pub fn unreliable_decision_opt(&self, intersection_query: GenericQuery<Intersection>, _forward: bool, intersections: &GenericDataset<Intersection>) -> Option<IntersectionDecision> {
 		let int_id = match intersections.get_item_id(&intersection_query) {
 			Some(id) => id,
 			None => return None
@@ -605,8 +600,8 @@ impl Intersection {
 			path_points
 		}
 	}
-	pub fn default_decision(&self, paths: &PathSet, curr_path: &GenericQuery<Path>) -> IntersectionDecision {
-		let mut out = IntersectionDecision {
+	pub fn default_decision(&self, _paths: &PathSet, _curr_path: &GenericQuery<Path>) -> IntersectionDecision {
+		let out = IntersectionDecision {
 			exit: 0,
 			forward: true
 		};
@@ -671,7 +666,7 @@ impl Intersection {
 		};
 		let mut out = Vec::<PathPosition>::new();
 		for (curr_path_query, path_pos) in &self.path_points {
-			if let Some((curr_ref, path)) = paths.get_item_tuple(curr_path_query) {
+			if let Some((curr_ref, _)) = paths.get_item_tuple(curr_path_query) {
 				if curr_ref.id == path_id {
 					out.push(path_pos.clone());
 				}
@@ -717,7 +712,7 @@ impl PathSet {
 	/// Because a `Path` requires an `Arc<PathType>` and a `SavePath` only has a reference to that path type (the name of a file in resources/), this function may fail if that path type config file can't be loaded.
 	pub fn from_save(save: SavePathSet) -> Result<Self, String> {
 		// Load path types
-		let mut path_types = HashMap::<PathTypeRef, Arc<PathType>>::new();
+		let path_types = HashMap::<PathTypeRef, Arc<PathType>>::new();
 		let mut paths = GenericDataset::<Path>::new();
 		for (save_path_ref, save_path) in save.paths.items {
 			// get path type config
@@ -783,8 +778,8 @@ impl PathSet {
 			};
 			// Logic to get possible new closest intersection
 			if let Some(diff_positive) = diff_positive_opt {
-				let mut use_this_one: bool = match &out {
-					Some((_, _, curr_pos, curr_best_dist)) => diff_positive < *curr_best_dist,
+				let use_this_one: bool = match &out {
+					Some((_, _, _, curr_best_dist)) => diff_positive < *curr_best_dist,
 					None => true
 				};
 				// Update `out` if `new_out` is Some(_)
@@ -920,6 +915,7 @@ impl PathBoundBodyState {
 	/// This will work in a loop until it has travelled the correct distance.
 	pub fn update(&mut self, dt: Float, forces: &PathBodyForceDescription, v_static: &VehicleStatic, path_set: &PathSet) {
 		// Intersection decision loop, this will usually only run once or twice, but it in theory should handle arbitrarily large steps
+		#[allow(unused_assignments)]
 		let mut step_remaining: Float = 0.0;
 		let mut prev_path_pos_and_intersection_opt: Option<(PathPosition, u64)> = None;
 		loop {

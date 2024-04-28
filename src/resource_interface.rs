@@ -26,6 +26,8 @@ pub static CALIBRATION_FILE: &str = "../resources/calibration.json";
 pub static PORT_FILE: &str = "../resources/port.txt";
 pub static CLIENT_SETTINGS_FILE: &str = "../resources/client_settings.json";
 
+pub static VEHICLE_STATIC_JSON_FILENAME: &str = "static_data.json";
+
 /*
 fn get_chunk_dir_path(chunk_ref: &ChunkRef, map_name: &str) -> String {
 	format!("{}{}/chunks/{}/", MAPS_DIR.to_owned(), map_name.to_owned(), chunk_ref.resource_dir_name())
@@ -57,7 +59,7 @@ pub fn load_static_vehicle_gltf(name: &str) -> Result<Vec<u8>, String> {
 }
 
 pub fn load_static_vehicle(name: &str) -> Result<VehicleStatic, Box<dyn Error>> {
-	let raw_string: String = load_file_with_better_error(&(VEHICLES_DIR.to_owned() + name + "/static_data.json"))?;
+	let raw_string: String = load_file_with_better_error(&(VEHICLES_DIR.to_owned() + name + "/" + VEHICLE_STATIC_JSON_FILENAME))?;
 	let vehicle: VehicleStatic = serde_json::from_str(&raw_string)?;
 	Ok(vehicle)
 }
