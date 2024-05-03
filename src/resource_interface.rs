@@ -13,18 +13,18 @@ use crate::{
 use crate::client::hardware_controller::Calibration;
 
 // STATICS
-pub static RESOURCES_DIR: &str = "../resources";
-pub static VEHICLES_DIR: &str = "../resources/vehicles/";
-pub static MAPS_DIR: &str = "../resources/maps/";
-pub static WORLDS_DIR: &str = "../resources/worlds/";
-pub static PATH_TYPES_DIR: &str = "../resources/path_types/";
-pub static MAP_GENERATORS_DIR: &str = "../resources/map_generators/";
-pub static PATH_TEXTURES_DIR: &str = "../resources/path_textures/";
-pub static USERS_FILE: &str = "../resources/server_credentials.json";
-pub static CLIENT_LOGIN_FILE: &str = "../resources/client_credentials.json";
-pub static CALIBRATION_FILE: &str = "../resources/calibration.json";
-pub static PORT_FILE: &str = "../resources/port.txt";
-pub static CLIENT_SETTINGS_FILE: &str = "../resources/client_settings.json";
+pub static RESOURCES_DIR: &str = "resources/";
+pub static VEHICLES_DIR: &str = "resources/vehicles/";
+pub static MAPS_DIR: &str = "resources/maps/";
+pub static WORLDS_DIR: &str = "resources/worlds/";
+pub static PATH_TYPES_DIR: &str = "resources/path_types/";
+pub static MAP_GENERATORS_DIR: &str = "resources/map_generators/";
+pub static PATH_TEXTURES_DIR: &str = "resources/path_textures/";
+pub static USERS_FILE: &str = "resources/server_credentials.json";
+pub static CLIENT_LOGIN_FILE: &str = "resources/client_credentials.json";
+pub static CALIBRATION_FILE: &str = "resources/calibration.json";
+pub static PORT_FILE: &str = "resources/port.txt";
+pub static CLIENT_SETTINGS_FILE: &str = "resources/client_settings.json";
 
 pub static VEHICLE_STATIC_JSON_FILENAME: &str = "static_data.json";
 

@@ -1,7 +1,10 @@
 //! Map main module file
 
-use std::{collections::HashMap, mem, thread, sync::{Arc, Mutex}, time::{Instant, Duration}, net::SocketAddr};
+use std::{collections::HashMap, mem, thread, sync::{Arc, Mutex}, time::{Instant, Duration}};
+#[cfg(feature = "client")]
+use std::net::SocketAddr;
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
+#[cfg(feature = "client")]
 use serde_json;
 #[cfg(feature = "client")]
 use bevy::prelude::*;
@@ -14,7 +17,7 @@ use crate::prelude::*;
 use crate::world::PhysicsStateSend;
 #[cfg(all(feature = "server", feature = "client"))]
 use validity::{ValidityTest, AutoFix, ValidityTestResult, ResourceDeserializationChecker};
-#[cfg(feature = "server")]
+#[cfg(all(feature = "server", feature = "client"))]
 use std::fs;
 
 pub mod chunk;

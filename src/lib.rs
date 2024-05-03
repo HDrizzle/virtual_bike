@@ -2,7 +2,11 @@
 //! Created by Hadrian Ward, 2023-6-8
 
 //#![allow(warnings)]// TODO: remove when I have a lot of free-time
-use std::{fmt, env, ops, error::Error, collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, time::{SystemTime, UNIX_EPOCH}, fs, path, net::SocketAddr, marker::PhantomData};
+use std::{fmt, ops, error::Error, collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, time::{SystemTime, UNIX_EPOCH}, fs, net::SocketAddr, marker::PhantomData};
+#[cfg(feature = "client")]
+use std::path;
+#[cfg(any(feature = "server", feature = "client"))]
+use std::env;
 #[cfg(any(feature = "server", feature = "debug_render_physics"))]
 use rapier3d::{dynamics::{RigidBodySet, IslandManager}, geometry::ColliderSet};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
@@ -911,7 +915,15 @@ pub fn ui_main() {
 				validity::main_ui();
 				#[cfg(not(all(feature = "server", feature = "client")))]
 				println!("Both the `client` and `server` features are required for this function");
-			}
+			},
+			#[cfg(feature = "client")]
+            "-debug-hardware" => {
+				client::hardware_controller::debug();
+			},
+			#[cfg(feature = "client")]
+            "-client" => {
+				client::start();
+			},
 			_ => panic!("Invalid arguments")
 		}
 	}

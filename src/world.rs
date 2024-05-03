@@ -21,6 +21,7 @@ use crate::resource_interface::*;
 #[cfg(feature = "debug_render_physics")]
 use crate::client::play::VehicleBodyHandles;*/
 
+#[cfg(feature = "server")]
 use nalgebra::vector;
 
 // Structs

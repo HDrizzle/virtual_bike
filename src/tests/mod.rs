@@ -1,4 +1,6 @@
-use std::{collections::HashMap, rc::Rc, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
+#[cfg(any(feature = "server", feature = "client"))]
+use std::rc::Rc;
 use approx::assert_relative_eq;
 use crate::prelude::*;
 

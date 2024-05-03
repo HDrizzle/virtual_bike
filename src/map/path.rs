@@ -6,7 +6,9 @@
 //! 
 //! There are `Route`s which represent a loop and can use multiple paths/parts of paths. A `Path` is a series of cubic bezier curves (`BCurve`).
 
-use std::{collections::HashMap, sync::Arc, f32::consts::PI, net::SocketAddr};
+use std::{collections::HashMap, sync::Arc, f32::consts::PI};
+#[cfg(feature = "client")]
+use std::net::SocketAddr;
 use core::cmp::{PartialOrd, Ordering};
 use nalgebra::UnitQuaternion;
 use serde::{Serialize, Deserialize};
@@ -16,6 +18,7 @@ use bevy::{prelude::*, render::render_asset::RenderAssetUsages};
 use crate::prelude::*;
 
 // CONSTS
+#[cfg(feature = "client")]
 const PATH_RENDER_SEGMENT_LENGTH: Float = 4.0;// Arbitrary
 pub const BCURVE_LENGTH_ESTIMATION_SEGMENTS: usize = 200;// Arbitrary
 const BCURVE_SAMPLE_ORIENTATION_DT: Float = 0.01;// Arbitrary
@@ -257,14 +260,16 @@ impl GenericPath {
 				break;
 			}
 			else {
-				let (new_index_raw, updated_t): (Int, Float) = match new_t {
-					0.0 => {
-						(bcurve_index as Int - 1, 1.0)
-					},
-					1.0 => {
+				let (new_index_raw, updated_t): (Int, Float) = if new_t == 0.0 {
+					(bcurve_index as Int - 1, 1.0)
+				}
+				else {
+					if new_t == 1.0 {
 						(bcurve_index as Int + 1, 0.0)
-					},
-					_ => panic!("BCurve step position change left over != 0, however the new t-value is not 0 or 1")
+					}
+					else {
+						panic!("BCurve step position change left over != 0, however the new t-value is not 0 or 1");
+					}
 				};
 				//dbg!((new_index_raw, updated_t));
 				let (new_bcurve_index, looped_this_time) = mod_or_clamp(new_index_raw, (self.knot_points.len() - 0) as UInt, loop_);

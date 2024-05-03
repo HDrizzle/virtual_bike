@@ -5,8 +5,17 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+# https://stackoverflow.com/questions/26946646/package-with-both-a-library-and-a-binary
+[lib]
+name = "virtual_bike"
+path = "src/lib.rs"
+
+[[bin]]
+name = "virtual_bike"
+path = "src/bin.rs"
+
 [features]
-default = ["server", "client", "client_default_signin", "path_rendering", "debug_vehicle_input"]#, "debug_render_physics", "experimental_terrain_gen"]
+default = ["client", "server", "client_default_signin", "path_rendering", "debug_vehicle_input"]#, "debug_render_physics", "experimental_terrain_gen"]
 
 server = ["rapier3d", "easy-gltf", "rouille"]
 

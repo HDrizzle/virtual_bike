@@ -3,7 +3,9 @@
 //! Any vehicle can be in one of two states: normal physics and path-bound. Normal physics means it will simply be controlled by the physics engine (Rapier 3D).
 //! when path-bound it will be controlled by the specific Path it is bound to. it's velocity will be a single scalar value whose sign indicates which direction it is travelling on the path wrt itself.
 
-use std::{error::Error, rc::Rc, ops::AddAssign, io::Write, net::SocketAddr};
+use std::{error::Error, rc::Rc, ops::AddAssign};
+#[cfg(feature = "client")]
+use std::{io::Write, net::SocketAddr};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 #[cfg(feature = "client")]
 use bevy::prelude::*;
