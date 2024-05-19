@@ -161,7 +161,7 @@ pub struct ChunkManagerPlugin;
 
 impl Plugin for ChunkManagerPlugin {
 	fn build(&self, app: &mut App) {
-		app.insert_resource(RenderDistance{load: 300.0, unload: 2000.0, pos: V2::new(0.0, 0.0)});// TODO: fix hardcoded values
+		app.insert_resource(RenderDistance{load: 300.0, unload: 1000.0, pos: V2::new(0.0, 0.0)});// TODO: fix hardcoded values
 		app.insert_resource(RequestedChunks::new(5.0));
 		app.add_systems(Update, update_chunks_system);
 	}

@@ -261,6 +261,7 @@ pub struct VehicleSend {
 	pub latest_forces: Option<BodyForces>,
 	/// Description of forces acting on vehicle when on path
 	pub path_forces_opt: Option<PathBodyForceDescription>,
+	pub route_opt: Option<GenericRef<Route>>,
 	pub body_state: BodyStateSerialize,
 	input: Option<InputData>,
 	latest_input_t: u64
@@ -366,6 +367,7 @@ impl Vehicle {
 			type_: self.static_.type_name.clone(),
 			latest_forces: self.latest_forces.clone(),
 			path_forces_opt: self.path_forces_opt.clone(),
+			route_opt: self.physics_controller.get_route_opt(&paths.generic.routes),
 			body_state: self.create_serialize_state(body_set, paths),
 			input: self.latest_input,
 			latest_input_t: self.latest_input_t
@@ -494,6 +496,9 @@ impl PhysicsController for VehicleRapierController {
 		}
 		(BodyForces::default(), None)// TODO
 	}
+	fn get_route_opt(&self, _: &GenericDataset<Route>) -> Option<GenericRef<Route>> {
+		None
+	}
 	fn recover_from_flip(&mut self, physics_state: &mut PhysicsState) {
 		// TODO: fix
 		let body = physics_state.bodies.get_mut(self.body_handle).expect("Unable to get vehicle body during unflip");
@@ -564,6 +569,12 @@ impl PhysicsController for VehiclePathBoundController{
 		self.state.update(args.dt, &forces, &self.v_static, &args.path_set);
 		//path.update_body(args.dt, &forces, &self.v_static, &mut self.state);
 		(BodyForces::from_path_bound_forces(&forces), Some(forces))
+	}
+	fn get_route_opt(&self, routes: &GenericDataset<Route>) -> Option<GenericRef<Route>> {
+		match &self.state.route_query_opt {
+			Some(route_query) => Some(routes.get_item_tuple(route_query).expect(&format!("Route query ({:?}) invalid", route_query)).0.clone()),
+			None => None
+		}
 	}
 }
 

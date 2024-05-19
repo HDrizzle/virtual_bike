@@ -38,3 +38,5 @@
 * 2024-3-5: New feature: chat log
 
 * 2024-3-9: Upgrading to bevy ^0.13
+
+* 2024-5-17: I haven't been good about updating this. Anyway, Hi!

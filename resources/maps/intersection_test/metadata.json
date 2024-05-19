@@ -23,10 +23,7 @@
 			"intersections": {
 				"items": [
 					[
-						{
-							"id": 0,
-							"unique_name": "center-right"
-						},
+						{"id": 0, "unique_name_opt": "center-right"},
 						{
 							"path_points": [
 								[
@@ -55,10 +52,7 @@
 			"routes": {
 				"items": [
 					[
-						{
-							"id": 0,
-							"unique_name": "test-route-0"
-						},
+						{"id": 0, "unique_name_opt": "test-route-0"},
 						{
 							"name": "Right-Center figure-8",
 							"intersection_decisions": [
@@ -76,10 +70,7 @@
 		"paths": {
 			"items":[
 				[
-					{
-						"id": 0,
-						"unique_name": "left"
-					},
+					{"id": 0, "unique_name_opt": "left"},
 					{
 						"generic": {
 							"name": "Left ball",
@@ -101,10 +92,7 @@
 					}
 				],
 				[
-					{
-						"id": 1,
-						"unique_name": "center"
-					},
+					{"id": 1, "unique_name_opt": "center"},
 					{
 						"generic": {
 							"name": "Thing",
@@ -130,10 +118,7 @@
 					}
 				],
 				[
-					{
-						"id": 2,
-						"unique_name": "right"
-					},
+					{"id": 2, "unique_name_opt": "right"},
 					{
 						"generic": {
 							"name": "Right ball",

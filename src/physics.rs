@@ -28,6 +28,7 @@ pub struct PhysicsUpdateArgs<'a> {
 pub trait PhysicsController {
 	fn serializable(&self, bodies: &RigidBodySet, paths: &PathSet) -> BodyStateSerialize;
 	fn update(&mut self, info: PhysicsUpdateArgs) -> (BodyForces, Option<PathBodyForceDescription>);
+	fn get_route_opt(&self, routes: &GenericDataset<Route>) -> Option<GenericRef<Route>>;
 	fn recover_from_flip(&mut self, _physics_state: &mut PhysicsState) {}
 }
 

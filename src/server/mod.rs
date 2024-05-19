@@ -141,7 +141,6 @@ impl NetworkRuntimeManager {
 							},
 							RenetRequest::TogglePlaying => {
 								// TODO: authenticate client
-								println!("Recieved RenetRequest::TogglePlaying");
 								tx.send(async_messages::ToWorld::TogglePlaying).expect("Unable to send client update to world");
 							},
 							RenetRequest::RecoverVehicleFromFlip(auth) => {

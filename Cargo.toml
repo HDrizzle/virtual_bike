@@ -21,7 +21,7 @@ server = ["rapier3d", "easy-gltf", "rouille"]
 
 client = ["serialport", "bevy", "bevy-inspector-egui", "bevy_renet", "image", "eframe", "bevy_web_asset"]
 
-debug_render_physics = ["rapier3d", "bevy_rapier3d", "bevy-inspector-egui-rapier"]
+debug_render_physics = ["rapier3d", "bevy_rapier3d"]#, "bevy-inspector-egui-rapier"
 experimental_terrain_gen = []
 debug_vehicle_input = []
 client_default_signin = []
@@ -78,5 +78,5 @@ image = {version = "^0.24", optional = true}
 eframe = {version = "0.23.0", optional = true}
 # debug_render_physics only
 bevy_rapier3d = {version = "0.25.0", features = ["debug-render"], optional = true}
-bevy-inspector-egui-rapier = {version = "0.9.0", features = ["rapier3d"], optional = true}
+#bevy-inspector-egui-rapier = {version = "0.9.0", features = ["rapier3d"], optional = true}
 bevy_web_asset = {version = "0.8", optional = true}

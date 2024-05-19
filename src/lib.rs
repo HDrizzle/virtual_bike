@@ -1,8 +1,7 @@
 //! Stationary bike-controlled video game / training program
 //! Created by Hadrian Ward, 2023-6-8
 
-//#![allow(warnings)]// TODO: remove when I have a lot of free-time
-use std::{fmt, ops, error::Error, collections::hash_map::DefaultHasher, hash::{Hash, Hasher}, time::{SystemTime, UNIX_EPOCH}, fs, net::SocketAddr, marker::PhantomData};
+use std::{collections::hash_map::DefaultHasher, error::Error, fs, fmt, hash::{Hash, Hasher}, marker::PhantomData, net::SocketAddr, ops, time::{SystemTime, UNIX_EPOCH}};
 #[cfg(feature = "client")]
 use std::path;
 #[cfg(any(feature = "server", feature = "client"))]
@@ -57,7 +56,7 @@ pub mod prelude {
 	// Misc
 	pub use crate::{
 		world::{StaticData, WorldSave, WorldSend},
-		map::{GenericMap, SendMap, path::{PathType, PathTypeRef, Path, SavePath, GenericPath, PathSet, SavePathSet, GenericPathSet, PathBoundBodyState, PathPosition, BCurve, BCurveSample, Intersection, IntersectionDecision, BCURVE_LENGTH_ESTIMATION_SEGMENTS}, chunk::{Chunk, ChunkRef, RegularElevationMesh}},
+		map::{GenericMap, SendMap, path::{Route, PathType, PathTypeRef, Path, SavePath, GenericPath, PathSet, SavePathSet, GenericPathSet, PathBoundBodyState, PathPosition, BCurve, BCurveSample, Intersection, IntersectionDecision, BCURVE_LENGTH_ESTIMATION_SEGMENTS}, chunk::{Chunk, ChunkRef, RegularElevationMesh}},
 		vehicle::{VehicleStatic, VehicleStaticModel, VehicleSave, VehicleSend, Wheel, WheelStatic, BodyStateSerialize, BodyForces, PathBodyForceDescription},
 		server::{RenetRequest, RenetResponse, AssetResponse, message_log},
 		GenericError,
@@ -340,12 +339,18 @@ impl<T> GenericRef<T> {
 			}
 		}
 	}
-	/// WARNING: This method can do what this whole type is meant to avoid: using references in the wrong context
+	/// WARNING: This method can do what this whole type is meant to avoid: using references in the wrong context. Use with caution.
 	pub fn into_another_type<T2>(&self) -> GenericRef<T2> {
 		GenericRef::<T2> {
 			id: self.id,
 			unique_name_opt: self.unique_name_opt.clone(),
 			_phantom: PhantomData{}
+		}
+	}
+	pub fn to_string(&self) -> String {
+		match &self.unique_name_opt {
+			Some(name) => format!("{} ({})", self.id, name),
+			None => self.id.to_string()
 		}
 	}
 }

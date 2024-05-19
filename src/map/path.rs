@@ -738,6 +738,8 @@ impl PathSet {
 	}
 	/// Gets next intersection on given path in given direction if there is one
 	/// 
+	/// intersection_to_exclude_opt: Optional intersection to exclude, expected use case is to put the previous intersection here which will be excluded if it is within `EPSILON` of current position
+	/// 
 	/// # Returns
 	/// 
 	/// Option<(
@@ -746,7 +748,13 @@ impl PathSet {
 	/// 	Position on path of intersection: PathPosition,
 	/// 	Distance along given path to intersection in direction given by `forward` (should always be 0 or positive)
 	/// )>
-	pub fn next_intersection_on_path(&self, path_query: &GenericQuery<Path>, path_pos: &PathPosition, forward: bool) -> Option<(u64, &Intersection, PathPosition, Float)> {
+	pub fn next_intersection_on_path(
+		&self,
+		path_query: &GenericQuery<Path>,
+		path_pos: &PathPosition,
+		forward: bool,
+		//intersection_to_exclude_opt: Option<GenericQuery<Intersection>>
+	) -> Option<(u64, &Intersection, PathPosition, Float)> {
 		// Get path
 		let path: &Path = &self.paths.get_item_tuple(&path_query).expect("Invalid path reference").1;
 		let path_len = path.generic.estimate_distance_to_position(&path.generic.end_position(), BCURVE_LENGTH_ESTIMATION_SEGMENTS);
@@ -784,10 +792,10 @@ impl PathSet {
 			// Logic to get possible new closest intersection
 			if let Some(diff_positive) = diff_positive_opt {
 				let use_this_one: bool = match &out {
-					Some((_, _, _, curr_best_dist)) => diff_positive < *curr_best_dist,
+					Some((_, _, _, curr_best_dist)) => (diff_positive < *curr_best_dist) && diff_positive != 0.0,// `diff_positive != 0.0` is just experimental, not sure if correct and it can cause edge cases
 					None => true
 				};
-				// Update `out` if `new_out` is Some(_)
+				// Update `out`
 				if use_this_one {
 					out = Some((id, &(self.generic.intersections.get_item_tuple(&GenericQuery::id(id)).expect("This shouldn't happen").1), curr_pos, diff_positive));
 				}

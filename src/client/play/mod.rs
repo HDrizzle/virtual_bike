@@ -11,7 +11,7 @@ use bevy::{
 	prelude::*,
 	input::{keyboard::KeyboardInput, ButtonState}
 };
-use bevy_renet::renet::{RenetClient, DefaultChannel, transport::NetcodeClientTransport};
+use bevy_renet::{RenetClientPlugin, transport::NetcodeClientPlugin, renet::{RenetClient, DefaultChannel, transport::NetcodeClientTransport}};
 #[cfg(feature = "debug_render_physics")]
 use bevy_rapier3d::plugin::RapierContext;
 use nalgebra::{UnitQuaternion, Isometry};
@@ -583,12 +583,15 @@ pub fn start(init_info: InitInfo) {
 		}),
 		// You need to add this plugin to enable wireframe rendering
 		WireframePlugin*/,
+		RenetClientPlugin,
+		NetcodeClientPlugin,
 		ChunkManagerPlugin,
 		HardwareControllerPlugin,
 		skybox::Sky{resolution: 1000},
 		chat::ChatGuiPlugin,
 		MainClientPlugin,
-		main_egui::GuiPlugin
+		main_egui::ForcesGuiPlugin,
+		main_egui::NavGuiPlugin
 	));
 	InitInfo::setup_app(init_info, &mut app);
 	println!("Starting Bevy app");
