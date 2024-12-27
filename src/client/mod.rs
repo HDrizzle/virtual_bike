@@ -4,7 +4,7 @@
 
 use std::{net, thread, time::{Duration, SystemTime}};
 use bevy::ecs::system::Resource;
-use bevy_renet::renet::{DefaultChannel, RenetClient, transport::{NetcodeClientTransport, ClientAuthentication}};
+use bevy_renet::{renet::{DefaultChannel, RenetClient}, netcode::{NetcodeClientTransport, ClientAuthentication}};
 use local_ip_address::local_ip;
 use serde::{Serialize, Deserialize};
 

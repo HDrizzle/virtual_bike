@@ -4,9 +4,9 @@
 
 use bevy::{
 	prelude::*,
-	asset::LoadState,
     core_pipeline::Skybox,
-	render::{render_resource::{TextureViewDescriptor, TextureViewDimension}, render_asset::RenderAssetUsages}
+	render::{render_resource::{TextureViewDescriptor, TextureViewDimension}, render_asset::RenderAssetUsages},
+	math::Quat
 };
 use image::{Rgb, RgbImage};
 
@@ -77,7 +77,7 @@ impl Sky {
     	mut images: ResMut<Assets<Image>>,
 		mut cubemap: ResMut<Cubemap>
 	) {
-		if !cubemap.is_loaded && asset_server.load_state(&cubemap.image_handle) == LoadState::Loaded {
+		if !cubemap.is_loaded && asset_server.load_state(&cubemap.image_handle).is_loaded() {
 			bevy::log::info!("Skybox texture loaded");
 			let image = images.get_mut(&cubemap.image_handle).unwrap();
 			image.reinterpret_stacked_2d_as_array(image.height() / image.width());
@@ -87,12 +87,9 @@ impl Sky {
             });
 			bevy::log::info!("Spawning camera with skybox");
 			commands.spawn((
-				Camera3dBundle {
-					transform: Transform::from_xyz(50.0, 10.0, 0.0).looking_at(Vec3::new(50., 0., 50.), Vec3::Y),
-					..default()
-				},
+				Camera3d::default(),
 				CameraComponent,
-				Skybox{image: cubemap.image_handle.clone(), brightness: 1000.0}
+				Skybox{image: cubemap.image_handle.clone(), brightness: 1000.0, rotation: Quat::IDENTITY}
 			));
 			cubemap.is_loaded = true;
 		}

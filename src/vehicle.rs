@@ -12,15 +12,6 @@ use bevy::prelude::*;
 #[cfg(feature = "client")]
 use bevy_inspector_egui::bevy_egui::egui::Ui;// Importing from re-export to prevent conflicting versions of bevy_egui
 
-use nalgebra::{vector, point, UnitQuaternion};
-#[cfg(feature = "server")]
-use easy_gltf;
-
-// Rapier 3D physics
-#[cfg(any(feature = "server", feature = "debug_render_physics"))]
-use rapier3d::{prelude::*, math::Real};
-//use nalgebra::{Isometry3, Vector3, vector, Point3, point, geometry::Quaternion, UnitQuaternion, Const};
-
 use crate::{prelude::*, map::path::PathBoundBodyState};
 #[cfg(feature = "server")]
 use crate::physics::PhysicsController;
@@ -40,116 +31,12 @@ pub struct WheelStatic {
 	pub steering_rotation_axis_offset: Float,
 }
 
-impl WheelStatic {
-	#[cfg(any(feature = "server", feature = "debug_render_physics"))]
-	pub fn build_rapier_collider(&self) -> Collider {
-		ColliderBuilder::cylinder((self.width / 2.0) as Real, (self.dia / 2.0) as Real)
-			.restitution(0.9)
-			.position(/*Iso::new(Translation{vector: V3::new(0., 0., 0.)}, UnitQuaternion::new(V3::x()))*/
-				Iso {
-					rotation: UnitQuaternion::new(V3::z() * std::f32::consts::FRAC_PI_2),// https://docs.rs/nalgebra/0.32.1/nalgebra/geometry/type.UnitQuaternion.html#method.from_axis_angle
-					translation: Translation{vector: V3::new(0., 0., 0.)}
-				}
-			)// https://rapier.rs/docs/user_guides/rust/colliders#position
-			.friction(self.friction)
-			.build()
-	}
-}
-
-#[cfg(feature = "server")]
-type WheelSteering = Option<(RigidBodyHandle, ImpulseJointHandle)>;
-
 #[derive(Clone)]
-#[cfg_attr(feature = "frontend", derive(Component))]
+#[cfg_attr(feature = "client", derive(Component))]
+#[allow(unused)]
 pub struct Wheel {
 	static_: WheelStatic,
-	#[cfg(feature = "server")] body_handle: RigidBodyHandle,
-	#[allow(unused)] #[cfg(feature = "server")] collider_handle: ColliderHandle,
-	/// None if not static_.steering or built in client
-	#[allow(unused)] #[cfg(feature = "server")] steering: WheelSteering
-}
-
-#[cfg(feature = "server")]
-impl Wheel {
-	pub fn build(static_: &WheelStatic, bodies: &mut RigidBodySet, colliders: &mut ColliderSet, joints: &mut ImpulseJointSet, v_body_handle: RigidBodyHandle) -> Self {
-		// Get vehicle position
-		let vehicle_position = bodies.get(v_body_handle).expect("Unable to get vehicle body handle in Wheel builder").position().clone();
-		// Build body & collider
-		let body = RigidBodyBuilder::dynamic()
-			//.position(add_isometries(&vehicle_position, &self.position_wrt_body))
-			.ccd_enabled(true)
-			.build();
-		let body_handle = bodies.insert(body);
-		let collider = static_.build_rapier_collider();
-		let collider_handle = colliders.insert_with_parent(collider, body_handle, bodies);
-		// Steering with joints: https://docs.rs/rapier3d/0.17.2/rapier3d/dynamics/struct.RevoluteJointBuilder.html
-		#[allow(unused)]
-		#[cfg(feature = "server")]
-		let steering = {
-			let (wheel_anchor_handle, wheel_position_wrt_anchor, steering): (RigidBodyHandle, Iso, WheelSteering) = match static_.steering {// The body that the wheel's "axle" will be attached to, either the vehicle itself or an intermediate body if it steers
-				true => {
-					// Build intermediate body
-					let mut body = RigidBodyBuilder::dynamic()
-						.position(add_isometries(&vehicle_position, &static_.position_wrt_body))
-						.build();
-					body.set_additional_mass_properties(
-						MassProperties {
-							local_com: point![0.0, 0.0, 0.0],
-							inv_mass: 1.0,
-							inv_principal_inertia_sqrt: point![1.0, 1.0, 1.0].coords,
-							principal_inertia_local_frame: UnitQuaternion::new(V3::y())
-						},
-						true
-					);// This is to prevent the wheel anchor having zero mass/moment of inertia which is interpreted as immovable, TODO
-					let body_handle = bodies.insert(body);
-					// Joint
-					let joint = RevoluteJointBuilder::new(V3::y_axis())
-						.local_anchor1(matrix_to_opoint(static_.position_wrt_body.translation.vector))
-						.local_anchor2(point![0.0, 0.0, static_.steering_rotation_axis_offset])// Caster wheel?
-						.build();
-					let joint_handle = joints.insert(v_body_handle, body_handle, joint, true);
-					(body_handle, Iso::identity(), Some((body_handle, joint_handle)))
-				},
-				false => (v_body_handle, static_.position_wrt_body, None)
-			};
-			let joint = RevoluteJointBuilder::new(V3::x_axis())
-				.local_anchor1(matrix_to_opoint(wheel_position_wrt_anchor.translation.vector))
-				.local_anchor2(point![0.0, 0.0, 0.0])
-				.build();
-			joints.insert(wheel_anchor_handle, body_handle, joint, true);
-			steering
-		};
-		#[cfg(feature = "client")]
-		let steering = None;
-		// Done
-		let out = Self {
-			static_: static_.clone(),
-			body_handle,
-			collider_handle,
-			steering
-		};
-		out.set_position_wrt_body(bodies, &vehicle_position);
-		if static_.steering {
-			out.update_steering(0.0, bodies, joints);
-		}
-		out
-	}
-	pub fn set_position_wrt_body(&self, bodies: &mut RigidBodySet, vehicle_position: &Iso) {
-		Self::set_position_wrt_body_static(bodies.get_mut(self.body_handle).expect("Unable to get wheel body w/ handle"), &self.static_.position_wrt_body, vehicle_position);
-	}
-	pub fn set_position_wrt_body_static(body: &mut RigidBody, position_wrt_vehicle: &Iso, vehicle_position: &Iso) {
-		body.set_position(add_isometries(vehicle_position, position_wrt_vehicle), true);
-	}
-	pub fn update_steering(&self, steering: Float, bodies: &mut RigidBodySet, _joints: &mut ImpulseJointSet) {
-		if self.static_.steering {
-			//let (_, joint_handle) = self.steering.expect("steering is None, but static data says this wheel is steering");
-			//let joint = joints.get_mut(joint_handle).expect("Joint set does not contain wheel steering joint");
-			// TODO: get this to work
-			//joint.data.set_motor(JointAxis::Y, steering, 6.28, 1000000.0, 1000000.0);// TODO: I just picked random values, fix
-			// Temporary hack
-			bodies.get_mut(self.body_handle).expect("Unable to get wheel body w/ handle").apply_torque_impulse(vector![0.0, steering as Float * 10.0, 0.0], true);
-		}
-	}
+	angle: Float
 }
 
 /// This is loaded from the resources and is identified by a vehicle name
@@ -203,45 +90,6 @@ impl CacheableBevyAsset for VehicleStaticModel {
 			Some(path) => Ok(asset_server.load(path.to_owned() + "#Scene0")),
 			None => Err(format!("Unable to strip \"assets/\" off the beginning of \"{}\" so it can be compatible with bevy's asset server", &path_raw))
 		}
-	}
-}
-
-#[cfg(feature = "server")]
-impl VehicleStatic {
-	pub fn build_rapier_collider(&self) -> Collider {
-		let scenes = easy_gltf::load(&(resource_interface::VEHICLES_DIR.to_owned() + &self.type_name + "/model.glb")).expect("Unable to load gltf for static vehicle model file");
-		for scene in scenes {
-			/*println!(
-				"Cameras: #{}  Lights: #{}  Models: #{}",
-				scene.cameras.len(),
-				scene.lights.len(),
-				scene.models.len()
-			)*/
-			for model in scene.models {// https://docs.rs/easy-gltf/latest/easy_gltf/model/struct.Model.html#
-				// Extract vertices
-				let mut vertices = Vec::<P3>::new();
-				for gltf_vertex in model.vertices() {
-					let p = gltf_vertex.position;
-					vertices.push(P3::new(p.x, p.y, p.z));
-				}
-				// Extract indices
-				let mut indices = Vec::<[u32; 3]>::new();
-				let mut curr_triangle: [u32; 3] = [0; 3];// Placeholder
-				let mut i = 0;
-				for flat_index in model.indices().expect(&format!("Model for static vehicle {} has no indices", &self.type_name)) {
-					curr_triangle[i] = *flat_index;
-					i += 1;
-					if i == 3 {
-						indices.push(curr_triangle);
-						curr_triangle = [0; 3];
-						i = 0;
-					}
-				}
-				// https://docs.rs/rapier3d/latest/rapier3d/geometry/struct.ColliderBuilder.html#method.trimesh
-				return ColliderBuilder::convex_decomposition(&vertices, &indices).restitution(0.2).mass(self.mass).friction(0.2).build();
-			}
-		}
-		panic!("no scenes or nodes with primitives found in model file for vehicle type {}", &self.type_name);
 	}
 }
 
@@ -314,12 +162,9 @@ pub struct Vehicle {
 impl Vehicle {
 	pub fn build(
 		save: &VehicleSave,
-		static_: Rc<VehicleStatic>,
-		bodies: &mut RigidBodySet,
-		colliders: &mut ColliderSet,
-		joints: &mut ImpulseJointSet
+		static_: Rc<VehicleStatic>
 	) -> Result<Vehicle, Box<dyn Error>> {
-		let physics_controller = save.body_state.build_physics_controller(bodies, colliders, joints, static_.clone());
+		let physics_controller = save.body_state.build_physics_controller(static_.clone());
 		// Done
 		Ok(Self {
 			static_,
@@ -336,12 +181,11 @@ impl Vehicle {
 		self.latest_input_t = get_unix_ts_secs_u64();
 	}
 	/// Must be run every frame
-	pub fn update_physics(&mut self, dt: Float, fluid_density: Float, physics_state: &mut PhysicsState, path_set: &PathSet, gravity: Float) {
+	pub fn update_physics(&mut self, dt: Float, fluid_density: Float, path_set: &PathSet, gravity: Float) {
 		//update(&mut self, dt: Float, drag_force: V3, latest_input: Option<InputData>, paths: &PathSet, bodies: &mut RigidBodySet, joints: &mut ImpulseJointSet)
 		let (forces, path_forces_opt): (BodyForces, Option<PathBodyForceDescription>) = self.physics_controller.update(PhysicsUpdateArgs{
 			dt,
 			gravity,
-			rapier: physics_state,
 			path_set,
 			latest_input: &self.latest_input,
 			drag_force_calculator: &|lin: V3, _ang: V3| -> BodyForces {BodyForces::new(V3::new(0.0, 0.0, crate::physics::fluid_drag_force(fluid_density, lin.z, self.static_.drag, self.static_.cross_sectional_area)), V3::zeros())}
@@ -350,25 +194,22 @@ impl Vehicle {
 		self.latest_forces = Some(forces);
 		self.path_forces_opt = path_forces_opt;
 	}
-	pub fn recover_from_flip(&mut self, physics_state: &mut PhysicsState) {
-		self.physics_controller.recover_from_flip(physics_state);
+	pub fn create_serialize_state(&self, paths: &PathSet) -> BodyStateSerialize {
+		self.physics_controller.serializable(paths)
 	}
-	pub fn create_serialize_state(&self, bodies: &RigidBodySet, paths: &PathSet) -> BodyStateSerialize {
-		self.physics_controller.serializable(bodies, paths)
-	}
-	pub fn save(&self, body_set: &RigidBodySet, paths: &PathSet) -> VehicleSave {
+	pub fn save(&self, paths: &PathSet) -> VehicleSave {
 		VehicleSave {
 			type_: self.static_.type_name.clone(),
-			body_state: self.create_serialize_state(body_set, paths)
+			body_state: self.create_serialize_state(paths)
 		}
 	}
-	pub fn send(&self, body_set: &RigidBodySet, paths: &PathSet) -> VehicleSend {
+	pub fn send(&self, paths: &PathSet) -> VehicleSend {
 		VehicleSend {
 			type_: self.static_.type_name.clone(),
 			latest_forces: self.latest_forces.clone(),
 			path_forces_opt: self.path_forces_opt.clone(),
 			route_opt: self.physics_controller.get_route_opt(&paths.generic.routes),
-			body_state: self.create_serialize_state(body_set, paths),
+			body_state: self.create_serialize_state(paths),
 			input: self.latest_input,
 			latest_input_t: self.latest_input_t
 		}
@@ -389,122 +230,12 @@ pub struct BodyStateSerialize {
 }
 
 impl BodyStateSerialize {
-	#[cfg(any(feature = "server", feature = "debug_render_physics"))]
-	pub fn init_rapier_body(&self, body: &mut RigidBody) {
-		body.set_position(self.position, true);
-		body.set_linvel(self.lin_vel, true);
-		body.set_angvel(self.ang_vel, true);
-	}
-	#[cfg(feature = "server")]
-	pub fn from_rapier_body(body: &RigidBody, path_bound_opt: Option<PathBoundBodyState>) -> Self {
-		Self {
-			position: *body.position(),
-			lin_vel: *body.linvel(),
-			ang_vel: *body.angvel(),
-			path_bound_opt
-		}
-	}
 	#[cfg(feature = "server")]
 	pub fn build_physics_controller(
 		&self,
-		bodies: &mut RigidBodySet,
-		colliders: &mut ColliderSet,
-		joints: &mut ImpulseJointSet,
 		v_static: Rc<VehicleStatic>
 	) -> Box<dyn PhysicsController> {
-		match &self.path_bound_opt {
-			Some(path_state) => {
-				Box::new(VehiclePathBoundController::build(path_state.clone(), v_static))
-			},
-			None => {
-				Box::new(VehicleRapierController::build(&self, bodies, colliders, joints, v_static))
-			}
-		}
-	}
-}
-
-#[cfg(feature = "server")]
-pub struct VehicleRapierController {
-	body_handle: RigidBodyHandle,
-	#[allow(unused)]
-	collider_handle: ColliderHandle,
-	#[allow(unused)]
-	wheels: Vec<Wheel>,
-	v_static: Rc<VehicleStatic>
-}
-
-#[cfg(feature = "server")]
-impl VehicleRapierController {
-	pub fn build (
-		body_state: &BodyStateSerialize,
-		bodies: &mut RigidBodySet,
-		colliders: &mut ColliderSet,
-		joints: &mut ImpulseJointSet,
-		static_: Rc<VehicleStatic>
-	) -> Self {
-		// Body
-		let mut body = RigidBodyBuilder::dynamic().ccd_enabled(true).build();
-		body_state.init_rapier_body(&mut body);
-		let body_handle = bodies.insert(body);
-		let collider = static_.build_rapier_collider();
-		let collider_handle = colliders.insert_with_parent(collider, body_handle, bodies);
-		// Wheels
-		let mut wheels = Vec::<Wheel>::new();
-		for w_static in &static_.wheels {
-			wheels.push(Wheel::build(w_static, bodies, colliders, joints, body_handle));
-			//joints.insert(body_handle, w_body_handle, joint, true);
-		}
-		// Set mass
-		let b_ref = bodies.get_mut(body_handle).expect("Unable to get body w/ handle");
-		b_ref.set_additional_mass(static_.mass as Float - b_ref.mass(), true);
-		// Done
-		Self {
-			body_handle,
-			collider_handle,
-			wheels,
-			v_static: static_.clone()
-		}
-	}
-}
-
-#[cfg(feature = "server")]
-impl PhysicsController for VehicleRapierController {
-	fn serializable(&self, bodies: &RigidBodySet, _paths: &PathSet) -> BodyStateSerialize {
-		let body: &RigidBody = bodies.get(self.body_handle).expect("Unable to get body with BodyPhysicsController::RegularPhysics.body_handle");
-		BodyStateSerialize::from_rapier_body(body, None)
-	}
-	fn update(&mut self, args: PhysicsUpdateArgs) -> (BodyForces, Option<PathBodyForceDescription>) {
-		match args.latest_input {
-			Some(control) => match args.rapier.bodies.get_mut(self.body_handle) {
-				Some(body) => {
-					// Get vehicle position and velocity
-					let position = body.position().clone();
-					// Forces
-					body.reset_forces(true);
-					body.reset_torques(true);
-					body.add_force(position.rotation.transform_point(&P3::new(0.0, 0.0, -control.power)).coords, true);// Drive, TODO: fix
-					body.add_force(position.rotation.transform_point(&P3::new(0.0, 0.0, control.brake * self.v_static.mass)).coords, true);// Brake
-					let torque_magnitude: Float = 1000.0;
-					body.add_torque(P3::new(0.0, control.steering as Float * torque_magnitude, 0.0).coords, true);
-					/*for w in self.wheels.iter() {
-						w.update_steering(control.steering as Float, bodies, joints);
-					}*/
-				},
-				None => panic!("Unable to get vehicle body during update")
-			},
-			None => {}
-		}
-		(BodyForces::default(), None)// TODO
-	}
-	fn get_route_opt(&self, _: &GenericDataset<Route>) -> Option<GenericRef<Route>> {
-		None
-	}
-	fn recover_from_flip(&mut self, physics_state: &mut PhysicsState) {
-		// TODO: fix
-		let body = physics_state.bodies.get_mut(self.body_handle).expect("Unable to get vehicle body during unflip");
-		body.set_rotation(UnitQuaternion::identity(), true);
-		body.set_translation(body.translation() + vector![0.0, 10.0, 0.0], true);// TODO: fix: arbitrary value
-		physics_state.bodies.propagate_modified_body_positions_to_colliders(&mut physics_state.colliders);
+		Box::new(VehiclePathBoundController::build(self.path_bound_opt.clone().expect("Currently, path bound is the only option for vehicle physics"), v_static))
 	}
 }
 
@@ -529,7 +260,7 @@ impl VehiclePathBoundController {
 
 #[cfg(feature = "server")]
 impl PhysicsController for VehiclePathBoundController{
-	fn serializable(&self, _: &RigidBodySet, path_set: &PathSet) -> BodyStateSerialize {
+	fn serializable(&self, path_set: &PathSet) -> BodyStateSerialize {
 		let path: &Path = path_set.paths.get_item_tuple(&self.state.path_query).expect(&format!("Unable to get path with body state path query `{:?}`", &self.state.path_query)).1;
 		path.generic.create_body_state(self.state.clone())
 	}

@@ -30,7 +30,15 @@
 				},
 				"lin_vel": [0, 0, 0],
 				"ang_vel": [0, 0, 0],
-				"path_bound_opt": null
+				"path_bound_opt": {
+                    "path_query": {"Id": [0]},
+					"pos": {
+						"latest_point": 1,
+                    	"t": 0.0
+					},
+                    "velocity": 15,
+                    "forward": true
+                }
 			}
 		}
 	},

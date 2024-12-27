@@ -5,14 +5,7 @@ use std::{thread, sync::mpsc, rc::Rc, collections::HashMap, time::{Duration, Ins
 use std::sync::Arc;
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 #[cfg(feature = "client")]
-#[cfg(feature = "debug_render_physics")]
-use bevy_rapier3d::plugin::RapierContext;
-#[cfg(feature = "client")]
 use bevy::ecs::system::Resource;
-
-// Rapier 3D physics
-#[cfg(any(feature = "server", feature = "debug_render_physics"))]
-use rapier3d::prelude::*;
 
 use crate::prelude::*;
 #[cfg(feature = "server")]
@@ -21,8 +14,6 @@ use crate::resource_interface::*;
 #[cfg(feature = "debug_render_physics")]
 use crate::client::play::VehicleBodyHandles;*/
 
-#[cfg(feature = "server")]
-use nalgebra::vector;
 
 // Structs
 
@@ -32,19 +23,10 @@ use nalgebra::vector;
 pub struct StaticData {
 	pub map: SendMap,
 	pub static_vehicles: HashMap<String, VehicleStatic>,// Vehicle type: VehicleStatic
-	#[cfg(feature = "debug_render_physics")]
-	pub partial_physics: PhysicsStateSend
 }
 
 impl StaticData {
 	#[cfg(feature = "client")]
-	#[cfg(feature = "debug_render_physics")]
-	pub fn init_bevy_rapier_context(&mut self, context: &mut RapierContext) {
-		// Debug feature
-		self.partial_physics.init_bevy_rapier_context(context);// very important that this is the first thing that acts on the rapier context, NOT the map
-		// Map
-		self.map.generic.init_rapier(&mut context.bodies);
-	}
 	/*#[cfg(feature = "client")]
 	// Probably outdated
 	pub fn vehicle_models_to_load(&self, server_addr: IpAddr) -> Vec<String> {
@@ -79,140 +61,8 @@ impl StaticData {
 			let vehicles = bincode::serialize(&self.static_vehicles).unwrap();
 			println!("vehicles: {}", vehicles.len());
 		}
-		#[cfg(feature = "debug_render_physics")]
-		{
-			let partial_physics = bincode::serialize(&self.partial_physics).unwrap();
-			println!("partial_physics: {}", partial_physics.len());
-		}
 	}
 }
-
-/// Complete physics state for use by Rapier
-/// Copied from https://rapier.rs/docs/user_guides/rust/serialization
-#[cfg(feature = "server")]
-pub struct PhysicsState {
-	pub pipeline: PhysicsPipeline,
-	pub islands: IslandManager,
-	pub broad_phase: BroadPhase,
-	pub narrow_phase: NarrowPhase,
-	pub bodies: RigidBodySet,
-	pub colliders: ColliderSet,
-	pub impulse_joints: ImpulseJointSet,
-	pub multibody_joints: MultibodyJointSet,
-	pub ccd_solver: CCDSolver,
-	pub query_pipeline: QueryPipeline,
-	pub integration_parameters: IntegrationParameters,
-	pub gravity: Vector<f32>,
-	pub physics_hooks: (),
-	pub event_handler: (),
-}
-
-#[cfg(feature = "server")]
-impl PhysicsState {
-	pub fn new(gravity: Float) -> Self {
-		Self {
-			pipeline: PhysicsPipeline::new(),
-			islands: IslandManager::new(),
-			broad_phase: BroadPhase::new(),
-			narrow_phase: NarrowPhase::new(),
-			bodies: RigidBodySet::new(),
-			colliders: ColliderSet::new(),
-			impulse_joints: ImpulseJointSet::new(),
-			multibody_joints: MultibodyJointSet::new(),
-			ccd_solver: CCDSolver::new(),
-			query_pipeline: QueryPipeline::new(),
-			integration_parameters: IntegrationParameters::default(),
-			gravity: vector![0.0, gravity, 0.0],
-			physics_hooks: (),
-			event_handler: ()
-		}
-	}
-	pub fn step(&mut self) {
-		self.pipeline.step(
-			&self.gravity,
-			&self.integration_parameters,
-			&mut self.islands,
-			&mut self.broad_phase,
-			&mut self.narrow_phase,
-			&mut self.bodies,
-			&mut self.colliders,
-			&mut self.impulse_joints,
-			&mut self.multibody_joints,
-			&mut self.ccd_solver,
-			None,
-			&self.physics_hooks,
-			&self.event_handler
-		)
-	}
-	pub fn insert_body(&mut self, body: RigidBody) -> RigidBodyHandle {
-		self.bodies.insert(body)
-	}
-	pub fn insert_collider_with_parent(&mut self, collider: Collider, body_handle: RigidBodyHandle) -> ColliderHandle {
-		self.colliders.insert_with_parent(collider, body_handle, &mut self.bodies)
-	}
-	#[cfg(feature = "debug_render_physics")]
-	#[cfg(feature = "server")]
-	pub fn send(&self/*, vehicles: &HashMap<String, Vehicle>*/) -> PhysicsStateSend {// TODO: only send the states of vehicles, wheel mounts and wheels
-		//let (mut bodies_v, mut colliders_v, mut impulse_joints_v): (Vec<RigidBodyHandle>, Vec<ColliderHandle>, Vec<ImpulseJointHandle>) = (Vec::new(), Vec::new(), Vec::new());
-		PhysicsStateSend {
-			islands: IslandManager::new(),//self.islands.clone(),
-			bodies: self.bodies.clone(),
-			colliders: self.colliders.clone(),
-			impulse_joints: self.impulse_joints.clone(),
-			multibody_joints: self.multibody_joints.clone(),
-		}
-	}
-	pub fn build_body_states(&self, bodies_to_exclude: Vec<RigidBodyHandle>) -> BodyStates {// TODO: only send the states of vehicles, wheel mounts and wheels
-		let mut out = BodyStates::new();
-		for (handle, body) in self.bodies.iter() {
-			if !bodies_to_exclude.contains(&handle) {
-				out.insert(handle, BodyStateSerialize::from_rapier_body(body, None));
-			}
-		}
-		out
-	}
-	pub fn build_body_creation_deletion_context(&mut self) -> RapierBodyCreationDeletionContext {
-		RapierBodyCreationDeletionContext {
-			bodies: &mut self.bodies,
-			colliders: &mut self.colliders,
-			islands: &mut self.islands
-		}
-	}
-}
-
-/// Only what is needed to init the client's rapier context, this should only be sent once when the client initially connects as it can be very large when serialized
-#[derive(Serialize, Deserialize, Clone)]
-#[cfg(feature = "debug_render_physics")]
-pub struct PhysicsStateSend {
-	pub islands: IslandManager,
-	pub bodies: RigidBodySet,
-	pub colliders: ColliderSet,
-	pub impulse_joints: ImpulseJointSet,
-	pub multibody_joints: MultibodyJointSet,
-}
-
-#[cfg(feature = "debug_render_physics")]
-impl PhysicsStateSend {
-	#[cfg(feature = "client")]
-	pub fn init_bevy_rapier_context(&self, context: &mut RapierContext) {
-		context.islands = self.islands.clone();
-		context.bodies = self.bodies.clone();
-		context.colliders = self.colliders.clone();
-		context.impulse_joints = self.impulse_joints.clone();
-		context.multibody_joints = self.multibody_joints.clone();
-	}
-	pub fn build_body_creation_deletion_context(&mut self) -> RapierBodyCreationDeletionContext {
-		RapierBodyCreationDeletionContext {
-			bodies: &mut self.bodies,
-			colliders: &mut self.colliders,
-			islands: &mut self.islands
-		}
-	}
-}
-
-/// Instead of sending over most of the rapier context, this just uses body handles and their corresponding states, only used for the `debug_render_physics` feature
-#[cfg(any(feature = "server", feature = "debug_render_physics"))]
-pub type BodyStates = HashMap<RigidBodyHandle, BodyStateSerialize>;
 
 /// These are sent between the thread running `World::main_loop()` and thread running the Renet server
 pub mod async_messages {
@@ -223,8 +73,7 @@ pub mod async_messages {
 		Pause,
 		Play,
 		TogglePlaying,
-		CreateChunk(ChunkRef),
-		RecoverVehicleFromFlip(ClientAuth)
+		CreateChunk(ChunkRef)
 	}
 	/// From the simulation to the server
 	pub enum FromWorld {
@@ -255,25 +104,7 @@ pub struct WorldSend {
 	/// Whether the simulation is playing or paused
 	pub playing: bool,
 	/// Current server frames per second
-	pub fps: f64,
-	/// Rapier body states
-	#[cfg(feature = "debug_render_physics")]
-	pub body_states: BodyStates
-}
-
-#[cfg(feature = "client")]
-impl WorldSend {
-	#[cfg(feature = "debug_render_physics")]
-	pub fn update_bevy_rapier_context(&self, context: &mut RapierContext, map_body_handle_opt: Option<RigidBodyHandle>) {
-		for (handle, body_state) in self.body_states.iter() {
-			if let Some(map_body_handle) = map_body_handle_opt {
-				if handle == &map_body_handle {
-					continue
-				}
-			}
-			body_state.init_rapier_body(context.bodies.get_mut(*handle).expect("Unable to get body with handle from WorldSend::body_states"));
-		}
-	}
+	pub fps: f64
 }
 
 /// Main game simulation, not directly serializable
@@ -288,8 +119,7 @@ pub struct World {
 	/// Whether the simulation is playing or paused
 	pub playing: bool,
 	/// Gravity, should be negative
-	pub gravity: Float,
-	physics_state: PhysicsState
+	pub gravity: Float
 }
 
 #[cfg(feature = "server")]
@@ -298,13 +128,11 @@ impl World {
 		// name: name of world file
 		let save = to_string_err_with_message(load_world(name), &format!("Could not load/deserialize world save file"))?;
 		let map: ServerMap = ServerMap::from_save(to_string_err_with_message(load_map_metadata(&save.map), &format!("Could not load SaveMap (\"{}\") for world \"{}\"", &save.map, name))?)?;
-		// Create blank physics state
-		let mut physics_state: PhysicsState = PhysicsState::new(save.gravity);
 		// Load vehicles
 		let mut vehicles: HashMap<String, Vehicle> = HashMap::new();
 		for (user, v_save) in save.vehicles.iter() {
 			let v_static: VehicleStatic = to_string_err_with_message(load_static_vehicle(&v_save.type_), &format!("Could not load VehicleStatic \"{}\"", &v_save.type_))?;// TODO: Move this error msg to `load_static_vehicle`
-			vehicles.insert(user.clone(), to_string_err_with_message(Vehicle::build(v_save, Rc::new(v_static), &mut physics_state.bodies, &mut physics_state.colliders, &mut physics_state.impulse_joints), &format!("Could not build Vehicle from VehicleStatic \"{}\"", &v_save.type_))?);
+			vehicles.insert(user.clone(), to_string_err_with_message(Vehicle::build(v_save, Rc::new(v_static)), &format!("Could not build Vehicle from VehicleStatic \"{}\"", &v_save.type_))?);
 		}
 		// Create world
 		let mut out = Self {
@@ -312,11 +140,8 @@ impl World {
 			vehicles,
 			age: Duration::from_secs_f64(save.age),
 			playing: save.playing,
-			gravity: save.gravity,
-			physics_state
+			gravity: save.gravity
 		};
-		// Init map
-		out.map.generic.init_rapier(&mut out.physics_state.bodies);
 		// Load all necessary chunks
 		out.load_unload_chunks();
 		// debug
@@ -337,8 +162,7 @@ impl World {
 			vehicles: HashMap::<String, Vehicle>::new(),
 			age: Duration::new(0, 0),
 			playing: false,
-			gravity: -9.81,
-			physics_state: PhysicsState::new(-9.81)
+			gravity: -9.81
 		})
 	}
 	pub fn new(
@@ -352,8 +176,7 @@ impl World {
 			vehicles,
 			age: Duration::new(0, 0),
 			playing,
-			gravity,
-			physics_state: PhysicsState::new(gravity)
+			gravity
 		}
 	}
 	pub fn main_loop(&mut self, rx: mpsc::Receiver<async_messages::ToWorld>, tx: mpsc::Sender<async_messages::FromWorld>) {
@@ -399,12 +222,6 @@ impl World {
 						async_messages::ToWorld::CreateChunk(ref_) => {
 							//println!("Creating chunk {:?} upon client request", &ref_);
 							self.map.load_or_create_chunk(&ref_);
-						},
-						async_messages::ToWorld::RecoverVehicleFromFlip(auth) => {
-							match self.vehicles.get_mut(&auth.name) {
-								Some(v) => v.recover_from_flip(&mut self.physics_state),
-								None => {}
-							}
 						}
 					}
 				},
@@ -422,27 +239,25 @@ impl World {
 		if self.playing {
 			// All vehicle physics controllers
 			for (_, v) in self.vehicles.iter_mut() {
-				v.update_physics(dt_f64 as Float, 1.225, &mut self.physics_state, &self.map.path_set, self.gravity);
+				v.update_physics(dt_f64 as Float, 1.225, &self.map.path_set, self.gravity);
 			}
-			// Rapier
-			self.physics_state.step();
 		}
 		// 3: Chunks
 		self.load_unload_chunks();
-		self.map.check_chunk_creator(&mut self.physics_state.build_body_creation_deletion_context());
+		self.map.check_chunk_creator();
 	}
 	pub fn load_unload_chunks(&mut self) {
 		// Possibly similar to client::chunk_manager::RenderDistance::load_unload_chunks()
 		// except this only loads chunks adjacent to the ones which vehicles are on
 		let chunks_needed: Vec<ChunkRef> = self.chunks_needed();
 		// 1: Unload
-		self.map.generic.unload_chunks(&chunks_needed, &mut self.physics_state.build_body_creation_deletion_context());
+		self.map.generic.unload_chunks(&chunks_needed);
 		// 2: Load
 		for chunk_ref in chunks_needed {
 			if !self.map.generic.is_chunk_loaded(&chunk_ref) {
 				//println!("Loading/Creating chunk {:?}", &chunk_ref);
 				match self.map.load_or_create_chunk(&chunk_ref) {// Will be None if the chunk doesn't exist and the map auto chunk gen is disabled
-					Some(chunk) => {self.map.generic.insert_chunk(chunk, Some(&mut self.physics_state.build_body_creation_deletion_context()));},
+					Some(chunk) => {self.map.generic.insert_chunk(chunk);},
 					None => {}
 				}
 			}
@@ -452,7 +267,7 @@ impl World {
 		// Get list of occupied chunks
 		let mut needed_chunks = Vec::<ChunkRef>::new();
 		for (_, v) in self.vehicles.iter() {
-			let v_body_state = v.create_serialize_state(&self.physics_state.bodies, &self.map.path_set);
+			let v_body_state = v.create_serialize_state(&self.map.path_set);
 			needed_chunks.push(ChunkRef::from_world_point(v3_to_v2(&v_body_state.position.translation.vector), self.map.generic.chunk_size));
 		}
 		// Get adjacent chunks
@@ -468,7 +283,7 @@ impl World {
 		// save vehicles
 		let mut save_vehicles = HashMap::new();
 		for (user, vehicle) in self.vehicles.iter() {
-			save_vehicles.insert(user.to_owned(), vehicle.save(&self.physics_state.bodies, &self.map.path_set));
+			save_vehicles.insert(user.to_owned(), vehicle.save(&self.map.path_set));
 		}
 		WorldSave {
 			map: self.map.generic.name.clone(),
@@ -482,15 +297,13 @@ impl World {
 		// save vehicles
 		let mut send_vehicles = HashMap::new();
 		for (user, vehicle) in self.vehicles.iter() {
-			send_vehicles.insert(user.to_owned(), vehicle.send(&self.physics_state.bodies, &self.map.path_set));
+			send_vehicles.insert(user.to_owned(), vehicle.send(&self.map.path_set));
 		}
 		WorldSend {
 			vehicles: send_vehicles,
 			age: self.age.as_secs_f64(),
 			playing: self.playing,
-			fps,
-			#[cfg(feature = "debug_render_physics")]
-			body_states: self.physics_state.build_body_states(vec![])//self.map.body_handle_opt.expect("Could not get map body handle when sending World")])
+			fps
 		}
 	}
 	pub fn build_static_data(&self) -> StaticData {
@@ -499,15 +312,10 @@ impl World {
 		for (_, vehicle) in self.vehicles.iter() {
 			static_vehicles.insert(vehicle.static_.type_name.clone(), (*vehicle.static_).clone());
 		}
-		// Physics send
-		#[cfg(feature = "debug_render_physics")]
-		let mut partial_physics = self.physics_state.send(/*&self.vehicles*/);
 		// Done
 		StaticData {
-			map: self.map.send(#[cfg(feature = "debug_render_physics")] &mut partial_physics),// Need to remove map colliders from physics send as they are redundant and makes the StaticData very large
-			static_vehicles,
-			#[cfg(feature = "debug_render_physics")]
-			partial_physics
+			map: self.map.send(),
+			static_vehicles
 		}
 	}
 }

@@ -6,10 +6,7 @@ use std::{rc::Rc, sync::{Arc, Mutex}, fs};
 use std::{io::Write, net::SocketAddr};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 #[cfg(feature = "client")]
-use bevy::{prelude::*, render::{texture::{ImageType, CompressedImageFormats, ImageSampler, ImageFormat}, render_asset::RenderAssetUsages}};
-// Rapier 3D physics
-#[cfg(any(feature = "server", feature = "debug_render_physics"))]
-use rapier3d::prelude::*;
+use bevy::{prelude::*, image::{CompressedImageFormats, ImageType, ImageSampler}, render::render_asset::RenderAssetUsages};
 
 use crate::{prelude::*, resource_interface};
 
@@ -164,17 +161,6 @@ impl RegularElevationMesh {
 			vertices,
 			indices
 		}
-	}
-	#[cfg(any(feature = "server", feature = "debug_render_physics"))]
-	pub fn rapier_collider(&self, offset: &V3) -> Collider {
-		// https://docs.rs/rapier3d/0.17.2/rapier3d/geometry/struct.ColliderBuilder.html#method.trimesh
-		let mesh = self.build_trimesh(offset);
-		ColliderBuilder::trimesh(
-			mesh.vertices,
-			mesh.indices
-		).friction(2.0)
-		.restitution(0.9)// TODO: fix const value
-		.build()
 	}
 	pub fn build_uv_coords(&self, grid_size: u64, vertices: &Vec<P3>, offset: &V3) -> Vec<[f32; 2]> {
 		// Offset is required because unless this is the chunk at (0, 0), the vertex coordinates will be out of the grid precision range
@@ -376,9 +362,6 @@ pub struct Chunk {
 	/// Default color if the client has no texture
 	pub background_color: [u8; 3],
 	#[serde(skip)]
-	#[cfg(any(feature = "server", feature = "debug_render_physics"))]
-	collider_handle: Option<ColliderHandle>,
-	#[serde(skip)]
 	#[cfg(feature = "client")]
 	/// Can be used for `remove()`: https://docs.rs/bevy/0.11.0/bevy/asset/struct.Assets.html#method.remove
 	pub asset_id_opt: Option<AssetId<Mesh>>
@@ -409,7 +392,6 @@ impl Chunk {
 			size: args.size,
 			grid_size: args.grid_size,
 			background_color: args.background_color,
-			collider_handle: None,
 			#[cfg(feature = "client")] asset_id_opt: None
 		};
 		// Save chunk
@@ -420,21 +402,6 @@ impl Chunk {
 		}
 		// Done
 		ChunkCreationResult::Ok(out)
-	}
-	#[cfg(any(feature = "server", feature = "debug_render_physics"))]
-	pub fn init_rapier(&mut self, rapier_data: &mut RapierBodyCreationDeletionContext, parent_body_handle: RigidBodyHandle) {
-		// Make sure this can only be called once
-		if let Some(_) = self.collider_handle {
-			panic!("init_rapier() called when self.collider_handle is not None, meaning it has been called more than once");
-		}
-		let collider = self.elevation.rapier_collider(&v2_to_v3(&self.ref_.to_v2()));
-		//collider.set_position(Iso{rotation: UnitQuaternion::identity(), translation: matrix_to_opoint(self.position).into()});
-		self.collider_handle = Some(rapier_data.colliders.insert_with_parent(collider, parent_body_handle, &mut rapier_data.bodies));
-	}
-	#[cfg(any(feature = "server", feature = "debug_render_physics"))]
-	pub fn remove_from_rapier(&mut self, rapier_data: &mut RapierBodyCreationDeletionContext) {
-		rapier_data.colliders.remove(self.collider_handle.expect("Removing collider from rapier, but self.collider_handle is None"), &mut rapier_data.islands, &mut rapier_data.bodies, false);
-		self.collider_handle = None;
 	}
 	#[cfg(feature = "client")]
 	pub fn bevy_pbr_bundle(&mut self, commands: &mut Commands, meshes:  &mut ResMut<Assets<Mesh>>, materials: &mut ResMut<Assets<StandardMaterial>>, asset_server: &AssetServer, server_addr: SocketAddr) {// See https://stackoverflow.com/questions/66677098/how-can-i-manually-create-meshes-in-bevy-with-vertices
@@ -464,13 +431,13 @@ impl Chunk {
 			}
 		};
 		let base_color = match &texture_handle_opt {
-			Some(_) => Color::rgba(
+			Some(_) => Color::srgba(
 				1.0,//self.background_color[0] as Float / 255.0,
 				1.0,//self.background_color[1] as Float / 255.0,
 				1.0,//self.background_color[2] as Float / 255.0,
 				0.0
 			),
-			None => Color::rgba(
+			None => Color::srgba(
 				self.background_color[0] as Float / 255.0,
 				self.background_color[1] as Float / 255.0,
 				self.background_color[2] as Float / 255.0,
@@ -491,12 +458,8 @@ impl Chunk {
 		self.asset_id_opt = Some(mesh_handle.id());
 		// Done
 		commands.spawn((
-			self.ref_.clone(),
-			PbrBundle {
-				mesh: mesh_handle,
-				material: material_handle,
-				..default()
-			}
+			Mesh3d(mesh_handle),
+			MeshMaterial3d(material_handle)
 		));
 	}
 	pub fn distance_to_point(&self, v: &V2) -> Float {

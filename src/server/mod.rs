@@ -1,7 +1,8 @@
 //! Created 2023-7-29
 //! see README on https://github.com/lucaspoffo/renet
 use std::{net::{SocketAddr, UdpSocket, IpAddr, Ipv4Addr}, time::{SystemTime, Duration, UNIX_EPOCH}, thread, sync::{mpsc, Arc}, mem};
-use renet::{RenetServer, ServerEvent, ConnectionConfig, ChannelConfig, transport::{ServerAuthentication, ServerConfig}, transport::NetcodeServerTransport, DefaultChannel};
+use renet::{RenetServer, ServerEvent, ConnectionConfig, ChannelConfig, DefaultChannel};
+use renet_netcode::{NetcodeServerTransport, ServerAuthentication, ServerConfig};
 use serde::{Serialize, Deserialize};
 use bincode;
 use local_ip_address::local_ip;
@@ -21,7 +22,6 @@ pub enum RenetRequest {
 	Init,
 	ClientUpdate(ClientUpdate),
 	TogglePlaying,
-	RecoverVehicleFromFlip(ClientAuth),
 	NewUser {
 		name: String,
 		psswd: String
@@ -141,11 +141,8 @@ impl NetworkRuntimeManager {
 							},
 							RenetRequest::TogglePlaying => {
 								// TODO: authenticate client
+								println!("Recieved toggle playing request");
 								tx.send(async_messages::ToWorld::TogglePlaying).expect("Unable to send client update to world");
-							},
-							RenetRequest::RecoverVehicleFromFlip(auth) => {
-								// TODO: authenticate client
-								tx.send(async_messages::ToWorld::RecoverVehicleFromFlip(auth)).expect("Unable to send message to world");
 							},
 							RenetRequest::NewUser{..} => {
 								todo!();// TODO

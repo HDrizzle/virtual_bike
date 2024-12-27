@@ -1,7 +1,6 @@
 //! For physics stuff, created 2023-12-16
 //! This is where the `PhysicsController` trait is
 
-use rapier3d::prelude::*;
 use crate::prelude::*;
 
 #[allow(unused)]
@@ -14,8 +13,6 @@ pub struct PhysicsUpdateArgs<'a> {
 	pub dt: Float,
 	/// Gravity, along 3D Y axis
 	pub gravity: Float,
-	/// Rapier physics state
-	pub rapier: &'a mut PhysicsState,
 	/// Path set
 	pub path_set: &'a PathSet,
 	/// Latest user input
@@ -26,10 +23,9 @@ pub struct PhysicsUpdateArgs<'a> {
 
 /// Generalization over rapier and paths
 pub trait PhysicsController {
-	fn serializable(&self, bodies: &RigidBodySet, paths: &PathSet) -> BodyStateSerialize;
+	fn serializable(&self, paths: &PathSet) -> BodyStateSerialize;
 	fn update(&mut self, info: PhysicsUpdateArgs) -> (BodyForces, Option<PathBodyForceDescription>);
 	fn get_route_opt(&self, routes: &GenericDataset<Route>) -> Option<GenericRef<Route>>;
-	fn recover_from_flip(&mut self, _physics_state: &mut PhysicsState) {}
 }
 
 /// Currently not used, but may be used for 2/3 numerical integration stepping

@@ -1,14 +1,13 @@
 //! Main egui for navigation and path bound lateral forces
 
-use bevy_inspector_egui::{
-	bevy_egui::{egui::{Ui, Window}, EguiContexts}// Importing from re-export to prevent conflicting versions of bevy_egui
-};
+use bevy_inspector_egui::bevy_egui::{egui::{Ui, Window}, EguiContexts, EguiSet};
 use bevy::prelude::*;
 
 use crate::prelude::*;
 
 /// Currently a placeholder, will probably use
 #[derive(Default)]
+#[allow(unused)]
 struct ForcesGuiState;
 
 // Systems
@@ -70,6 +69,6 @@ pub struct NavGuiPlugin;
 
 impl Plugin for NavGuiPlugin {
 	fn build(&self, app: &mut App) {
-		app.add_systems(Update, nav_update_system);
+		app.add_systems(Update, nav_update_system.after(EguiSet::InitContexts));
 	}
 }

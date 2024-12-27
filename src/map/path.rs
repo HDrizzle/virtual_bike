@@ -473,9 +473,11 @@ impl GenericPath {
 		let mut curr_pos = PathPosition::default();
 		loop {
 			// With help from https://github.com/bevyengine/bevy/blob/main/examples/3d/wireframe.rs
-			let texture_handle: Handle<Image> = asset_server.load(&format!("http://{:?}/path_textures/{}.png", server_addr, &type_config.ref_));//"road_us.png");
+			let path = format!("http://{:?}/path_textures/{}.png", server_addr, &type_config.ref_);
+			println!("Path bevy init using {}", &path);
+			let texture_handle: Handle<Image> = asset_server.load(&path);//"road_us.png");// TODO: Once I get ths working, move outside loop
 			let material_handle = materials.add(StandardMaterial {
-				base_color: Color::rgba(0.5, 0.5, 0.5, 1.0),
+				base_color: Color::srgba(0.5, 0.5, 0.5, 1.0),
 				base_color_texture: Some(texture_handle),
 				alpha_mode: AlphaMode::Opaque,
 				unlit: true,
@@ -486,13 +488,10 @@ impl GenericPath {
 			// Add mesh to meshes and get handle
 			let mesh_handle: Handle<Mesh> = meshes.add(mesh);
 			// Insert mesh BEFORE break
-			commands.spawn(
-				PbrBundle {
-					mesh: mesh_handle,
-					material: material_handle,
-					..default()
-				}
-			);
+			commands.spawn((
+				Mesh3d(mesh_handle),
+				MeshMaterial3d(material_handle)
+			));
 			// Check next pos and maybe break
 			match next_pos_opt {
 				Some(next_pos) => {

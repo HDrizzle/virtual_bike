@@ -11,12 +11,9 @@ use bevy::{
 	prelude::*,
 	input::{keyboard::KeyboardInput, ButtonState}
 };
-use bevy_renet::{RenetClientPlugin, transport::NetcodeClientPlugin, renet::{RenetClient, DefaultChannel, transport::NetcodeClientTransport}};
-#[cfg(feature = "debug_render_physics")]
-use bevy_rapier3d::plugin::RapierContext;
+use bevy_renet::{RenetClientPlugin, renet::{RenetClient, DefaultChannel}, netcode::NetcodeClientPlugin};
+use renet_netcode::NetcodeClientTransport;
 use nalgebra::{UnitQuaternion, Isometry};
-#[cfg(feature = "debug_render_physics")]
-use rapier3d::dynamics::RigidBodyHandle;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bincode;
 use bevy_web_asset;
@@ -31,11 +28,6 @@ use chunk_manager::{ChunkManagerPlugin, RenderDistance, RequestedChunks};
 mod skybox;
 mod chat;
 mod main_egui;
-
-// Custom resources
-#[derive(Resource)]
-#[cfg(feature = "debug_render_physics")]
-struct MapBodyHandle(pub RigidBodyHandle);
 
 #[derive(Resource)]
 pub struct RenetServerAddr(pub net::SocketAddr);
@@ -168,7 +160,6 @@ impl InitInfo {
 	}
 	pub fn setup_system(
 		mut commands: Commands,
-		#[cfg(feature = "debug_render_physics")] rapier_context_res: ResMut<RapierContext>,
 		mut static_data: ResMut<StaticData>,
 		mut meshes: ResMut<Assets<Mesh>>,
 		mut materials: ResMut<Assets<StandardMaterial>>,
@@ -199,15 +190,6 @@ impl InitInfo {
 			scene: scene0,
 			..Default::default()
 		});*/
-		// Init rapier
-		#[cfg(feature = "debug_render_physics")]
-		{
-			// (HashMap<String, RigidBodyHandle>, Vec<(String, Wheel)>)
-			let mut rapier_context = rapier_context_res.into_inner();
-			static_data.init_bevy_rapier_context(&mut rapier_context);
-			// Save map body handle
-			commands.insert_resource(MapBodyHandle(static_data.map.generic.body_handle_opt.expect("Could not get map body handle")));
-		}
 	}
 }
 
@@ -279,14 +261,13 @@ fn misc_key_event_system(
 	mut renet_client: ResMut<RenetClient>,
 	auth_res: Res<ClientAuth>,
 ) {
-	let auth = auth_res.into_inner().clone();
+	let _auth = auth_res.into_inner().clone();
 	// Key events
 	for ev in key_events.read() {
 		match ev.state {
 			ButtonState::Pressed => {
 				match ev.key_code {
 					KeyCode::KeyP => renet_client.send_message(DefaultChannel::ReliableOrdered, bincode::serialize(&RenetRequest::TogglePlaying).unwrap()),
-					KeyCode::KeyE => renet_client.send_message(DefaultChannel::ReliableOrdered, bincode::serialize(&RenetRequest::RecoverVehicleFromFlip(auth.clone())).unwrap()),
 					_ => {}
 				}
 			}
@@ -300,7 +281,7 @@ fn misc_key_event_system(
 fn vehicle_render_system(
 	mut commands: Commands,
     v_static_asset_handles: Res<StaticVehicleAssetHandles>,
-	mut v_scenes: Query<(&Handle<Scene>, &UsernameComponent, &mut Transform)>,
+	mut v_scenes: Query<(&SceneRoot, &UsernameComponent, &mut Transform)>,
 	world: Res<WorldSend>
 ) {
 	// Based on https://bevy-cheatbook.github.io/3d/gltf.html
@@ -321,13 +302,12 @@ fn vehicle_render_system(
 		let v_type = &world.vehicles.get(username).unwrap().type_;
 		println!("Creating scene for \"{}\" with vehicle type \"{}\"", username, v_type);
 		commands.spawn((
-			SceneBundle {// TODO: include UsernameComponent
-				scene: match v_static_asset_handles.0.get(v_type) {
+			SceneRoot (
+				match v_static_asset_handles.0.get(v_type) {
 					Some(handle) => handle.clone(),
 					None => panic!("Static vehicle scene asset handle for \"{}\" does not exist in `Res<StaticVehicleAssetHandles>`", v_type)
-				},
-				..Default::default()
-			},
+				}
+			),
 			UsernameComponent(username.clone())
 		));
 	}
@@ -341,8 +321,6 @@ fn update_system(
 	asset_server: Res<AssetServer>,
 	mut renet_client: ResMut<RenetClient>,
 	mut asset_client: ResMut<AssetLoaderManager>,
-	#[cfg(feature = "debug_render_physics")] rapier_context_res: ResMut<RapierContext>,
-	#[cfg(feature = "debug_render_physics")] map_body_handle: Res<MapBodyHandle>,
 	mut requested_chunks: ResMut<RequestedChunks>,
 	renet_server_addr: Res<RenetServerAddr>,
 	mut world_state_res: ResMut<WorldSend>,
@@ -350,8 +328,6 @@ fn update_system(
 	mut msg_log: ResMut<message_log::Log>
 ) {
 	// How to move a camera: https://bevy-cheatbook.github.io/cookbook/pan-orbit-camera.html
-	#[cfg(feature = "debug_render_physics")]
-	let mut rapier_context = rapier_context_res.into_inner();
 	// Incomming messages
 	let mut most_recent_world_state: Option<WorldSend> = None;
 	let mut messages = Vec::<Vec<u8>>::new();
@@ -400,7 +376,7 @@ fn update_system(
 						},
 						None => {}//panic!("Server should send chunks with texture data")
 					}
-					static_data.map.generic.insert_chunk_client(chunk, #[cfg(feature = "debug_render_physics")] &mut RapierBodyCreationDeletionContext::from_bevy_rapier_context(&mut rapier_context), &mut commands, &mut meshes, &mut materials, &asset_server, renet_server_addr.0);
+					static_data.map.generic.insert_chunk_client(chunk, &mut commands, &mut meshes, &mut materials, &asset_server, renet_server_addr.0);
 				},
 				AssetResponse::Wait => {},
 				AssetResponse::Err(e) => error!("AssetResponse::Err({})", e)
@@ -410,11 +386,6 @@ fn update_system(
 	}
 	// This will be like the "main loop"
 	if let Some(world_state) = most_recent_world_state {
-		// Update all bevy things, first get vect of wheels
-		#[cfg(feature = "debug_render_physics")]
-		world_state.update_bevy_rapier_context(&mut rapier_context, Some(map_body_handle.0));
-		#[cfg(feature = "debug_render_physics")]
-		rapier_context.propagate_modified_body_positions_to_colliders();// Just what I needed https://docs.rs/bevy_rapier3d/latest/bevy_rapier3d/plugin/struct.RapierContext.html#method.propagate_modified_body_positions_to_colliders
 		// Save world state
 		*world_state_res = world_state;
 	}
@@ -515,12 +486,12 @@ fn render_test(
         ..default()
     });*/
 	// directional 'sun' light, copied from https://bevyengine.org/examples/3D%20Rendering/lighting/
-    commands.spawn(DirectionalLightBundle {
-        directional_light: DirectionalLight {
+    commands.spawn((
+		DirectionalLight {
             shadows_enabled: true,
             ..default()
         },
-        transform: Transform {
+        Transform {
             translation: Vec3::new(0.0, 100.0, 0.0),
             rotation: Quat::from_rotation_x(-PI / 2.),
             ..default()
@@ -534,8 +505,7 @@ fn render_test(
             ..default()
         }
         .into(),*/
-        ..default()
-    });
+	));
 }
 
 struct MainClientPlugin;
@@ -547,16 +517,10 @@ impl Plugin for MainClientPlugin {
 		#[cfg(feature = "debug_vehicle_input")]
 		app.add_systems(Update, vehicle_input_key_event_system);
 		app.add_systems(Update, update_system);
-		// bevy_rapier3d
-		#[cfg(feature = "debug_render_physics")]
-		{
-			app.insert_resource(bevy_rapier3d::plugin::RapierContext::default());
-			app.add_plugins(bevy_rapier3d::render::RapierDebugRenderPlugin::default());
-		}
 		//app.add_plugin(InspectableRapierPlugin);
 		app.add_plugins(WorldInspectorPlugin::new());
 		// Rendering
-		app.insert_resource(ClearColor(Color::rgb(0.7, 0.7, 0.7)));// https://bevy-cheatbook.github.io/window/clear-color.html
+		app.insert_resource(ClearColor(Color::srgb(0.7, 0.7, 0.7)));// https://bevy-cheatbook.github.io/window/clear-color.html
 		app.add_systems(Startup, render_test);
 		app.add_systems(Update, vehicle_render_system.after(update_system));// Vehicle rendering AFTER recieving latest world state
 		app.add_systems(Update, camera_update_system.after(update_system));
@@ -567,31 +531,23 @@ pub fn start(init_info: InitInfo) {
 	let mut app = App::new();
 	//app.add_plugins(bevy_web_asset::WebAssetPlugin);
 	app.add_plugins((
-		bevy_web_asset::WebAssetPlugin,
+		bevy_web_asset::WebAssetPlugin::default(),// TODO: Wait for this to get updated to bevy 15
 		DefaultPlugins.set(WindowPlugin {
 			primary_window: Some(Window {
 				title: APP_NAME.to_string(),
 				..Default::default()
 			}),
 			..Default::default()
-		})/*.set(RenderPlugin {// From https://github.com/bevyengine/bevy/blob/main/examples/3d/wireframe.rs
-			render_creation: RenderCreation::Automatic(WgpuSettings {
-				// WARN this is a native only feature. It will not work with webgl or webgpu
-				features: WgpuFeatures::POLYGON_MODE_LINE,
-				..default()
-			}),
 		}),
-		// You need to add this plugin to enable wireframe rendering
-		WireframePlugin*/,
-		RenetClientPlugin,
-		NetcodeClientPlugin,
 		ChunkManagerPlugin,
 		HardwareControllerPlugin,
 		skybox::Sky{resolution: 1000},
 		chat::ChatGuiPlugin,
 		MainClientPlugin,
 		main_egui::ForcesGuiPlugin,
-		main_egui::NavGuiPlugin
+		main_egui::NavGuiPlugin,
+		RenetClientPlugin,
+		NetcodeClientPlugin,
 	));
 	InitInfo::setup_app(init_info, &mut app);
 	println!("Starting Bevy app");

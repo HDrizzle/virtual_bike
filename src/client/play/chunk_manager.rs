@@ -2,8 +2,6 @@
 
 use std::{time::{SystemTime, Duration}, collections::HashMap};
 use bevy::prelude::*;
-#[cfg(feature = "debug_render_physics")]
-use bevy_rapier3d::plugin::RapierContext;
 
 use crate::prelude::*;
 
@@ -29,7 +27,6 @@ impl RenderDistance {
 	pub fn load_unload_chunks(
 		&self,
 		map: &mut GenericMap,
-		#[cfg(feature = "debug_render_physics")] context: &mut RapierContext,
 		meshes: &mut ResMut<Assets<Mesh>>,
 		materials: &mut ResMut<Assets<StandardMaterial>>
 	) -> Vec<ChunkRef> {
@@ -42,7 +39,7 @@ impl RenderDistance {
 			}
 		}
 		for ref_ in &chunks_to_unload {
-			map.unload_chunk_client(ref_, #[cfg(feature = "debug_render_physics")] context, meshes, materials);
+			map.unload_chunk_client(ref_, meshes, materials);
 		}
 		// 2: List all chunks that must be loaded
 		let mut chunks_to_load: Vec<ChunkRef> = {
@@ -145,12 +142,10 @@ pub fn update_chunks_system(// TODO get this to only run when the camera is move
 	mut materials: ResMut<Assets<StandardMaterial>>,
 	render_distance: Res<RenderDistance>,
 	mut static_data: ResMut<StaticData>,
-	#[cfg(feature = "debug_render_physics")]
-	mut rapier_context_res: ResMut<RapierContext>,
 	mut asset_client: ResMut<AssetLoaderManager>,
 	mut requested_chunks: ResMut<RequestedChunks>
 ) {
-	let chunks_to_load: Vec<ChunkRef> = render_distance.load_unload_chunks(&mut static_data.map.generic, #[cfg(feature = "debug_render_physics")] &mut rapier_context_res, &mut meshes, &mut materials);
+	let chunks_to_load: Vec<ChunkRef> = render_distance.load_unload_chunks(&mut static_data.map.generic, &mut meshes, &mut materials);
 	for chunk_ref in chunks_to_load {
 		requested_chunks.add(chunk_ref, &mut asset_client);
 	}

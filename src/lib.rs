@@ -6,14 +6,10 @@ use std::{collections::hash_map::DefaultHasher, error::Error, fs, fmt, hash::{Ha
 use std::path;
 #[cfg(any(feature = "server", feature = "client"))]
 use std::env;
-#[cfg(any(feature = "server", feature = "debug_render_physics"))]
-use rapier3d::{dynamics::{RigidBodySet, IslandManager}, geometry::ColliderSet};
 use serde::{Serialize, Deserialize};// https://stackoverflow.com/questions/60113832/rust-says-import-is-not-used-and-cant-find-imported-statements-at-the-same-time
 use nalgebra::{Point3, Point2, Vector3, Vector2, point, Matrix, Const, ArrayStorage, OPoint, Translation, Isometry3, UnitQuaternion};
 #[cfg(feature = "client")]
 use bevy::{prelude::Transform, asset::{Asset, AssetServer, Handle}, ecs::system::Resource, render::{mesh::{Mesh, Indices}, render_resource::PrimitiveTopology, render_asset::RenderAssetUsages}};
-#[cfg(feature = "debug_render_physics")]
-use bevy_rapier3d::plugin::RapierContext;
 use dialoguer;
 use rand::Rng;
 use approx::{AbsDiffEq, RelativeEq};
@@ -51,6 +47,7 @@ pub mod prelude {
 	pub type P3 = Point3<Float>;
 	pub type V3 = Vector3<Float>;
 	pub type Iso = Isometry3<Float>;
+	//pub type Quat = UnitQuaternion<Float>;
 	pub const EPSILON: Float = 1.0e-6;// Arbitrary
 	pub use std::f32::consts::PI;
 	// Misc
@@ -80,7 +77,7 @@ pub mod prelude {
 	#[cfg(feature = "server")] pub use crate::{
 		physics::{PhysicsController, PhysicsUpdateArgs, BodyAveragableState, defaut_extra_forces_calculator},
 		vehicle::Vehicle,
-		world::{World, PhysicsState},
+		world::World,
 		map::{ServerMap, SaveMap, map_generation::{self, MapGenerator, MeshCreationArgs, gis::WorldLocation}, chunk::{ChunkCreationArgs, ChunkCreationResult}}
 	};
 	#[allow(unused_import_braces)]
@@ -88,10 +85,6 @@ pub mod prelude {
 		server::AssetRequest
 	};
 	#[cfg(all(feature = "server", feature = "client"))] pub use crate::validity;
-	#[allow(unused_import_braces)]
-	#[cfg(any(feature = "server", feature = "debug_render_physics"))] pub use crate::{
-		RapierBodyCreationDeletionContext
-	};
 	// Utility functions because nalgebra is friggin complicated
 	pub fn add_isometries(iso1: &Iso, iso2: &Iso) -> Iso {
 		// Adds two isometries together
@@ -679,25 +672,6 @@ impl Default for BasicTriMesh {
 			indices: Vec::new()
 		}
 	}
-}
-
-#[cfg(any(feature = "server", feature = "debug_render_physics"))]
-pub struct RapierBodyCreationDeletionContext<'a> {
-	pub bodies: &'a mut RigidBodySet,
-	pub colliders: &'a mut ColliderSet,
-	pub islands: &'a mut IslandManager
-}
-
-#[cfg(any(feature = "server", feature = "debug_render_physics"))]
-impl<'a> RapierBodyCreationDeletionContext<'a> {// From ChatGPT
-    #[cfg(feature = "debug_render_physics")]
-    pub fn from_bevy_rapier_context(ctx: &'a mut RapierContext) -> Self {
-        Self {
-            bodies: &mut ctx.bodies,
-            colliders: &mut ctx.colliders,
-            islands: &mut ctx.islands,
-        }
-    }
 }
 
 #[derive(Clone, PartialEq, Debug)]
