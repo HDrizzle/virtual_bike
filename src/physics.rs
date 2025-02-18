@@ -24,7 +24,7 @@ pub struct PhysicsUpdateArgs<'a> {
 /// Generalization over rapier and paths
 pub trait PhysicsController {
 	fn serializable(&self, paths: &PathSet) -> BodyStateSerialize;
-	fn update(&mut self, info: PhysicsUpdateArgs) -> (BodyForces, Option<PathBodyForceDescription>);
+	fn update(&mut self, info: PhysicsUpdateArgs) -> (BodyForces, Option<PathBodyForceDescription>, Vec<String>);
 	fn get_route_opt(&self, routes: &GenericDataset<Route>) -> Option<GenericRef<Route>>;
 }
 

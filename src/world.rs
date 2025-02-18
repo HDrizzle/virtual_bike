@@ -13,6 +13,7 @@ use crate::resource_interface::*;
 /*#[cfg(feature = "client")]
 #[cfg(feature = "debug_render_physics")]
 use crate::client::play::VehicleBodyHandles;*/
+use message_log::{Message, MessageAddress, MessageEnum};
 
 
 // Structs
@@ -78,7 +79,8 @@ pub mod async_messages {
 	/// From the simulation to the server
 	pub enum FromWorld {
 		State(WorldSend),
-		Error(String)
+		Error(String),
+		Message(message_log::Message)
 	}
 }
 
@@ -238,8 +240,11 @@ impl World {
 		// 2: Step physics simulation
 		if self.playing {
 			// All vehicle physics controllers
-			for (_, v) in self.vehicles.iter_mut() {
-				v.update_physics(dt_f64 as Float, 1.225, &self.map.path_set, self.gravity);
+			for (username, v) in self.vehicles.iter_mut() {
+				let nav_messages_raw: Vec<String> = v.update_physics(dt_f64 as Float, 1.225, &self.map.path_set, self.gravity);
+				for msg_raw in nav_messages_raw {
+					tx.send(async_messages::FromWorld::Message(Message::new(MessageEnum::Navigation(msg_raw), MessageAddress::List(vec![username.clone()])))).unwrap();
+				}
 			}
 		}
 		// 3: Chunks
@@ -387,7 +392,8 @@ mod tests {
 					pos: PathPosition::new(0, 0.5),
 					velocity: 10.0,
 					forward: true,
-					route_query_opt: None
+					route_query_opt: None,
+					in_range_prev_intersection_opt: None
 				},
 				v_static_rc
 			))

@@ -21,7 +21,9 @@ pub enum MessageEnum {
     ClientConnected(String),
     /// When the Renet server loses a connection
     /// Username, Reason
-    ClientDisconnected(String, String)
+    ClientDisconnected(String, String),
+    /// Usually meant for a single client. Sent for events such as intersections being crossed, etc
+    Navigation(String)
 }
 
 impl MessageEnum {
@@ -29,15 +31,23 @@ impl MessageEnum {
         match &self {
             Self::UserChat{name, chat} => format!("{}: {}", name, chat),
             Self::ClientConnected(s) => format!("Client \"{}\" connected", s),
-            Self::ClientDisconnected(name, reason) => format!("Client \"{}\" disconnected for reason: {}", name, reason)
+            Self::ClientDisconnected(name, reason) => format!("Client \"{}\" disconnected for reason: {}", name, reason),
+            Self::Navigation(msg) => format!("Navigation: {}", msg)
         }
     }
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+pub enum MessageAddress {
+    Everyone,
+    List(Vec<String>)
 }
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Message {
     timestamp: u64,
-    enum_: MessageEnum
+    enum_: MessageEnum,
+    pub to: MessageAddress
 }
 
 impl Message {
@@ -47,10 +57,11 @@ impl Message {
 }
 
 impl Message {
-    pub fn new(enum_: MessageEnum) -> Self {
+    pub fn new(enum_: MessageEnum, to: MessageAddress) -> Self {
         Self {
             timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs(),
-            enum_
+            enum_,
+            to
         }
     }
 }

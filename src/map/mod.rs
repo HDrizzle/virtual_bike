@@ -41,7 +41,9 @@ pub struct GenericMap {// Serialize, Deserialize, Clone, used by client AND serv
 	/// Default background color
 	pub background_color: [u8; 3],
 	/// Whether the server is allowed to automatically generate chunks
-	pub auto_gen_chunks: bool
+	pub auto_gen_chunks: bool,
+	/// To prevent intersection detection from happening more then once
+	pub intersection_norepeat_radius: Float
 }
 
 impl GenericMap {
@@ -54,7 +56,8 @@ impl GenericMap {
 			chunk_grid_size,
 			landmarks: HashMap::<String, V2>::new(),
 			background_color,
-			auto_gen_chunks: true
+			auto_gen_chunks: true,
+			intersection_norepeat_radius: 1.0
 		}
 	}
     #[cfg(feature = "client")]

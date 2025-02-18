@@ -14,7 +14,7 @@ use crate::{prelude::*, world::async_messages, resource_interface};
 
 // mods
 pub mod message_log;
-use message_log::{Message, MessageEnum, Log};
+use message_log::{Message, MessageEnum, Log, MessageAddress};
 
 /// All possible requests to the Renet server
 #[derive(Serialize, Deserialize)]
@@ -103,7 +103,8 @@ impl NetworkRuntimeManager {
 								// Broadcast state to all clients
 								self.server.broadcast_message(DefaultChannel::Unreliable, bincode::serialize(&RenetResponse::WorldState(world_send)).unwrap());
 							}
-							async_messages::FromWorld::Error(e) => panic!("Received the following error from world: {}", e)
+							async_messages::FromWorld::Error(e) => panic!("Received the following error from world: {}", e),
+							async_messages::FromWorld::Message(msg) => self.send_message(msg)
 						}
 					},
 					Err(error) => {
@@ -141,7 +142,6 @@ impl NetworkRuntimeManager {
 							},
 							RenetRequest::TogglePlaying => {
 								// TODO: authenticate client
-								println!("Recieved toggle playing request");
 								tx.send(async_messages::ToWorld::TogglePlaying).expect("Unable to send client update to world");
 							},
 							RenetRequest::NewUser{..} => {
@@ -149,7 +149,7 @@ impl NetworkRuntimeManager {
 							}
 							RenetRequest::Chat(auth, chat) => {
 								// TODO: authenticate client
-								self.new_message(MessageEnum::UserChat{name: auth.name, chat});
+								self.send_message(Message::new(MessageEnum::UserChat{name: auth.name, chat}, MessageAddress::Everyone));
 							}
 						},
 						Err(e) => {
@@ -161,19 +161,25 @@ impl NetworkRuntimeManager {
 			}
 			// Check for client connections/disconnections, TODO more usefull
 			while let Some(event) = self.server.get_event() {
-				self.new_message(match event {
-					ServerEvent::ClientConnected{client_id} => MessageEnum::ClientConnected(client_id.to_string()),// TODO: client name
-					ServerEvent::ClientDisconnected{client_id, reason} => MessageEnum::ClientDisconnected(client_id.to_string(), reason.to_string())// TODO: client name
+				self.send_message(match event {
+					ServerEvent::ClientConnected{client_id} => Message::new(MessageEnum::ClientConnected(client_id.to_string()), MessageAddress::Everyone),// TODO: client name
+					ServerEvent::ClientDisconnected{client_id, reason} => Message::new(MessageEnum::ClientDisconnected(client_id.to_string(), reason.to_string()), MessageAddress::Everyone)// TODO: client name
 				});
 			}
 			// Send packets to clients
 			self.transport.send_packets(&mut self.server);
 		}
 	}
-	fn new_message(&mut self, msg_enum: MessageEnum) {
-		let msg = Message::new(msg_enum);
+	fn send_message(&mut self, msg: Message) {
+		let to_everyone: bool = msg.to == MessageAddress::Everyone;
 		self.message_log.add(msg.clone());
-		self.server.broadcast_message(DefaultChannel::ReliableOrdered, bincode::serialize(&RenetResponse::Message(msg)).unwrap());
+		let msg_encoded = bincode::serialize(&RenetResponse::Message(msg)).unwrap();
+		if to_everyone {
+			self.server.broadcast_message(DefaultChannel::ReliableOrdered, msg_encoded);
+		}
+		else {// TODO
+			self.server.broadcast_message(DefaultChannel::ReliableOrdered, msg_encoded);
+		}
 	}
 }
 

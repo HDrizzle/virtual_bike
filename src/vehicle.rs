@@ -181,9 +181,9 @@ impl Vehicle {
 		self.latest_input_t = get_unix_ts_secs_u64();
 	}
 	/// Must be run every frame
-	pub fn update_physics(&mut self, dt: Float, fluid_density: Float, path_set: &PathSet, gravity: Float) {
+	pub fn update_physics(&mut self, dt: Float, fluid_density: Float, path_set: &PathSet, gravity: Float) -> Vec<String> {
 		//update(&mut self, dt: Float, drag_force: V3, latest_input: Option<InputData>, paths: &PathSet, bodies: &mut RigidBodySet, joints: &mut ImpulseJointSet)
-		let (forces, path_forces_opt): (BodyForces, Option<PathBodyForceDescription>) = self.physics_controller.update(PhysicsUpdateArgs{
+		let (forces, path_forces_opt, nav_messages): (BodyForces, Option<PathBodyForceDescription>, Vec<String>) = self.physics_controller.update(PhysicsUpdateArgs{
 			dt,
 			gravity,
 			path_set,
@@ -193,6 +193,8 @@ impl Vehicle {
 		// Save forces
 		self.latest_forces = Some(forces);
 		self.path_forces_opt = path_forces_opt;
+		// Done
+		nav_messages
 	}
 	pub fn create_serialize_state(&self, paths: &PathSet) -> BodyStateSerialize {
 		self.physics_controller.serializable(paths)
@@ -264,7 +266,7 @@ impl PhysicsController for VehiclePathBoundController{
 		let path: &Path = path_set.paths.get_item_tuple(&self.state.path_query).expect(&format!("Unable to get path with body state path query `{:?}`", &self.state.path_query)).1;
 		path.generic.create_body_state(self.state.clone())
 	}
-	fn update(&mut self, args: PhysicsUpdateArgs) -> (BodyForces, Option<PathBodyForceDescription>) {
+	fn update(&mut self, args: PhysicsUpdateArgs) -> (BodyForces, Option<PathBodyForceDescription>, Vec<String>) {
 		// Forces
 		let mut forces = PathBodyForceDescription::default();
 		// Get path
@@ -297,9 +299,9 @@ impl PhysicsController for VehiclePathBoundController{
 		forces.gravity = path.generic.sideways_gravity_force_component(&self.state.pos, &*self.v_static, args.gravity) * (bool_sign(self.state.forward) as Float);
 		forces.rolling_resistance = 0.0;// TODO
 		// Update
-		self.state.update(args.dt, &forces, &self.v_static, &args.path_set);
+		let nav_messages = self.state.update(args.dt, &forces, &self.v_static, &args.path_set);
 		//path.update_body(args.dt, &forces, &self.v_static, &mut self.state);
-		(BodyForces::from_path_bound_forces(&forces), Some(forces))
+		(BodyForces::from_path_bound_forces(&forces), Some(forces), nav_messages)
 	}
 	fn get_route_opt(&self, routes: &GenericDataset<Route>) -> Option<GenericRef<Route>> {
 		match &self.state.route_query_opt {

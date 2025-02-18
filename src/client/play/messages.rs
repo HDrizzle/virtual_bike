@@ -28,7 +28,7 @@ fn update_system(
 	auth: Res<ClientAuth>,
     msg_log: ResMut<message_log::Log>
 ) {
-    Window::new("Messages/Chat").show(egui_contexts.ctx_mut(), |ui: &mut Ui| {
+    Window::new("Messages").show(egui_contexts.ctx_mut(), |ui: &mut Ui| {
         // Recieved messages
         for msg in &msg_log.messages {
             ui.label(msg.to_string());
@@ -42,9 +42,9 @@ fn update_system(
     });
 }
 
-pub struct ChatGuiPlugin;
+pub struct MessageGuiPlugin;
 
-impl Plugin for ChatGuiPlugin {
+impl Plugin for MessageGuiPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(message_log::Log::new());
         app.add_systems(Update, update_system);

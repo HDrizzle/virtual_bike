@@ -26,7 +26,7 @@ use super::{hardware_controller::HardwareControllerPlugin, Settings, asset_clien
 mod chunk_manager;
 use chunk_manager::{ChunkManagerPlugin, RenderDistance, RequestedChunks};
 mod skybox;
-mod chat;
+mod messages;
 mod main_egui;
 
 #[derive(Resource)]
@@ -542,7 +542,7 @@ pub fn start(init_info: InitInfo) {
 		ChunkManagerPlugin,
 		HardwareControllerPlugin,
 		skybox::Sky{resolution: 1000},
-		chat::ChatGuiPlugin,
+		messages::MessageGuiPlugin,
 		MainClientPlugin,
 		main_egui::ForcesGuiPlugin,
 		main_egui::NavGuiPlugin,
